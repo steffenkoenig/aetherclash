@@ -1,0 +1,97 @@
+/* ─── Aether Clash ─────────────────────────────────────────── */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #040810;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #ffffff;
+}
+
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #0a1228 0%, #040810 100%);
+}
+
+/* ─── Canvas ─────────────────────────────────────────────────── */
+
+#game-canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    /* aspect-ratio kept via JS resize; canvas fills window */
+    max-width:  100vw;
+    max-height: 100vh;
+    cursor: none;
+    /* Subtle vignette */
+    box-shadow:
+        0 0 80px rgba(74, 158, 255, 0.12),
+        0 0 200px rgba(16, 217, 160, 0.06),
+        inset 0 0 80px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Loading Overlay ─────────────────────────────────────────── */
+
+#loading {
+    position: fixed;
+    inset: 0;
+    background: #040810;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.5s ease;
+}
+
+#loading.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#loading h1 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    background: linear-gradient(135deg, #4A9EFF 0%, #10D9A0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 1rem;
+}
+
+#loading-bar-wrap {
+    width: 260px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#loading-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4A9EFF, #10D9A0);
+    border-radius: 3px;
+    animation: loadBar 0.8s ease forwards;
+}
+
+@keyframes loadBar {
+    from { width: 0;    }
+    to   { width: 100%; }
+}
+
+/* ─── Accessibility / Focus ────────────────────────────────────── */
+
+:focus-visible {
+    outline: 2px solid #4A9EFF;
+    outline-offset: 2px;
+}
