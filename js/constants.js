@@ -108,7 +108,7 @@ const CHARACTERS = [
             [ATTACK.BACK_AIR]:      { base: 8,  scale: 1.0, hitFrames: [4,7],  recoveryFrames: 18, angle: 160, name: 'Heel Kick'    },
             [ATTACK.UP_AIR]:        { base: 6,  scale: 0.9, hitFrames: [4,7],  recoveryFrames: 15, angle: 85,  name: 'Sky Slash'    },
             [ATTACK.DOWN_AIR]:      { base: 9,  scale: 1.1, hitFrames: [5,9],  recoveryFrames: 20, angle: -80, name: 'Meteor'       },
-            [ATTACK.UP_ABILITY]:    { base: 5,  scale: 0.7, hitFrames: [3,18], recoveryFrames: 30, angle: 85,  name: 'Spin Leap', multiHit: 4 },
+            [ATTACK.UP_ABILITY]:    { base: 5,  scale: 0.7, hitFrames: [3,18], recoveryFrames: 30, angle: 85,  name: 'Spin Leap', multiHitCount: 4 },
             [ATTACK.NEUTRAL_ABILITY]:{base: 7,  scale: 1.0, hitFrames: [8,12], recoveryFrames: 24, angle: 20,  name: 'Aether Orb'  }
         }
     },
@@ -232,7 +232,7 @@ const CHARACTERS = [
             [ATTACK.BACK_AIR]:      { base: 7,  scale: 1.0, hitFrames: [2,5],  recoveryFrames: 13, angle: 160, name: 'Mule Kick'    },
             [ATTACK.UP_AIR]:        { base: 5,  scale: 0.8, hitFrames: [2,5],  recoveryFrames: 11, angle: 88,  name: 'Axle Kick'    },
             [ATTACK.DOWN_AIR]:      { base: 7,  scale: 1.0, hitFrames: [3,7],  recoveryFrames: 16, angle: -80, name: 'Stomp'        },
-            [ATTACK.UP_ABILITY]:    { base: 3,  scale: 0.5, hitFrames: [2,20], recoveryFrames: 25, angle: 88,  name: 'Kick Lift', multiHit: 6 },
+            [ATTACK.UP_ABILITY]:    { base: 3,  scale: 0.5, hitFrames: [2,20], recoveryFrames: 25, angle: 88,  name: 'Kick Lift', multiHitCount: 6 },
             [ATTACK.NEUTRAL_ABILITY]:{base: 5,  scale: 0.7, hitFrames: [4,9],  recoveryFrames: 18, angle: 8,   name: 'Burst Dash'   }
         }
     }

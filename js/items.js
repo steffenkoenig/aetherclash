@@ -172,7 +172,8 @@ class ItemManager {
         this.items     = [];
         this.spawnTimer = randomInt(ITEM_SPAWN_INTERVAL_MIN, ITEM_SPAWN_INTERVAL_MAX);
         this.lastTime  = performance.now();
-        this.assistActive = false;  // only one assist at a time
+        this.assistActive  = false;  // only one assist at a time
+        this._pendingActions = [];   // frame-based deferred callbacks
     }
 
     update(players, screenShake) {
@@ -226,6 +227,9 @@ class ItemManager {
 
         // Clean inactive items
         this.items = this.items.filter(i => i.active);
+
+        // Tick frame-based deferred actions
+        this._tickPendingActions();
     }
 
     _spawnItem() {
@@ -254,7 +258,8 @@ class ItemManager {
                 this.assistActive = true;
                 item.active = false;
                 this._triggerAssist(player, allPlayers, screenShake);
-                setTimeout(() => { this.assistActive = false; }, 4000);
+                // Re-enable assist spawning after ~4 seconds (240 frames)
+                this._pendingActions.push({ framesLeft: 240, fn: () => { this.assistActive = false; } });
             }
         }
     }
@@ -281,15 +286,28 @@ class ItemManager {
         if (opponents.length === 0) return;
         const target = opponents[randomInt(0, opponents.length - 1)];
 
-        // Deal a single powerful strike after a 1-second delay
-        setTimeout(() => {
-            if (target.isDead || target.stocks <= 0) return;
-            const fakemove = { base: 15, scale: 1.3, angle: 60, multiHit: false };
-            target.takeHit({ playerIndex: -1, facing: target.x > summoner.x ? -1 : 1,
-                             hitThisAttack: new Set(), charData: summoner.charData },
-                           fakemove);
-            screenShake.trigger(8);
-        }, 1000);
+        // Deal a single powerful strike after ~60 frames (~1 second at 60fps)
+        this._pendingActions.push({
+            framesLeft: 60,
+            fn: () => {
+                if (target.isDead || target.stocks <= 0) return;
+                const fakemove = { base: 15, scale: 1.3, angle: 60, multiHitCount: 0 };
+                target.takeHit(
+                    { playerIndex: -1, facing: target.x > summoner.x ? -1 : 1,
+                      hitThisAttack: new Set(), charData: summoner.charData },
+                    fakemove
+                );
+                screenShake.trigger(8);
+            }
+        });
+    }
+
+    _tickPendingActions() {
+        this._pendingActions = this._pendingActions.filter(a => {
+            a.framesLeft--;
+            if (a.framesLeft <= 0) { a.fn(); return false; }
+            return true;
+        });
     }
 
     draw(ctx) {

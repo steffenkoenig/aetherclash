@@ -224,7 +224,7 @@ class Game {
                 if (rectsOverlap(hitbox.x, hitbox.y, hitbox.w, hitbox.h,
                                  hurtbox.x, hurtbox.y, hurtbox.w, hurtbox.h)) {
                     // Multi-hit: use attack frame as hit index
-                    const mhIndex = move.multiHit ? Math.floor(attacker.attackFrame / 3) : 0;
+                    const mhIndex = move.multiHitCount ? Math.floor(attacker.attackFrame / 3) : 0;
                     const didHit = defender.takeHit(attacker, move, mhIndex);
                     if (didHit) {
                         const kb = calcKnockback(defender.damage, defender.charData.weight, move.scale, move.base);

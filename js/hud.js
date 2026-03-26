@@ -224,11 +224,4 @@ class HUD {
 
         ctx.restore();
     }
-
-    _dmgColor(pct) {
-        if (pct < 50)  return '#FFFFFF';
-        if (pct < 100) return lerpColor('#FFFFFF', '#FFDD00', (pct - 50)  / 50);
-        if (pct < 150) return lerpColor('#FFDD00', '#FF6600', (pct - 100) / 50);
-        return lerpColor('#FF6600', '#FF0000', clamp((pct - 150) / 50, 0, 1));
-    }
 }

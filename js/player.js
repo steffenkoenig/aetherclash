@@ -64,6 +64,9 @@ class Player {
         // Up-ability flag
         this.upAbilityUsed = false;
 
+        // Vanguard crash-down timer (frames until fast-fall begins)
+        this.vanguardCrashTimer = 0;
+
         // Launch trail
         this.trail = [];  // array of { x, y, alpha }
         this.trailTimer = 0;
@@ -159,6 +162,14 @@ class Player {
             return;  // freeze during hit lag
         }
         if (this.stateTimer > 0) this.stateTimer--;
+
+        // Vanguard crash timer: fast-fall after rising peak
+        if (this.vanguardCrashTimer > 0) {
+            this.vanguardCrashTimer--;
+            if (this.vanguardCrashTimer === 0) {
+                this.fastFalling = true;
+            }
+        }
 
         // Update trail
         this._updateTrail();
@@ -279,7 +290,7 @@ class Player {
         if (h.down && this.vy > 0) { this.fastFalling = true; }
 
         // Jump / double jump (buffer)
-        if (input.consumeBuffer(p, 'up') || input.consumeBuffer(p, 'attack') && false) {
+        if (input.consumeBuffer(p, 'up')) {
             this._jump(); return;
         }
 
@@ -491,10 +502,10 @@ class Player {
             return;
         }
 
-        // Vanguard up ability: leap up then crash down
+        // Vanguard up ability: leap up then crash down (uses frame counter set on the player)
         if (this.charData.id === 'vanguard' && attackKey === ATTACK.UP_ABILITY) {
             this.vy = JUMP_FORCE * 1.4;
-            setTimeout(() => { if (this) this.fastFalling = true; }, 400);
+            this.vanguardCrashTimer = 24;  // start falling after ~24 frames
         }
         // Striker up ability: rapid kick lifts
         if (this.charData.id === 'striker' && attackKey === ATTACK.UP_ABILITY) {
@@ -572,7 +583,7 @@ class Player {
         if (this.hitLag > 0) return false;
 
         // Avoid hitting same target twice in one swing (except multi-hit)
-        const hitKey = move.multiHit ? `${attacker.playerIndex}_${multiHitIndex}` : attacker.playerIndex;
+        const hitKey = move.multiHitCount ? `${attacker.playerIndex}_${multiHitIndex}` : attacker.playerIndex;
         if (attacker.hitThisAttack.has(hitKey)) return false;
         attacker.hitThisAttack.add(hitKey);
 
