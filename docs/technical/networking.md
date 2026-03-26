@@ -78,15 +78,36 @@ const dataChannel = peerConnection.createDataChannel('game', {
 
 Each frame, each client sends a compact input packet:
 
+### Input Types: Runtime vs Network
+
+Two distinct types represent input in the system:
+
+```typescript
+// Full runtime input state — used by the physics engine
+// Defined in full in input.md
+interface InputState {
+  jump: boolean; attack: boolean; special: boolean; shield: boolean; grab: boolean;
+  stickX: number; stickY: number;   // float −1.0..+1.0
+  cStickX: number; cStickY: number;
+}
+
+// Network-serialised input — packed into a single uint16 for the wire
+// Produced by encodeInput() and decoded back to InputState by decodeInput()
+type PackedInputState = number; // uint16, bit layout described in "Input Encoding" below
+```
+
+Every input packet sent over WebRTC uses `PackedInputState` (not the full `InputState` object):
+
 ```typescript
 interface InputPacket {
-  frame: number;        // Current simulation frame number (uint32)
-  inputs: InputState;   // Encoded controller state (see Input docs)
-  checksum: number;     // CRC32 of local game state at this frame (uint32)
+  frame: number;           // Current simulation frame number (uint32, 4 bytes)
+  inputs: PackedInputState; // Encoded controller state    (uint16, 2 bytes)
 }
 ```
 
-Total wire size: **~12 bytes** per packet. At 60 Hz, this is ~720 bytes/sec per direction — well within WebRTC DataChannel overhead.
+Total wire size: **6 bytes** per regular packet. At 60 Hz this is ~360 bytes/sec per direction — well within WebRTC DataChannel overhead.
+
+A separate **checksum packet** piggybacks on the regular packet every 60 frames (1 second), adding a `checksum` field (CRC32, uint32 = 4 bytes) for a total of **10 bytes** for that frame only.
 
 ### Input Encoding
 
@@ -138,6 +159,8 @@ interface GameStateSnapshot {
 }
 
 const stateBuffer: GameStateSnapshot[] = new Array(ROLLBACK_BUFFER_SIZE);
+// Circular buffer of packed inputs (uint16) for each of the last N frames
+const predictedInputs: PackedInputState[] = new Array(ROLLBACK_BUFFER_SIZE);
 ```
 
 A snapshot must be **serialisable and copyable in < 1 ms**. This is why the physics engine uses simple fixed-point values (no heap-allocated objects in hot state).
@@ -161,6 +184,7 @@ function onOpponentInput(packet: InputPacket): void {
     return;
   }
 
+  // packet.inputs is a PackedInputState (uint16 primitive) — safe to compare with !==
   if (packet.inputs !== predictedInputs[packet.frame]) {
     // Prediction was wrong — rollback needed
     const rollbackDepth = currentFrame - packet.frame;

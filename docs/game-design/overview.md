@@ -26,7 +26,7 @@ The game draws inspiration from classic platform fighters while innovating on ac
 The game must load and be playable within seconds of visiting the URL. All assets are streamed progressively; the first character and stage are playable before the full roster downloads. Zero-installation also means zero update friction — the latest version is always live.
 
 ### 2. Expressive, Physics-Driven Combat
-Every hit feels different based on the victim's current damage percentage, the attacker's character weight, and the specific move used. Players must read the situation and adapt — a combo that works at 30% becomes a lethal finishing move at 120%.
+Every hit feels different based on the victim's current damage percentage, the victim's character weight, and the specific move used. Players must read the situation and adapt — a combo that works at 30% becomes a lethal finishing move at 120%.
 
 ### 3. Competitive Depth Without Complexity Walls
 A new player picks up the basics (jump, attack, dodge) within one minute. A competitive player spends months mastering hitbox timing, DI (directional influence), and punish windows. The skill ceiling is high but the floor is intentionally low.

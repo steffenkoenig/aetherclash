@@ -110,6 +110,10 @@ export function fixedMul(a: Fixed, b: Fixed): Fixed {
 export function fixedDiv(a: Fixed, b: Fixed): Fixed {
   return Number((BigInt(a) << BigInt(FRAC_BITS)) / BigInt(b)) | 0;
 }
+
+// Addition and subtraction are plain integer operations — no scaling needed
+export function fixedAdd(a: Fixed, b: Fixed): Fixed { return (a + b) | 0; }
+export function fixedSub(a: Fixed, b: Fixed): Fixed { return (a - b) | 0; }
 ```
 
 **Rule:** All positions (`x`, `y`), velocities (`vx`, `vy`), and physics constants (`gravity`, knockback values) are stored as `Fixed`. Only convert to `number` for rendering (renderer operates in float space).

@@ -113,24 +113,37 @@ const CSTICK_DEADZONE = 0.3;
 
 ## Input Buffer
 
-The **input buffer** is the key mechanic that makes the game feel responsive. When a button is pressed, it is recorded in a FIFO queue of length **5 frames**. If the game engine cannot act on the input immediately (e.g., the character is in the middle of another action), it will check the buffer on subsequent frames and act as soon as possible:
+The **input buffer** is the key mechanic that makes the game feel responsive. When a button is pressed, it is recorded in a per-action FIFO queue. If the game engine cannot act on the input immediately (e.g., the character is in the middle of another action), it will check the buffer on subsequent frames and act as soon as possible:
 
 ```typescript
 class InputBuffer {
-  private buffer: Map<InputAction, number> = new Map();
+  // Each action maps to a FIFO queue of frame numbers when it was pressed
+  private buffer: Map<InputAction, number[]> = new Map();
   private readonly BUFFER_WINDOW = 5; // frames
 
   press(action: InputAction, currentFrame: number): void {
-    this.buffer.set(action, currentFrame);
+    let queue = this.buffer.get(action);
+    if (!queue) {
+      queue = [];
+      this.buffer.set(action, queue);
+    }
+    queue.push(currentFrame);
   }
 
   consume(action: InputAction, currentFrame: number): boolean {
-    const pressedAt = this.buffer.get(action);
-    if (pressedAt !== undefined && currentFrame - pressedAt <= this.BUFFER_WINDOW) {
-      this.buffer.delete(action);
-      return true;
+    const queue = this.buffer.get(action);
+    if (!queue || queue.length === 0) return false;
+
+    // Discard any presses older than the buffer window
+    while (queue.length > 0 && currentFrame - queue[0] > this.BUFFER_WINDOW) {
+      queue.shift();
     }
-    return false;
+
+    if (queue.length === 0) return false;
+
+    // Consume the oldest valid press (FIFO order)
+    queue.shift();
+    return true;
   }
 }
 ```

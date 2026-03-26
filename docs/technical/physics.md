@@ -75,12 +75,15 @@ Where:
 
 Every move defines a **launch angle** in degrees (0° = directly right, 90° = directly up).
 
+> **Note:** The snippet below is **conceptual pseudocode** written in floating-point for readability. The real implementation must use Q16.16 fixed-point arithmetic for `d`, `w`, `s`, `b`, and `F` (via `fixedMul`/`fixedDiv`), and must replace `Math.cos`/`Math.sin` with a pre-computed lookup table (LUT) of 512 entries to guarantee identical results across all browsers and CPU architectures. See the [Build Guide](../implementation/build-guide.md) for the `FixedNum` API.
+
 ```typescript
+// PSEUDOCODE — uses float arithmetic for clarity; real implementation uses Fixed + LUT
 function applyKnockback(victim: Fighter, attacker: Fighter, move: Move): void {
-  const d = victim.damagePercent;
-  const w = victim.weightClass;
-  const s = move.knockbackScaling;
-  const b = move.baseKnockback;
+  const d = victim.damagePercent;   // float equivalent of Q16.16 value
+  const w = victim.weightClass;     // float equivalent of Q16.16 value
+  const s = move.knockbackScaling;  // float equivalent of Q16.16 value
+  const b = move.baseKnockback;     // float equivalent of Q16.16 value
 
   const F = ((d / 10 + (d * w) / 20) / (w + 1)) * s + b;
 
@@ -89,6 +92,7 @@ function applyKnockback(victim: Fighter, attacker: Fighter, move: Move): void {
     attacker.facingRight ? move.launchAngle : 180 - move.launchAngle
   );
 
+  // Real implementation: victim.vx = fixedMul(cosLUT(angle), F_fixed);
   victim.vx = Math.cos(angleRad) * F;
   victim.vy = Math.sin(angleRad) * F;
   victim.state = 'hitstun';
@@ -113,8 +117,9 @@ The victim may apply directional influence by holding the stick during hitstun:
 ```typescript
 const DI_MAX_ANGLE_CHANGE = 15; // degrees
 const diInput = victim.inputState.stick; // normalised [-1, 1] vector
+const baseAngle = move.launchAngle;      // degrees, before DI is applied
 const angleAdjust = diInput.x * DI_MAX_ANGLE_CHANGE;
-adjustedAngle = clamp(baseAngle + angleAdjust, 0, 360);
+const adjustedAngle = clamp(baseAngle + angleAdjust, 0, 360);
 ```
 
 DI is only factored in on the **first frame** of hitstun.
