@@ -168,14 +168,15 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
 
   gl.useProgram(program);
 
-  // Draw platforms (white rectangles)
+  // Draw platforms (white rectangles); py is the surface line so offset down by half thickness
   for (const plat of stagePlatforms) {
     const x1 = toFloat(plat.x1);
     const x2 = toFloat(plat.x2);
     const py  = toFloat(plat.y);
     const w   = x2 - x1;
     const cx  = (x1 + x2) / 2;
-    drawQuad(cx, py, w, 10, 0.9, 0.9, 0.9);
+    const PLAT_THICKNESS = 10;
+    drawQuad(cx, py - PLAT_THICKNESS / 2, w, PLAT_THICKNESS, 0.9, 0.9, 0.9);
   }
 
   // Draw fighters (coloured quads)

@@ -3,7 +3,6 @@
 
 import { toFixed, fixedAdd, fixedMul } from './fixednum.js';
 import {
-  transformComponents,
   physicsComponents,
   fighterComponents,
 } from '../ecs/component.js';
@@ -34,13 +33,6 @@ export function applyGravitySystem(): void {
       if (phys.vy < termVel) {
         phys.vy = termVel;
       }
-    }
-
-    // Keep prevY/prevX in sync before position update
-    const transform = transformComponents.get(id);
-    if (transform) {
-      transform.prevX = transform.x;
-      transform.prevY = transform.y;
     }
   }
 }
