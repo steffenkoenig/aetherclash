@@ -1,7 +1,7 @@
 // src/main.ts
 // Entry point: sets up the Physics Sandbox (Phase 1)
 
-import { toFixed, toFloat } from './engine/physics/fixednum.js';
+import { toFixed, toFloat, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
 import { createEntity } from './engine/ecs/entity.js';
 import {
   transformComponents,
@@ -64,7 +64,8 @@ fighterComponents.set(playerId, {
 
 // ── Input state ───────────────────────────────────────────────────────────────
 
-let prevJump = false;
+// Air-drift scale: 80% of run speed (Fixed constant)
+const AIR_DRIFT_SCALE = toFixed(0.8);
 
 function processInput(): void {
   const input = sampleKeyboard();
@@ -75,21 +76,28 @@ function processInput(): void {
   // Pass-through flag for platforms
   setEntityPassThroughInput(playerId, input.stickY < -0.5);
 
-  // Horizontal movement
+  // Horizontal movement — all arithmetic stays in Fixed
   if (phys.grounded) {
-    if (input.stickX !== 0) {
-      phys.vx = toFixed(input.stickX * toFloat(fighter.stats.runSpeed));
+    if (input.stickX > 0) {
+      phys.vx = fighter.stats.runSpeed;
       fighter.state = 'run';
-      transform.facingRight = input.stickX > 0;
+      transform.facingRight = true;
+    } else if (input.stickX < 0) {
+      phys.vx = fixedNeg(fighter.stats.runSpeed);
+      fighter.state = 'run';
+      transform.facingRight = false;
     } else {
       phys.vx = toFixed(0);
       fighter.state = 'idle';
     }
   } else {
-    // Air drift
-    if (input.stickX !== 0) {
-      phys.vx = toFixed(input.stickX * toFloat(fighter.stats.runSpeed) * 0.8);
-      transform.facingRight = input.stickX > 0;
+    // Air drift at 80% of run speed
+    if (input.stickX > 0) {
+      phys.vx = fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE);
+      transform.facingRight = true;
+    } else if (input.stickX < 0) {
+      phys.vx = fixedNeg(fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE));
+      transform.facingRight = false;
     } else {
       phys.vx = toFixed(0);
     }
@@ -101,8 +109,8 @@ function processInput(): void {
     phys.gravityMultiplier = toFixed(2.5);
   }
 
-  // Jump (edge detect: only on first frame the key is held)
-  if (input.jump && !prevJump) {
+  // Jump — use jumpJustPressed (edge-detected in the input system)
+  if (input.jumpJustPressed) {
     if (phys.grounded) {
       phys.vy = fighter.stats.jumpForce;
       phys.grounded = false;
@@ -118,7 +126,6 @@ function processInput(): void {
       fighter.jumpCount = 2;
     }
   }
-  prevJump = input.jump;
 
   // Reset gravity multiplier when not fast-falling
   if (!phys.fastFalling) {

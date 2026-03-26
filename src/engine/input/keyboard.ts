@@ -2,12 +2,18 @@
 // Keyboard input: samples once per physics frame.
 
 export interface InputState {
-  // Digital buttons
+  // Digital buttons (held this frame)
   jump:    boolean;
   attack:  boolean;
   special: boolean;
   shield:  boolean;
   grab:    boolean;
+
+  // Edge-detection: true only on the first frame the button is pressed
+  jumpJustPressed:    boolean;
+  attackJustPressed:  boolean;
+  specialJustPressed: boolean;
+  grabJustPressed:    boolean;
 
   // Stick (−1.0 to +1.0; keyboard emulates discrete 8 directions)
   stickX:  number;
@@ -21,6 +27,8 @@ export interface InputState {
 export function makeNeutralInput(): InputState {
   return {
     jump: false, attack: false, special: false, shield: false, grab: false,
+    jumpJustPressed: false, attackJustPressed: false,
+    specialJustPressed: false, grabJustPressed: false,
     stickX: 0, stickY: 0, cStickX: 0, cStickY: 0,
   };
 }
@@ -88,22 +96,39 @@ export function sampleKeyboard(): InputState {
     stickY = -1.0;
   }
 
-  const jumpPressed =
-    keysDown.has('KeyW') || keysDown.has('ArrowUp') || keysDown.has('Space');
+  const jumpKeys    = ['KeyW', 'ArrowUp', 'Space'];
+  const attackKeys  = ['KeyJ'];
+  const specialKeys = ['KeyK'];
+  const grabKeys    = ['KeyI'];
+
+  const jumpHeld    = jumpKeys.some(k => keysDown.has(k));
+  const attackHeld  = attackKeys.some(k => keysDown.has(k));
+  const specialHeld = specialKeys.some(k => keysDown.has(k));
+  const grabHeld    = grabKeys.some(k => keysDown.has(k));
+
+  // Edge-detection: only true when the key transitioned down this sample
+  const jumpJustPressed    = jumpKeys.some(k => keysPressed.has(k));
+  const attackJustPressed  = attackKeys.some(k => keysPressed.has(k));
+  const specialJustPressed = specialKeys.some(k => keysPressed.has(k));
+  const grabJustPressed    = grabKeys.some(k => keysPressed.has(k));
 
   const state: InputState = {
-    jump:    jumpPressed,
-    attack:  keysDown.has('KeyJ'),
-    special: keysDown.has('KeyK'),
+    jump:    jumpHeld,
+    attack:  attackHeld,
+    special: specialHeld,
     shield:  keysDown.has('KeyL'),
-    grab:    keysDown.has('KeyI'),
+    grab:    grabHeld,
+    jumpJustPressed,
+    attackJustPressed,
+    specialJustPressed,
+    grabJustPressed,
     stickX,
     stickY,
     cStickX: 0,
     cStickY: 0,
   };
 
-  // Clear pressed-this-frame set after sampling
+  // Clear pressed-this-frame set after sampling so each press fires once
   keysPressed.clear();
 
   return state;

@@ -34,3 +34,8 @@ export function fixedAdd(a: Fixed, b: Fixed): Fixed {
 export function fixedSub(a: Fixed, b: Fixed): Fixed {
   return (a - b) | 0;
 }
+
+/** Negate a fixed-point value: equivalent to multiplying by −1. */
+export function fixedNeg(a: Fixed): Fixed {
+  return (-a) | 0;
+}

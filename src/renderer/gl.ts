@@ -17,6 +17,12 @@ let program: WebGLProgram;
 let vao: WebGLVertexArrayObject;
 let positionBuffer: WebGLBuffer;
 
+// Cached uniform locations (populated once after program link; guaranteed non-null
+// because we throw on link failure before reaching this point)
+let uTranslation!: WebGLUniformLocation;
+let uSize!: WebGLUniformLocation;
+let uColor!: WebGLUniformLocation;
+
 const INTERNAL_WIDTH  = 1920;
 const INTERNAL_HEIGHT = 1080;
 
@@ -81,6 +87,11 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
   program = createShaderProgram(VS_SOURCE, FS_SOURCE);
   gl.useProgram(program);
 
+  // Cache uniform locations once after program link
+  uTranslation = gl.getUniformLocation(program, 'u_translation')!;
+  uSize        = gl.getUniformLocation(program, 'u_size')!;
+  uColor       = gl.getUniformLocation(program, 'u_color')!;
+
   // Unit quad vertices (two triangles)
   const verts = new Float32Array([
     -0.5, -0.5,
@@ -140,13 +151,9 @@ function compileShader(type: number, src: string): WebGLShader {
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 
 function drawQuad(x: number, y: number, w: number, h: number, r: number, g: number, b: number, a = 1.0): void {
-  const transLoc = gl.getUniformLocation(program, 'u_translation');
-  const sizeLoc  = gl.getUniformLocation(program, 'u_size');
-  const colorLoc = gl.getUniformLocation(program, 'u_color');
-
-  gl.uniform2f(transLoc, x, y);
-  gl.uniform2f(sizeLoc, w, h);
-  gl.uniform4f(colorLoc, r, g, b, a);
+  gl.uniform2f(uTranslation, x, y);
+  gl.uniform2f(uSize, w, h);
+  gl.uniform4f(uColor, r, g, b, a);
 
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLES, 0, 6);

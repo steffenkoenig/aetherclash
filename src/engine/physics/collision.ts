@@ -2,6 +2,7 @@
 // Continuous AABB-vs-line-segment platform collision detection.
 
 import type { Fixed } from './fixednum.js';
+import { FRAC_SCALE } from './fixednum.js';
 import {
   transformComponents,
   physicsComponents,
@@ -62,7 +63,7 @@ export function platformCollisionSystem(): void {
         for (const platform of platforms) {
           const bottom = transform.y - FIGHTER_HALF_HEIGHT;
           if (
-            Math.abs(bottom - platform.y) <= 1 && // within 1 Q16.16 unit
+            Math.abs(bottom - platform.y) <= FRAC_SCALE && // within 1 world unit (Q16.16)
             transform.x >= platform.x1 &&
             transform.x <= platform.x2
           ) {
@@ -99,13 +100,22 @@ export function platformCollisionSystem(): void {
   }
 }
 
-// Per-entity pass-through input flag; set by the input system each frame
+// Per-entity pass-through input flag; set by the input system each frame.
+// Entries are removed when the flag is cleared to prevent stale accumulation.
 const passThroughInputs = new Map<number, boolean>();
 
 export function setEntityPassThroughInput(entityId: number, down: boolean): void {
-  passThroughInputs.set(entityId, down);
+  if (down) {
+    passThroughInputs.set(entityId, true);
+  } else {
+    passThroughInputs.delete(entityId);
+  }
 }
 
 export function getEntityPassThroughInput(entityId: number): boolean {
   return passThroughInputs.get(entityId) ?? false;
+}
+
+export function clearPassThroughInputs(): void {
+  passThroughInputs.clear();
 }
