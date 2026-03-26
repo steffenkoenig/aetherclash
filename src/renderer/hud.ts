@@ -1,0 +1,159 @@
+// src/renderer/hud.ts
+// Damage percentage HUD and stock icon overlay (HTML/CSS over the WebGL canvas).
+// Colour-codes percentages: white (0–30%) → yellow (31–80%) → orange (81–120%) → red (121%+)
+
+import { toFloat } from '../engine/physics/fixednum.js';
+import { fighterComponents } from '../engine/ecs/component.js';
+
+// ── Colour thresholds ─────────────────────────────────────────────────────────
+
+const PCT_FRESH       = 30;   // 0–30%:   white
+const PCT_DAMAGED     = 80;   // 31–80%:  yellow
+const PCT_VULNERABLE  = 120;  // 81–120%: orange
+                               // 121%+:   red
+
+function pctToColour(pct: number): string {
+  if (pct <= PCT_FRESH)      return '#ffffff';
+  if (pct <= PCT_DAMAGED)    return '#f5f000';
+  if (pct <= PCT_VULNERABLE) return '#ff8000';
+  return '#ff2020';
+}
+
+// ── Stock icon helpers ────────────────────────────────────────────────────────
+
+const STOCK_COLOURS = ['#4aa8ff', '#ff5555', '#44dd66', '#f5e800'];
+
+function makeStockIcon(colour: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = 'hud-stock-icon';
+  Object.assign(span.style, {
+    display: 'inline-block',
+    width:   '14px',
+    height:  '14px',
+    borderRadius: '50%',
+    background: colour,
+    margin: '0 3px',
+  });
+  return span;
+}
+
+// ── HUD container ─────────────────────────────────────────────────────────────
+
+let hudContainer: HTMLDivElement | null = null;
+let playerPanels: HTMLDivElement[] = [];
+
+/**
+ * Initialise the HUD overlay.  Call once after the canvas has been added to the DOM.
+ * @param playerCount  Number of fighters in the match (1–4).
+ */
+export function initHUD(playerCount: number): void {
+  // Remove any previous HUD
+  if (hudContainer) {
+    hudContainer.remove();
+  }
+  playerPanels = [];
+
+  hudContainer = document.createElement('div');
+  hudContainer.id = 'hud-overlay';
+  Object.assign(hudContainer.style, {
+    position:  'absolute',
+    bottom:    '20px',
+    left:      '50%',
+    transform: 'translateX(-50%)',
+    display:   'flex',
+    gap:       '40px',
+    pointerEvents: 'none',
+    zIndex:    '50',
+    fontFamily: '"Segoe UI", Arial, sans-serif',
+  });
+
+  for (let i = 0; i < playerCount; i++) {
+    const panel = document.createElement('div');
+    panel.className = 'hud-player-panel';
+    Object.assign(panel.style, {
+      display:        'flex',
+      flexDirection:  'column',
+      alignItems:     'center',
+      background:     'rgba(0,0,0,0.55)',
+      borderRadius:   '10px',
+      padding:        '8px 18px',
+      minWidth:       '90px',
+    });
+
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'hud-player-name';
+    nameLabel.textContent = `P${i + 1}`;
+    Object.assign(nameLabel.style, {
+      color:      STOCK_COLOURS[i % STOCK_COLOURS.length]!,
+      fontSize:   '14px',
+      fontWeight: 'bold',
+      marginBottom: '4px',
+    });
+
+    const pctLabel = document.createElement('div');
+    pctLabel.className = 'hud-damage-pct';
+    pctLabel.textContent = '0%';
+    Object.assign(pctLabel.style, {
+      fontSize:   '32px',
+      fontWeight: 'bold',
+      color:      '#ffffff',
+      lineHeight: '1.1',
+    });
+
+    const stockRow = document.createElement('div');
+    stockRow.className = 'hud-stock-row';
+    Object.assign(stockRow.style, {
+      display:    'flex',
+      marginTop:  '5px',
+    });
+
+    panel.appendChild(nameLabel);
+    panel.appendChild(pctLabel);
+    panel.appendChild(stockRow);
+    hudContainer.appendChild(panel);
+    playerPanels.push(panel);
+  }
+
+  document.body.appendChild(hudContainer);
+}
+
+/**
+ * Update the HUD each render frame.
+ * Maps fighterComponents in insertion order to the player panels.
+ */
+export function updateHUD(): void {
+  if (!hudContainer) return;
+
+  let panelIdx = 0;
+  for (const [, fighter] of fighterComponents) {
+    const panel = playerPanels[panelIdx];
+    if (!panel) break;
+
+    const pctLabel  = panel.querySelector<HTMLDivElement>('.hud-damage-pct')!;
+    const stockRow  = panel.querySelector<HTMLDivElement>('.hud-stock-row')!;
+    const colour    = STOCK_COLOURS[panelIdx % STOCK_COLOURS.length]!;
+
+    // Damage percentage
+    const pct = Math.max(0, toFloat(fighter.damagePercent));
+    pctLabel.textContent = `${Math.round(pct)}%`;
+    pctLabel.style.color = pctToColour(pct);
+
+    // Stock icons — rebuild each frame (stock count rarely changes)
+    stockRow.innerHTML = '';
+    for (let s = 0; s < fighter.stocks; s++) {
+      stockRow.appendChild(makeStockIcon(colour));
+    }
+
+    // Dim panel if fighter is KO'd
+    (panel as HTMLElement).style.opacity = fighter.state === 'KO' ? '0.4' : '1';
+
+    panelIdx++;
+  }
+}
+
+/** Remove the HUD from the DOM (call on match end). */
+export function disposeHUD(): void {
+  hudContainer?.remove();
+  hudContainer  = null;
+  playerPanels  = [];
+}
