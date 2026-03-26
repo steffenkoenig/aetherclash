@@ -17,15 +17,17 @@
 | :--- | :--- |
 | Language | TypeScript (strict mode) |
 | Bundler | Vite |
-| Renderer | WebGL 2.0 (raw GL, no Three.js) |
+| Renderer | WebGL 2.0 (raw preferred; Three.js optional) |
 | Physics | Custom deterministic engine (Q16.16 fixed-point) |
 | Networking | WebRTC DataChannel (game data) + WebSocket (signalling) |
-| Testing | Vitest |
-| Linting | ESLint + `@typescript-eslint` |
+| Testing | Vitest (planned; see [Build Guide](docs/implementation/build-guide.md) for test scripts) |
+| Linting | ESLint + `@typescript-eslint` (planned; see [Build Guide](docs/implementation/build-guide.md) for lint configuration) |
 
 ---
 
-## Folder Structure
+## Planned Folder Structure
+
+> **Note:** The repository currently contains documentation only. The directory layout below reflects the *intended* source structure for implementation. See the [Build Guide](docs/implementation/build-guide.md) for the scaffolding steps.
 
 ```
 src/
@@ -123,7 +125,7 @@ Invalid transitions (e.g., `KO` → `attack`) are logged as errors and silently 
 
 Snapshots must be creatable and restorable in **< 1 ms**. Rules:
 - Use pre-allocated `Uint8Array` pools — no heap allocation in the snapshot hot path.
-- Snapshots contain: `frame`, serialised `fighters` (fixed-size binary), `rngState` (uint32).
+- Snapshots must contain **all simulation-affecting state** (e.g., frame, serialised fighters, projectiles/items, stage/physics state, `rngState`). This may be stored as a single packed binary blob, and the snapshot CRC32 must cover the entire blob.
 - The circular buffer holds **8 frames**. Do not grow it without updating the rollback depth constant.
 
 ### 5. Input Encoding
