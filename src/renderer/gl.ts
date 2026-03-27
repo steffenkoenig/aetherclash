@@ -32,16 +32,17 @@ let positionBuffer: WebGLBuffer;
 // Cached uniform locations (populated once after program link; guaranteed non-null
 // because we throw on link failure before reaching this point)
 let uTranslation!: WebGLUniformLocation;
-let uSize!: WebGLUniformLocation;
-let uColor!: WebGLUniformLocation;
+let uSize!:        WebGLUniformLocation;
+let uColor!:       WebGLUniformLocation;
+let uCamOffset!:   WebGLUniformLocation;
+let uCamScale!:    WebGLUniformLocation;
 
 const INTERNAL_WIDTH  = 1920;
 const INTERNAL_HEIGHT = 1080;
 
-// World-space origin is the centre of the stage floor.
-// We map world units 1:1 to pixels at 1080p.
-const WORLD_TO_CLIP_X = 2 / INTERNAL_WIDTH;
-const WORLD_TO_CLIP_Y = 2 / INTERNAL_HEIGHT;
+// Default world-to-clip scale (no camera movement, 1:1 at 1080p).
+const DEFAULT_CAM_SCALE_X = 2 / INTERNAL_WIDTH;
+const DEFAULT_CAM_SCALE_Y = 2 / INTERNAL_HEIGHT;
 
 const VS_SOURCE = `#version 300 es
 precision highp float;
@@ -49,17 +50,15 @@ in vec2 a_position;
 uniform vec2 u_translation;
 uniform vec2 u_size;
 uniform vec4 u_color;
+uniform vec2 u_cam_offset;
+uniform vec2 u_cam_scale;
 out vec4 v_color;
 
 void main() {
   // Build a unit quad [-0.5, 0.5]^2 → world space → clip space
   vec2 worldPos = a_position * u_size + u_translation;
-  // Convert world coords to clip coords
-  // World origin at centre of screen; +Y is up
-  vec2 clip = vec2(
-    worldPos.x * ${WORLD_TO_CLIP_X.toFixed(8)},
-    worldPos.y * ${WORLD_TO_CLIP_Y.toFixed(8)}
-  );
+  // Apply camera transform: world → clip
+  vec2 clip = worldPos * u_cam_scale + u_cam_offset;
   gl_Position = vec4(clip, 0.0, 1.0);
   v_color = u_color;
 }
@@ -107,6 +106,11 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
   uTranslation = gl.getUniformLocation(program, 'u_translation')!;
   uSize        = gl.getUniformLocation(program, 'u_size')!;
   uColor       = gl.getUniformLocation(program, 'u_color')!;
+  uCamOffset   = gl.getUniformLocation(program, 'u_cam_offset')!;
+  uCamScale    = gl.getUniformLocation(program, 'u_cam_scale')!;
+
+  // Set default camera: static 1:1 world-to-clip, centred at origin
+  setRenderCamera(0, 0, DEFAULT_CAM_SCALE_X, DEFAULT_CAM_SCALE_Y);
 
   // Unit quad vertices (two triangles)
   const verts = new Float32Array([
@@ -174,6 +178,24 @@ function drawQuad(x: number, y: number, w: number, h: number, r: number, g: numb
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   gl.bindVertexArray(null);
+}
+
+// ── Camera uniform setter ─────────────────────────────────────────────────────
+
+/**
+ * Upload the camera transform to the vertex shader uniforms.
+ * Call once per frame before render(), using values from getCameraTransform().
+ * Defaults (0, 0, 2/1920, 2/1080) reproduce the Phase 1 static camera.
+ */
+export function setRenderCamera(
+  offsetX: number,
+  offsetY: number,
+  scaleX:  number,
+  scaleY:  number,
+): void {
+  gl.useProgram(program);
+  gl.uniform2f(uCamOffset, offsetX, offsetY);
+  gl.uniform2f(uCamScale,  scaleX,  scaleY);
 }
 
 // ── Render function ───────────────────────────────────────────────────────────
