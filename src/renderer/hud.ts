@@ -37,10 +37,20 @@ function makeStockIcon(colour: string): HTMLSpanElement {
   return span;
 }
 
+// ── Panel cached references ───────────────────────────────────────────────────
+
+interface PanelRefs {
+  panel: HTMLDivElement;
+  pctLabel: HTMLDivElement;
+  stockRow: HTMLDivElement;
+  colour: string;
+  lastStockCount: number; // track previous stock count to avoid unnecessary DOM rebuilds
+}
+
 // ── HUD container ─────────────────────────────────────────────────────────────
 
 let hudContainer: HTMLDivElement | null = null;
-let playerPanels: HTMLDivElement[] = [];
+let panelRefs: PanelRefs[] = [];
 
 /**
  * Initialise the HUD overlay.  Call once after the canvas has been added to the DOM.
@@ -51,7 +61,7 @@ export function initHUD(playerCount: number): void {
   if (hudContainer) {
     hudContainer.remove();
   }
-  playerPanels = [];
+  panelRefs = [];
 
   hudContainer = document.createElement('div');
   hudContainer.id = 'hud-overlay';
@@ -68,6 +78,8 @@ export function initHUD(playerCount: number): void {
   });
 
   for (let i = 0; i < playerCount; i++) {
+    const colour = STOCK_COLOURS[i % STOCK_COLOURS.length]!;
+
     const panel = document.createElement('div');
     panel.className = 'hud-player-panel';
     Object.assign(panel.style, {
@@ -84,9 +96,9 @@ export function initHUD(playerCount: number): void {
     nameLabel.className = 'hud-player-name';
     nameLabel.textContent = `P${i + 1}`;
     Object.assign(nameLabel.style, {
-      color:      STOCK_COLOURS[i % STOCK_COLOURS.length]!,
-      fontSize:   '14px',
-      fontWeight: 'bold',
+      color:        colour,
+      fontSize:     '14px',
+      fontWeight:   'bold',
       marginBottom: '4px',
     });
 
@@ -103,15 +115,17 @@ export function initHUD(playerCount: number): void {
     const stockRow = document.createElement('div');
     stockRow.className = 'hud-stock-row';
     Object.assign(stockRow.style, {
-      display:    'flex',
-      marginTop:  '5px',
+      display:   'flex',
+      marginTop: '5px',
     });
 
     panel.appendChild(nameLabel);
     panel.appendChild(pctLabel);
     panel.appendChild(stockRow);
     hudContainer.appendChild(panel);
-    playerPanels.push(panel);
+
+    // Cache references — avoids querySelector on every frame
+    panelRefs.push({ panel, pctLabel, stockRow, colour, lastStockCount: -1 });
   }
 
   document.body.appendChild(hudContainer);
@@ -124,36 +138,44 @@ export function initHUD(playerCount: number): void {
 export function updateHUD(): void {
   if (!hudContainer) return;
 
-  let panelIdx = 0;
+  let idx = 0;
   for (const [, fighter] of fighterComponents) {
-    const panel = playerPanels[panelIdx];
-    if (!panel) break;
-
-    const pctLabel  = panel.querySelector<HTMLDivElement>('.hud-damage-pct')!;
-    const stockRow  = panel.querySelector<HTMLDivElement>('.hud-stock-row')!;
-    const colour    = STOCK_COLOURS[panelIdx % STOCK_COLOURS.length]!;
+    const refs = panelRefs[idx];
+    if (!refs) break;
 
     // Damage percentage
     const pct = Math.max(0, toFloat(fighter.damagePercent));
-    pctLabel.textContent = `${Math.round(pct)}%`;
-    pctLabel.style.color = pctToColour(pct);
+    const pctText = `${Math.round(pct)}%`;
+    if (refs.pctLabel.textContent !== pctText) {
+      refs.pctLabel.textContent = pctText;
+    }
+    const newColour = pctToColour(pct);
+    if (refs.pctLabel.style.color !== newColour) {
+      refs.pctLabel.style.color = newColour;
+    }
 
-    // Stock icons — rebuild each frame (stock count rarely changes)
-    stockRow.innerHTML = '';
-    for (let s = 0; s < fighter.stocks; s++) {
-      stockRow.appendChild(makeStockIcon(colour));
+    // Stock icons — only rebuild when the stock count has changed
+    if (fighter.stocks !== refs.lastStockCount) {
+      refs.stockRow.innerHTML = '';
+      for (let s = 0; s < fighter.stocks; s++) {
+        refs.stockRow.appendChild(makeStockIcon(refs.colour));
+      }
+      refs.lastStockCount = fighter.stocks;
     }
 
     // Dim panel if fighter is KO'd
-    (panel as HTMLElement).style.opacity = fighter.state === 'KO' ? '0.4' : '1';
+    const opacity = fighter.state === 'KO' ? '0.4' : '1';
+    if (refs.panel.style.opacity !== opacity) {
+      refs.panel.style.opacity = opacity;
+    }
 
-    panelIdx++;
+    idx++;
   }
 }
 
 /** Remove the HUD from the DOM (call on match end). */
 export function disposeHUD(): void {
   hudContainer?.remove();
-  hudContainer  = null;
-  playerPanels  = [];
+  hudContainer = null;
+  panelRefs    = [];
 }

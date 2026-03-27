@@ -646,3 +646,127 @@ describe('move registries', () => {
     expect(moves['forwardSmash']!.hitboxes[0]!.id).toBe('kael_fsmash_0');
   });
 });
+
+// ── Move-instance hit registry ────────────────────────────────────────────────
+
+describe('move-instance hit registry', () => {
+  it('same move can hit the same victim on a new execution (moveInstanceId incremented)', () => {
+    const attackerId = makeGroundedFighter('kael', KAEL_STATS);
+    const victimId   = makeGroundedFighter('kael', KAEL_STATS);
+
+    transformComponents.get(attackerId)!.x = toFixed(0);
+    transformComponents.get(victimId)!.x   = toFixed(60);
+
+    const attacker = fighterComponents.get(attackerId)!;
+    attacker.state            = 'attack';
+    attacker.currentMoveId    = 'forwardSmash';
+    attacker.currentMoveFrame = 22;
+    attacker.moveInstanceId   = 0;
+
+    // First execution — registers hit
+    hitboxSystem();
+    const damageAfterFirst = fighterComponents.get(victimId)!.damagePercent;
+    expect(damageAfterFirst).toBeGreaterThan(toFixed(0));
+
+    // Simulate move end: reset hitlag and bump moveInstanceId (new execution)
+    fighterComponents.get(attackerId)!.hitlagFrames = 0;
+    fighterComponents.get(victimId)!.hitlagFrames   = 0;
+    fighterComponents.get(victimId)!.hitstunFrames  = 0;
+    fighterComponents.get(victimId)!.state          = 'idle';
+    attacker.moveInstanceId = 1; // new move execution
+
+    // Second execution of the same move — should register again
+    hitboxSystem();
+    const damageAfterSecond = fighterComponents.get(victimId)!.damagePercent;
+    expect(damageAfterSecond).toBeGreaterThan(damageAfterFirst);
+  });
+});
+
+// ── Respawn behaviour when stocks run out ─────────────────────────────────────
+
+describe('stocks — no respawn when eliminated', () => {
+  it('no respawnCountdown set when last stock is lost', () => {
+    const id = makeGroundedFighter('kael', KAEL_STATS);
+    fighterComponents.get(id)!.stocks = 1;
+
+    triggerKO(id);
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.stocks).toBe(0);
+    expect(fighter.state).toBe('KO');
+    // respawnCountdown must NOT be set (or must be 0/undefined)
+    expect(fighter.respawnCountdown ?? 0).toBe(0);
+  });
+
+  it('respawnCountdown is set when stocks remain', () => {
+    const id = makeGroundedFighter('kael', KAEL_STATS);
+    fighterComponents.get(id)!.stocks = 3;
+
+    triggerKO(id);
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.stocks).toBe(2);
+    expect(fighter.respawnCountdown).toBeGreaterThan(0);
+  });
+});
+
+// ── Hitlag freezes other timers ───────────────────────────────────────────────
+
+describe('hitlag timer freeze', () => {
+  it('hitstun countdown does NOT advance while hitlag is active', () => {
+    const id = makeGroundedFighter('kael', KAEL_STATS);
+    transitionFighterState(id, 'hitstun', { hitstunFrames: 20 });
+    const fighter = fighterComponents.get(id)!;
+    fighter.hitlagFrames = 6; // 6 frames of hitlag
+
+    // Tick 6 frames — should only decrement hitlagFrames, not hitstunFrames
+    for (let i = 0; i < 6; i++) {
+      fighterTimerSystem();
+    }
+
+    expect(fighter.hitlagFrames).toBe(0);
+    expect(fighter.hitstunFrames).toBe(20); // unchanged during hitlag
+  });
+
+  it('hitstun resumes after hitlag expires', () => {
+    const id = makeGroundedFighter('kael', KAEL_STATS);
+    transitionFighterState(id, 'hitstun', { hitstunFrames: 5 });
+    const fighter = fighterComponents.get(id)!;
+    fighter.hitlagFrames = 2;
+
+    // 2 frames of hitlag + 5 frames of hitstun = 7 total frames to recover
+    for (let i = 0; i < 7; i++) {
+      fighterTimerSystem();
+    }
+
+    expect(fighter.hitlagFrames).toBe(0);
+    expect(fighter.hitstunFrames).toBe(0);
+    expect(fighter.state).toBe('idle');
+  });
+});
+
+// ── Ledge auto-release on state exit ─────────────────────────────────────────
+
+describe('ledge auto-release', () => {
+  it('ledge is released automatically when fighter leaves ledgeHang', () => {
+    const id = makeAirborne('kael', KAEL_STATS, 0, 100);
+    const fighter = fighterComponents.get(id)!;
+    fighter.jumpCount = 2;
+
+    const ledgeX = toFixed(15);
+    const ledgeY = toFixed(130);
+    ledgeColliders.push({ x: ledgeX, y: ledgeY, facingRight: false, occupied: null });
+    physicsComponents.get(id)!.vy = toFixed(-0.1);
+
+    ledgeGrabSystem();
+
+    expect(ledgeColliders[0]!.occupied).toBe(id);
+    expect(fighter.state).toBe('ledgeHang');
+
+    // Transition out of ledgeHang (e.g. fighter jumps off)
+    transitionFighterState(id, 'jump');
+
+    // The ledge should be released automatically
+    expect(ledgeColliders[0]!.occupied).toBeNull();
+  });
+});

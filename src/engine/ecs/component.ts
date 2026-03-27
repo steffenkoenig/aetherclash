@@ -64,7 +64,7 @@ export interface Hitbox {
   launchAngle: number; // degrees (integer, not Fixed)
   activeFrames: [number, number]; // [startFrame, endFrame] inclusive
   hitlagFrames: number;
-  id: string; // unique per move instance — used by hit registry
+  id: string; // unique per hitbox definition — used as part of the hit registry key
 }
 
 export interface Hurtbox {
@@ -97,6 +97,7 @@ export interface Fighter {
   shieldHealth?: Fixed;           // current shield health; 0 = broken
   currentMoveId?: string | null;  // ID of the active move (matches Move map key)
   currentMoveFrame?: number;      // current frame within the active move
+  moveInstanceId?: number;        // increments each time a new move starts; used in hit registry key
   respawnCountdown?: number;      // frames until respawn after KO (180 = 3 s)
   ledgeHangFrames?: number;       // frames since ledge grab (first 20 = intangible)
 }

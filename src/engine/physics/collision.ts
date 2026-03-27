@@ -12,7 +12,7 @@ import {
 } from '../ecs/component.js';
 import type { Hitbox, Hurtbox } from '../ecs/component.js';
 import { applyHit } from './knockback.js';
-import { transitionFighterState } from './stateMachine.js';
+import { transitionFighterState, onStateTransition } from './stateMachine.js';
 
 // ── Platform ──────────────────────────────────────────────────────────────────
 
@@ -100,12 +100,13 @@ export function platformCollisionSystem(): void {
         const fighter = fighterComponents.get(id);
         if (fighter) {
           fighter.jumpCount = 0;
+          // Use state machine for landing transitions
           if (
             fighter.state === 'jump' ||
             fighter.state === 'doubleJump' ||
             fighter.state === 'airDodge'
           ) {
-            fighter.state = 'idle';
+            transitionFighterState(id, 'idle');
           }
         }
         break;
@@ -150,11 +151,12 @@ export function aabbOverlap(
   );
 }
 
-// Hit registry: prevents the same hitbox from registering on the same victim twice.
-// Key format: "attackerId_hitboxId_victimId"
+// Hit registry: prevents the same hitbox from registering on the same victim twice
+// within a single move execution.
+// Key format: "attackerId_moveInstanceId_hitboxId_victimId"
 const hitRegistry = new Set<string>();
 
-/** Clear hit registry entries for a specific attacker's move (call when a move ends). */
+/** Clear hit registry entries for a specific attacker (call when a move ends). */
 export function clearHitRegistry(attackerId: number): void {
   for (const key of hitRegistry) {
     if (key.startsWith(`${attackerId}_`)) {
@@ -184,52 +186,54 @@ export function getActiveHitboxes(entityId: number): Hitbox[] {
   return move.hitboxes.filter(h => frame >= h.activeFrames[0] && frame <= h.activeFrames[1]);
 }
 
+/** Default body hurtbox used as a fallback when no move-specific data is available. */
+const DEFAULT_HURTBOX: Hurtbox = {
+  offsetX: toFixed(0),
+  offsetY: toFixed(0),
+  width:   DEFAULT_HURTBOX_WIDTH,
+  height:  DEFAULT_HURTBOX_HEIGHT,
+  activeFrames: [0, 9999],
+};
+
 /**
  * Return the active hurtboxes for an entity given its current move frame.
- * Falls back to the default full-body hurtbox if none are defined.
+ * Falls back to the default full-body hurtbox if move data is missing or
+ * defines no hurtboxes (ensures a fighter is always hittable).
  */
 export function getActiveHurtboxes(entityId: number): Hurtbox[] {
   const fighter = fighterComponents.get(entityId);
   if (!fighter) return [];
   const moveId = fighter.currentMoveId;
   if (!moveId) {
-    // Default: full body hurtbox centred on the fighter
-    return [{
-      offsetX: toFixed(0),
-      offsetY: toFixed(0),
-      width:   DEFAULT_HURTBOX_WIDTH,
-      height:  DEFAULT_HURTBOX_HEIGHT,
-      activeFrames: [0, 9999],
-    }];
+    return [DEFAULT_HURTBOX];
   }
   const moves = moveRegistries.get(fighter.characterId);
-  if (!moves) return [];
+  if (!moves) {
+    // Character has no registered move data — fall back to default body hurtbox
+    return [DEFAULT_HURTBOX];
+  }
   const move = moves[moveId];
   if (!move || move.hurtboxes.length === 0) {
-    return [{
-      offsetX: toFixed(0),
-      offsetY: toFixed(0),
-      width:   DEFAULT_HURTBOX_WIDTH,
-      height:  DEFAULT_HURTBOX_HEIGHT,
-      activeFrames: [0, 9999],
-    }];
+    return [DEFAULT_HURTBOX];
   }
   const frame = fighter.currentMoveFrame ?? 0;
-  return move.hurtboxes.filter(h => frame >= h.activeFrames[0] && frame <= h.activeFrames[1]);
+  const active = move.hurtboxes.filter(h => frame >= h.activeFrames[0] && frame <= h.activeFrames[1]);
+  return active.length > 0 ? active : [DEFAULT_HURTBOX];
 }
 
 /**
  * System: check hitboxes of all attacking fighters against hurtboxes of all others.
- * Applies hits via applyHit(); respects the hit registry (single-hit-per-move guarantee).
+ * Applies hits via applyHit(); respects the hit registry (single-hit-per-move-instance guarantee).
+ * The registry key includes the attacker's moveInstanceId so the same move definition
+ * can register hits on a new execution.
  *
  * @param diInputMap  Optional map of entityId → stickX for DI (defaults to 0 for all)
  */
 export function hitboxSystem(diInputMap?: Map<number, number>): void {
-  const entities = [...fighterComponents.keys()];
-
-  for (const attackerId of entities) {
-    const attacker = fighterComponents.get(attackerId)!;
-    // Skip hitlag frames (both attacker and victim are frozen)
+  // Iterate the Map directly to avoid a per-frame array allocation
+  outerAttacker:
+  for (const [attackerId, attacker] of fighterComponents) {
+    // Skip hitlag frames (attacker is frozen)
     if ((attacker.hitlagFrames ?? 0) > 0) continue;
     if (attacker.state !== 'attack') continue;
 
@@ -239,9 +243,10 @@ export function hitboxSystem(diInputMap?: Map<number, number>): void {
     const attackerTransform = transformComponents.get(attackerId);
     if (!attackerTransform) continue;
 
-    for (const victimId of entities) {
+    const moveInstanceId = attacker.moveInstanceId ?? 0;
+
+    for (const [victimId, victim] of fighterComponents) {
       if (victimId === attackerId) continue;
-      const victim = fighterComponents.get(victimId)!;
 
       // Invincible / already in KO
       if (victim.invincibleFrames > 0 || victim.state === 'KO') continue;
@@ -253,9 +258,14 @@ export function hitboxSystem(diInputMap?: Map<number, number>): void {
 
       const activeHurtboxes = getActiveHurtboxes(victimId);
 
+      let hitRegisteredThisVictim = false;
+
       for (const hitbox of activeHitboxes) {
-        const registryKey = `${attackerId}_${hitbox.id}_${victimId}`;
-        if (hitRegistry.has(registryKey)) continue; // already hit
+        if (hitRegisteredThisVictim) break; // only one hit per victim per frame
+
+        // Key includes moveInstanceId to allow re-hitting on a new move execution
+        const registryKey = `${attackerId}_${moveInstanceId}_${hitbox.id}_${victimId}`;
+        if (hitRegistry.has(registryKey)) continue; // already hit this victim with this hitbox
 
         // Compute world-space hitbox centre; >> 1 divides the Fixed integer by 2
         // which correctly computes half the fixed-point width/height value.
@@ -282,7 +292,13 @@ export function hitboxSystem(diInputMap?: Map<number, number>): void {
               hitbox.launchAngle,
               di,
             );
-            break; // one hitbox overlap is enough per victim per frame
+            hitRegisteredThisVictim = true;
+
+            // applyHit sets hitlagFrames on the attacker; exit attacker loop if frozen
+            const attackerNowInHitlag = (attacker.hitlagFrames ?? 0) > 0;
+            if (attackerNowInHitlag) continue outerAttacker;
+
+            break; // break hurtbox loop; hitRegisteredThisVictim will break hitbox loop
           }
         }
       }
@@ -372,3 +388,13 @@ export function releaseLedge(entityId: number): void {
     }
   }
 }
+
+// ── Automatic ledge release on state exit ────────────────────────────────────
+// Register a state-transition callback so that any transition out of 'ledgeHang'
+// (whether triggered by input, KO, or any other system) releases the ledge occupancy.
+
+onStateTransition((entityId, fromState) => {
+  if (fromState === 'ledgeHang') {
+    releaseLedge(entityId);
+  }
+});

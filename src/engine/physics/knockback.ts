@@ -5,10 +5,10 @@
 import type { Fixed } from './fixednum.js';
 import {
   toFixed,
-  toFloat,
   fixedAdd,
   fixedMul,
   fixedDiv,
+  FRAC_SCALE,
 } from './fixednum.js';
 import { cosLUT, sinLUT } from './trig.js';
 import { fighterComponents, physicsComponents, transformComponents } from '../ecs/component.js';
@@ -18,6 +18,15 @@ import { transitionFighterState } from './stateMachine.js';
 
 /** Maximum angle adjustment from Directional Influence (degrees). */
 export const DI_MAX_DEGREES = 15;
+
+// Hoisted Fixed constants used in the knockback formula hot path.
+const FIXED_1  = toFixed(1);
+const FIXED_10 = toFixed(10);
+const FIXED_20 = toFixed(20);
+
+// Divisor for integer hitstun computation: 5 * FRAC_SCALE
+// hitstunFrames = floor(F_float * 0.4) = floor(F_int * 2 / (5 * FRAC_SCALE))
+const HITSTUN_DIVISOR = BigInt(5) * BigInt(FRAC_SCALE);
 
 // ── Pure formula helpers (exported for tests) ─────────────────────────────────
 
@@ -36,25 +45,25 @@ export const DI_MAX_DEGREES = 15;
  */
 export function computeKnockback(d: Fixed, w: Fixed, s: Fixed, b: Fixed): Fixed {
   // d / 10
-  const d10 = fixedDiv(d, toFixed(10));
+  const d10 = fixedDiv(d, FIXED_10);
   // d * w / 20
-  const dw20 = fixedDiv(fixedMul(d, w), toFixed(20));
+  const dw20 = fixedDiv(fixedMul(d, w), FIXED_20);
   // (d/10 + d*w/20) / (w + 1)
   const numerator = fixedAdd(d10, dw20);
-  const wPlus1    = fixedAdd(w, toFixed(1));
+  const wPlus1    = fixedAdd(w, FIXED_1);
   const fraction  = fixedDiv(numerator, wPlus1);
   // fraction * s + b
   return fixedAdd(fixedMul(fraction, s), b);
 }
 
 /**
- * Compute hitstun duration: floor(F * 0.4)
- * Converts to float before computing the floor since the result is an integer frame count.
- * @param force - Launch force F (Fixed)
+ * Compute hitstun duration: floor(F * 0.4) = floor(F_int * 2 / (5 * FRAC_SCALE))
+ * Uses integer-only arithmetic (via BigInt) to remain deterministic across engines.
+ * @param force - Launch force F (Fixed, Q16.16)
  * @returns Number of hitstun frames (integer)
  */
 export function computeHitstun(force: Fixed): number {
-  return Math.floor(toFloat(force) * 0.4);
+  return Number(BigInt(force) * 2n / HITSTUN_DIVISOR);
 }
 
 /**
@@ -72,18 +81,18 @@ export function computeHitlag(damage: number): number {
  * Apply a hit from attacker to victim:
  *  - Computes knockback force using the victim's current damage and weight
  *  - Accumulates damage on the victim
- *  - Applies DI (only on the very first hitstun frame, i.e. when transitioning into hitstun)
+ *  - Applies DI
  *  - Sets vx/vy on the victim
  *  - Sets hitstun and hitlag frames on both attacker and victim
  *  - Transitions the victim to 'hitstun'
  *
- * @param attackerId    - Entity ID of the attacker
- * @param victimId      - Entity ID of the victim
- * @param damage        - Raw damage integer for this hit
+ * @param attackerId       - Entity ID of the attacker
+ * @param victimId         - Entity ID of the victim
+ * @param damage           - Raw damage integer for this hit
  * @param knockbackScaling - Move's scaling factor (Fixed)
  * @param baseKnockback    - Move's base knockback (Fixed)
  * @param launchAngleDeg   - Move's launch angle in degrees (0 = right, 90 = up)
- * @param diInputX         - Victim's stick X in [-1, 1] for DI (float, not Fixed)
+ * @param diInputX         - Victim's stick X in [−1, 1] for DI (float, not Fixed)
  */
 export function applyHit(
   attackerId: number,
@@ -112,7 +121,7 @@ export function applyHit(
   // Flip launch angle if the attacker is facing left (before applying DI)
   let angle = attackerTransform.facingRight ? launchAngleDeg : 180 - launchAngleDeg;
 
-  // Apply DI (only valid on the first hitstun frame, caller responsibility)
+  // Apply DI
   angle += diInputX * DI_MAX_DEGREES;
 
   // Normalise angle to [0, 360)
@@ -126,7 +135,7 @@ export function applyHit(
   victimPhys.grounded    = false;
   victimPhys.fastFalling = false;
 
-  // Accumulate damage (add to damage AFTER computing knockback — consistent with the spec)
+  // Accumulate damage (after computing knockback — consistent with the spec)
   victimFighter.damagePercent = fixedAdd(
     victimFighter.damagePercent,
     toFixed(damage),

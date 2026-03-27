@@ -45,7 +45,14 @@ export function triggerKO(entityId: number): void {
   if (fighter.state === 'KO') return;
 
   fighter.stocks = Math.max(0, fighter.stocks - 1);
-  transitionFighterState(entityId, 'KO', { respawnCountdown: RESPAWN_DELAY_FRAMES });
+
+  if (fighter.stocks > 0) {
+    // Stocks remain: schedule a respawn after the delay
+    transitionFighterState(entityId, 'KO', { respawnCountdown: RESPAWN_DELAY_FRAMES });
+  } else {
+    // No stocks remaining: eliminated — stay KO'd with no respawn scheduled
+    transitionFighterState(entityId, 'KO', {});
+  }
 
   for (const cb of koCallbacks) {
     cb(entityId);

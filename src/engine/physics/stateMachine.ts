@@ -27,12 +27,40 @@ const VALID_TRANSITIONS: Readonly<Record<FighterState, ReadonlyArray<FighterStat
   KO:          ['idle'], // only allowed transition from KO is respawn → idle
 };
 
+// ── State-transition callbacks ────────────────────────────────────────────────
+
+export type StateTransitionCallback = (
+  entityId: number,
+  fromState: FighterState,
+  toState: FighterState,
+) => void;
+
+const stateTransitionCallbacks: StateTransitionCallback[] = [];
+
+/**
+ * Register a callback that fires whenever any fighter successfully transitions
+ * between states.  Use to implement cross-module side-effects (e.g. releasing a
+ * ledge when leaving `ledgeHang`) without creating circular imports.
+ */
+export function onStateTransition(cb: StateTransitionCallback): void {
+  stateTransitionCallbacks.push(cb);
+}
+
+/** Remove all registered state-transition callbacks (useful for test teardown). */
+export function clearStateTransitionCallbacks(): void {
+  stateTransitionCallbacks.length = 0;
+}
+
+// ── Transition data ───────────────────────────────────────────────────────────
+
 /** Optional data that may accompany a state transition. */
 export interface TransitionData {
   hitstunFrames?: number;
   respawnCountdown?: number;
   ledgeHangFrames?: number;
 }
+
+// ── Core transition function ──────────────────────────────────────────────────
 
 /**
  * Attempt to transition a fighter to a new state.
@@ -58,6 +86,7 @@ export function transitionFighterState(
     return false;
   }
 
+  const fromState = fighter.state;
   fighter.state = newState;
 
   // Apply transition data
@@ -71,20 +100,29 @@ export function transitionFighterState(
     fighter.ledgeHangFrames = data.ledgeHangFrames;
   }
 
+  // Fire cross-module callbacks
+  for (const cb of stateTransitionCallbacks) {
+    cb(entityId, fromState, newState);
+  }
+
   return true;
 }
 
+// ── Per-frame timer system ────────────────────────────────────────────────────
+
 /**
  * Tick hitstun, hitlag, and shield-break countdown for a fighter.
- * Should be called once per physics frame with the entity's ID.
+ * When hitlag is active, all other timers are frozen — the fighter is in
+ * a brief freeze-frame before hitstun or knockback begins to play out.
  */
 export function tickFighterTimers(entityId: number): void {
   const fighter = fighterComponents.get(entityId);
   if (!fighter) return;
 
-  // Decrement hitlag
+  // Hitlag: freeze all other timers while active
   if (fighter.hitlagFrames !== undefined && fighter.hitlagFrames > 0) {
     fighter.hitlagFrames--;
+    return;
   }
 
   // Decrement hitstun; when it expires, transition back to idle
