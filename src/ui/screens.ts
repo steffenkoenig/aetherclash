@@ -251,8 +251,10 @@ function showStageSelect(): void {
   startBtn.onclick = () => {
     const charId  = selectedCharacter ?? 'kael';
     const stageId = selectedStage    ?? 'aetherPlateau';
+    // Capture the callback BEFORE disposeScreens() clears it.
+    const cb = callbacks;
     disposeScreens();
-    callbacks?.onMatchReady(charId as CharacterId, stageId as StageId);
+    cb?.onMatchReady(charId as CharacterId, stageId as StageId);
   };
   nav.appendChild(startBtn);
 
