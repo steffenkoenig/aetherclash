@@ -23,7 +23,12 @@ npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslin
 npm install --save-dev vitest                         # unit testing
 ```
 
-No runtime dependencies are required for the game engine. Three.js is optional for the renderer — raw WebGL 2.0 keeps the bundle size minimal.
+Three.js (r0.183.2) is the only runtime dependency, used for 3D rendering via WebGL 2.0. Install it alongside the dev tools:
+
+```bash
+npm install three                          # runtime renderer
+npm install --save-dev @types/three        # TypeScript types
+```
 
 ### Folder Structure
 
@@ -332,21 +337,19 @@ Expected file layout per character:
 
 ```
 public/assets/kael/
-  kael.glb           # Rigged low-poly mesh with embedded animation clips
-  kael_atlas.png     # 2048×2048 flat-shaded texture atlas
-  kael_atlas.json    # UV region metadata per surface (optional, for tooling)
+  kael.glb           # Rigged low-poly mesh with embedded animation clips and materials
 ```
 
-Load character assets at runtime using the standard `fetch` + WebGL buffer upload path:
+Load character assets at runtime using the `loadGLTF` helper in `src/renderer/models.ts`, which uses Three.js `GLTFLoader` internally:
 
 ```typescript
-import { loadGLTF, loadTexture } from '../renderer/models';
-
-const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
-
-const kaelModel = await loadGLTF('/assets/kael/kael.glb');
-const kaelAtlas = await loadTexture(gl, '/assets/kael/kael_atlas.png');
+import { loadGLTF } from '../renderer/models';
+// loadGLTF uses Three.js GLTFLoader internally:
+const model = await loadGLTF('/assets/kael/kael.glb');
+if (!model.failed && model.root) {
+  scene.add(model.root);
+  // model.clips contains AnimationClip[] from the GLB
+}
 ```
 
 ### Service Worker for Caching
@@ -362,7 +365,6 @@ self.addEventListener('install', (event) => {
         '/',
         '/assets/index.js',
         '/assets/kael/kael.glb',
-        '/assets/kael/kael_atlas.png',
         // ... all stage and character assets
       ])
     )

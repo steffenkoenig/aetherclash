@@ -28,6 +28,8 @@
    cd aetherclash
    npm install
    npm install --save-dev vitest eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin prettier
+   npm install three                          # Three.js renderer (runtime)
+   npm install --save-dev @types/three        # TypeScript types
    ```
    Create the folder tree from [Build Guide § Folder Structure](build-guide.md). Commit as `chore: initial scaffold`.
 
@@ -58,7 +60,7 @@
    Map keys to `InputState` (see [Input § Default Control Schemes](../technical/input.md)). Sample once per physics frame, not per render frame. Commit as `feat(phase-1): keyboard input`.
 
 8. **Render a placeholder character and platform.**
-   Set up the WebGL 2.0 canvas in `src/renderer/gl.ts` at 1920×1080 internal resolution with CSS viewport scaling from [Rendering § WebGL Canvas Setup](../technical/rendering.md). Draw a coloured quad for the character and a white rectangle for the platform. No texture atlas yet. Commit as `feat(phase-1): placeholder renderer`.
+   Set up the Three.js `WebGLRenderer` and `OrthographicCamera` in `src/renderer/gl.ts` at 1920×1080 internal resolution with CSS viewport scaling (see [Rendering § Renderer Setup](../technical/rendering.md)). Render procedural box-humanoid `MeshToonMaterial` groups as character placeholders and `BoxGeometry` slabs for platforms. Three.js manages the WebGL context. Commit as `feat(phase-1): placeholder renderer`.
 
 9. **Add a debug overlay.**
    Print position (x, y), velocity (vx, vy), state, and FPS as HTML text above the canvas. Commit as `feat(phase-1): debug overlay`.
@@ -116,7 +118,7 @@
    Place ledge colliders at all solid platform edges. Trigger `LEDGE_HANG` when the grab-hand AABB overlaps a ledge collider while the character is airborne and moving downward. Refresh aerial jumps on grab. See [Mechanics § Ledge Mechanics](../game-design/mechanics.md). Commit as `feat(phase-2): ledge grabbing`.
 
 9. **Load 3D character model assets.**
-   Load each character's glTF/GLB file and texture atlas at startup. Parse embedded animation clips. Bind the flat-shaded atlas texture to the mesh. See [Architecture § 3D Asset Strategy](../technical/architecture.md). Commit as `feat(phase-2): 3d-character-models`.
+   Generate placeholder GLB files for all 5 characters and 5 stages using the asset generation script (`npm run generate-assets`). Load them at runtime via the `loadGLTF(url)` helper in `src/renderer/models.ts`, which uses Three.js `GLTFLoader` and falls back to procedural geometry if the file is absent. The renderer automatically swaps procedural groups for loaded GLB scenes. See [Architecture § 3D Asset Strategy](../technical/architecture.md). Commit as `feat(phase-2): 3d-character-models`.
 
 10. **Implement the damage HUD.**
     Render damage percentages and stock icons as HTML over the canvas. Colour-code percentages: white → yellow → orange → red. See [Rendering § HUD System](../technical/rendering.md). Commit as `feat(phase-2): damage HUD`.
