@@ -13,6 +13,8 @@ import { getCameraTransform }              from './camera.js';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PLAYER_COLORS = ['#4499FF', '#FF4444', '#44FF66', '#FFEE22'] as const;
+/** Rounds damage to one decimal place before display. */
+const DAMAGE_ROUND_FACTOR = 10;
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ let trackedIds: number[] = [];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function damageColor(pct: number): string {
+function getDamageColor(pct: number): string {
   if (pct <= 30)  return '#FFFFFF';
   if (pct <= 80)  return '#FFE000';
   if (pct <= 120) return '#FF8C00';
@@ -165,9 +167,9 @@ export function updateHud(): void {
     // ── Damage label ────────────────────────────────────────────────────────
     const dmgLabel = damageLabels[i];
     if (dmgLabel && fighter) {
-      const pct = Math.round(toFloat(fighter.damagePercent) * 10) / 10;
+      const pct = Math.round(toFloat(fighter.damagePercent) * DAMAGE_ROUND_FACTOR) / DAMAGE_ROUND_FACTOR;
       dmgLabel.textContent = `${pct.toFixed(1)}%`;
-      dmgLabel.style.color = damageColor(pct);
+      dmgLabel.style.color = getDamageColor(pct);
     }
 
     // ── Stock icons ─────────────────────────────────────────────────────────

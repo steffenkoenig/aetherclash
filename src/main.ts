@@ -53,9 +53,10 @@ const MOVE_DATA = new Map([
   ['gorun', new Map(Object.entries(GORUN_MOVES))],
 ]);
 
-// ── Air-drift scale ───────────────────────────────────────────────────────────
+// ── Air-drift scale and input threshold ──────────────────────────────────────
 
 const AIR_DRIFT_SCALE = toFixed(0.8);
+const STICK_THRESHOLD = 0.5;
 
 // ── Player 1 entity — Kael ────────────────────────────────────────────────────
 
@@ -199,10 +200,9 @@ function samplePlayer2Input(): InputState {
 
 // ── Move helpers ──────────────────────────────────────────────────────────────
 
-function getMoves(characterId: string): Record<string, typeof KAEL_MOVES[string]> | undefined {
-  if (characterId === 'kael')  return KAEL_MOVES;
-  if (characterId === 'gorun') return GORUN_MOVES;
-  return undefined;
+// Convenience wrapper — looks up a character's move table from the shared map.
+function getMoves(characterId: string) {
+  return MOVE_DATA.get(characterId);
 }
 
 // ── Animation sync ────────────────────────────────────────────────────────────
@@ -221,8 +221,8 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
   let moveId: string;
 
   if (phys.grounded) {
-    if (Math.abs(input.stickX) > 0.5) moveId = 'forwardSmash';
-    else if (input.stickY > 0.5)      moveId = 'upSmash';
+    if (Math.abs(input.stickX) > STICK_THRESHOLD) moveId = 'forwardSmash';
+    else if (input.stickY > STICK_THRESHOLD)      moveId = 'upSmash';
     else {
       // Kael has neutralJab1; Gorun has neutralJab
       moveId = fighter.characterId === 'kael' ? 'neutralJab1' : 'neutralJab';
@@ -256,7 +256,7 @@ function processPlayerInput(
   }
 
   // Pass-through flag for one-way platforms
-  setEntityPassThroughInput(playerId, input.stickY < -0.5);
+  setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
 
   // Record buffered presses for this frame
   if (input.jumpJustPressed)    buffer.press('jump',    matchState.frame);
@@ -288,7 +288,7 @@ function processPlayerInput(
   if (fighter.state === 'attack') {
     fighter.attackFrame++;
     const moves = getMoves(fighter.characterId);
-    const move  = moves?.[fighter.currentMoveId ?? ''];
+    const move  = moves?.get(fighter.currentMoveId ?? '');
     if (move && fighter.attackFrame >= move.totalFrames) {
       clearHitRegistry(playerId);
       fighter.currentMoveId = null;
@@ -316,7 +316,7 @@ function processPlayerInput(
       }
     }
   } else {
-    // Air drift at 80 % of run speed
+    // Air drift at 80% of run speed
     if (input.stickX > 0) {
       phys.vx = fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE);
       transform.facingRight = true;
@@ -329,7 +329,7 @@ function processPlayerInput(
   }
 
   // ── Fast-fall ─────────────────────────────────────────────────────────────
-  if (!phys.grounded && input.stickY < -0.5 && phys.vy <= 0) {
+  if (!phys.grounded && input.stickY < -STICK_THRESHOLD && phys.vy <= 0) {
     phys.fastFalling        = true;
     phys.gravityMultiplier  = toFixed(2.5);
   }
