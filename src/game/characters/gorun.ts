@@ -58,7 +58,13 @@ export const GORUN_MOVES: Record<string, Move> = {
     hitboxes: [
       { activeFrames: [7, 12], offsetX: toFixed(22), offsetY: toFixed(-20), width: toFixed(38), height: toFixed(22), damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(3), launchAngle: 25, hitlagFrames: 4, id: 'gorun_dtilt' },
       // Shockwave hitbox — ground-level extra range
-      { activeFrames: [10, 16], offsetX: toFixed(45), offsetY: toFixed(-22), width: toFixed(25), height: toFixed(15), damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(2), launchAngle: 20, hitlagFrames: 4, id: 'gorun_dtilt_shockwave' },
+      {
+        activeFrames: [10, 16],
+        offsetX: toFixed(45), offsetY: toFixed(-22),
+        width: toFixed(25), height: toFixed(15),
+        damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(2),
+        launchAngle: 20, hitlagFrames: 4, id: 'gorun_dtilt_shockwave',
+      },
     ],
     hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 22, landingLag: 0,
