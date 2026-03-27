@@ -5,12 +5,12 @@ import { toFixed } from '../../engine/physics/fixednum.js';
 import type { FighterStats, Move } from '../../engine/ecs/component.js';
 
 export const VELA_STATS: FighterStats = {
-  maxFallSpeed:     toFixed(-0.90),
-  maxFastFallSpeed: toFixed(-1.65),
-  jumpForce:        toFixed(1.15),
-  doubleJumpForce:  toFixed(0.95),
-  walkSpeed:        toFixed(0.9),
-  runSpeed:         toFixed(1.3),
+  maxFallSpeed:     toFixed(-13.0),
+  maxFastFallSpeed: toFixed(-21.0),
+  jumpForce:        toFixed(16.0),
+  doubleJumpForce:  toFixed(13.0),
+  walkSpeed:        toFixed(6.0),
+  runSpeed:         toFixed(9.5),
   weightClass:      toFixed(1.3),
 };
 

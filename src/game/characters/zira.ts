@@ -5,12 +5,12 @@ import { toFixed } from '../../engine/physics/fixednum.js';
 import type { FighterStats, Move } from '../../engine/ecs/component.js';
 
 export const ZIRA_STATS: FighterStats = {
-  maxFallSpeed:     toFixed(-0.90),
-  maxFastFallSpeed: toFixed(-1.70),
-  jumpForce:        toFixed(1.4),
-  doubleJumpForce:  toFixed(1.2),
-  walkSpeed:        toFixed(1.1),
-  runSpeed:         toFixed(1.5),
+  maxFallSpeed:     toFixed(-11.0),
+  maxFastFallSpeed: toFixed(-18.0),
+  jumpForce:        toFixed(18.0),
+  doubleJumpForce:  toFixed(16.0),
+  walkSpeed:        toFixed(7.0),
+  runSpeed:         toFixed(11.0),
   weightClass:      toFixed(0.6),
 };
 

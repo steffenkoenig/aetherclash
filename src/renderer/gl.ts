@@ -1,5 +1,5 @@
 // src/renderer/gl.ts
-// Three.js WebGL renderer — orthographic side-on view.
+// Three.js WebGL renderer — perspective 2.5D view with gentle downward tilt.
 // Internal resolution: 1920×1080, CSS-scaled to fill the viewport.
 //
 // Rendering layers (back to front):
@@ -30,7 +30,11 @@ const INTERNAL_HEIGHT = 1080;
 
 let renderer: THREE.WebGLRenderer;
 let scene:    THREE.Scene;
-let threeCamera: THREE.OrthographicCamera;
+let threeCamera: THREE.PerspectiveCamera;
+
+// Camera Z distance and Y tilt for the 2.5D perspective look.
+const PERSP_Z      = 700;
+const PERSP_TILT_Y = 100;  // camera sits this many units above the focus point
 
 // ── Character mesh registry ───────────────────────────────────────────────────
 
@@ -259,16 +263,16 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
   renderer.setClearColor(0x0d0d1e);
   renderer.shadowMap.enabled = false;
 
-  // Orthographic camera matching the internal resolution
-  threeCamera = new THREE.OrthographicCamera(
-    -INTERNAL_WIDTH  / 2,  // left
-     INTERNAL_WIDTH  / 2,  // right
-     INTERNAL_HEIGHT / 2,  // top
-    -INTERNAL_HEIGHT / 2,  // bottom
+  // Perspective camera: 45° FOV, matches internal aspect ratio.
+  // Positioned above and in front of the stage; looks slightly downward (~8°).
+  threeCamera = new THREE.PerspectiveCamera(
+    45,
+    INTERNAL_WIDTH / INTERNAL_HEIGHT,
     0.1,
-    2000,
+    5000,
   );
-  threeCamera.position.set(0, 0, 1000);
+  threeCamera.position.set(0, PERSP_TILT_Y, PERSP_Z);
+  threeCamera.lookAt(0, 0, 0);
 
   scene = new THREE.Scene();
 
@@ -332,9 +336,10 @@ function applyPose(group: THREE.Group, state: FighterState): void {
   // The determinism rule applies only to the simulation path.
   const t = Date.now() * 0.001;
 
-  // Reset per-frame transient transforms before applying state pose
-  group.rotation.z  = 0;
-  group.scale.set(group.scale.x < 0 ? -1 : 1, 1, 1); // preserve facing, reset y/z
+  // Reset per-frame transient transforms before applying state pose.
+  // rotation.y (facing direction) is set by the caller — do not touch it here.
+  group.rotation.z = 0;
+  group.scale.set(1, 1, 1);
 
   // Reset arm forward position (used by attack)
   armR.position.z = 0;
@@ -380,7 +385,7 @@ function applyPose(group: THREE.Group, state: FighterState): void {
       break;
 
     case 'shielding':
-      group.scale.set(group.scale.x < 0 ? -0.95 : 0.95, 0.95, 1.2);
+      group.scale.set(0.95, 0.95, 1.2);
       break;
 
     default:
@@ -396,7 +401,8 @@ function applyPose(group: THREE.Group, state: FighterState): void {
 
 export function render(stagePlatforms: Platform[], _alpha: number): void {
   // ── Camera update ─────────────────────────────────────────────────────────
-  threeCamera.position.set(camera.x, camera.y, 1000);
+  threeCamera.position.set(camera.x, camera.y + PERSP_TILT_Y, PERSP_Z);
+  threeCamera.lookAt(camera.x, camera.y, 0);
   threeCamera.zoom = camera.zoom;
   threeCamera.updateProjectionMatrix();
 
@@ -468,9 +474,11 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     const wy = toFloat(transform.y);
     group.position.set(wx, wy, zOffset);
 
-    // Facing direction (preserve any y/z scale set by pose)
-    const faceSign = transform.facingRight ? 1 : -1;
-    group.scale.x = faceSign * Math.abs(group.scale.x);
+    // Facing direction: rotate character around Y so they truly turn to face
+    // their movement direction in 3D (face toward +Z in model space).
+    // rotation.y = -π/2 → face points to world +X (right)
+    // rotation.y = +π/2 → face points to world -X (left)
+    group.rotation.y = transform.facingRight ? -Math.PI / 2 : Math.PI / 2;
 
     // Pose animation:
     //  - For GLB models: drive the AnimationMixer (already ticked above)
