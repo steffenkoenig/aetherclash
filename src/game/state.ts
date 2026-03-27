@@ -11,6 +11,11 @@ export const matchState: MatchState = {
   paused: false,
 };
 
+export function resetMatchState(): void {
+  matchState.frame  = 0;
+  matchState.paused = false;
+}
+
 export function tickFrame(): void {
   matchState.frame++;
 }

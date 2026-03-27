@@ -1,8 +1,8 @@
 // src/main.ts
-// Entry point: Phase 2 — 2-player split-keyboard combat sandbox.
+// Entry point — shows start menu (character + stage select), then runs the match.
 
 import { toFixed, toFloat, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
-import { createEntity }                          from './engine/ecs/entity.js';
+import { createEntity, resetEntityCounter }      from './engine/ecs/entity.js';
 import {
   transformComponents,
   physicsComponents,
@@ -11,6 +11,7 @@ import {
   type Fighter,
   type Physics,
   type Renderable,
+  clearAllComponents,
 } from './engine/ecs/component.js';
 import { applyGravitySystem }          from './engine/physics/gravity.js';
 import {
@@ -31,32 +32,78 @@ import {
   grabFramesMap,
   airDodgeUsedSet,
   isEntityFrozenByHitlag,
+  clearStateMachineMaps,
 } from './engine/physics/stateMachine.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
-import { startLoop }                       from './engine/loop.js';
-import { initRenderer, render } from './renderer/gl.js';
+import { startLoop, stopLoop }             from './engine/loop.js';
+import { initRenderer, render, resetRenderer } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
-import { initHud, updateHud }              from './renderer/hud.js';
+import { initHud, updateHud, disposeHud }  from './renderer/hud.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
 import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
+import { VELA_STATS, VELA_MOVES }          from './game/characters/vela.js';
+import { SYNE_STATS, SYNE_MOVES }          from './game/characters/syne.js';
+import { ZIRA_STATS, ZIRA_MOVES }          from './game/characters/zira.js';
+import type { FighterStats } from './engine/ecs/component.js';
+import type { Move } from './engine/ecs/component.js';
 import {
   AETHER_PLATEAU_PLATFORMS,
   AETHER_PLATEAU_BLAST_ZONES,
 } from './game/stages/aetherPlateau.js';
-import { matchState, tickFrame }           from './game/state.js';
+import { FORGE_PLATFORMS, FORGE_BLAST_ZONES }               from './game/stages/forge.js';
+import { CLOUD_CITADEL_PLATFORMS, CLOUD_CITADEL_BLAST_ZONES } from './game/stages/cloudCitadel.js';
+import { ANCIENT_RUIN_PLATFORMS, ANCIENT_RUIN_BLAST_ZONES } from './game/stages/ancientRuin.js';
+import {
+  DIGITAL_GRID_PLATFORMS_PHASE1,
+  DIGITAL_GRID_BLAST_ZONES,
+} from './game/stages/digitalGrid.js';
+import { matchState, tickFrame, resetMatchState } from './game/state.js';
+import {
+  initScreens,
+  registerServiceWorker,
+  type CharacterId,
+  type StageId,
+} from './ui/screens.js';
 
-// ── Stage setup ───────────────────────────────────────────────────────────────
+// ── Character lookup tables ───────────────────────────────────────────────────
 
-platforms.push(...AETHER_PLATEAU_PLATFORMS);
-setBlastZones(AETHER_PLATEAU_BLAST_ZONES);
+const CHARACTER_STATS: Record<string, FighterStats> = {
+  kael:  KAEL_STATS,
+  gorun: GORUN_STATS,
+  vela:  VELA_STATS,
+  syne:  SYNE_STATS,
+  zira:  ZIRA_STATS,
+};
 
-// ── Move data map (built once; passed to checkHitboxSystem every frame) ───────
+const CHARACTER_MOVES: Record<string, Record<string, Move>> = {
+  kael:  KAEL_MOVES,
+  gorun: GORUN_MOVES,
+  vela:  VELA_MOVES,
+  syne:  SYNE_MOVES,
+  zira:  ZIRA_MOVES,
+};
 
-const MOVE_DATA = new Map([
-  ['kael',  new Map(Object.entries(KAEL_MOVES))],
-  ['gorun', new Map(Object.entries(GORUN_MOVES))],
-]);
+// ── Stage lookup tables ───────────────────────────────────────────────────────
+
+import type { Platform } from './engine/physics/collision.js';
+import type { BlastZones } from './engine/physics/blastZone.js';
+
+const STAGE_PLATFORMS: Record<string, Platform[]> = {
+  aetherPlateau: AETHER_PLATEAU_PLATFORMS,
+  forge:         FORGE_PLATFORMS,
+  cloudCitadel:  CLOUD_CITADEL_PLATFORMS,
+  ancientRuin:   ANCIENT_RUIN_PLATFORMS,
+  digitalGrid:   DIGITAL_GRID_PLATFORMS_PHASE1,
+};
+
+const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
+  aetherPlateau: AETHER_PLATEAU_BLAST_ZONES,
+  forge:         FORGE_BLAST_ZONES,
+  cloudCitadel:  CLOUD_CITADEL_BLAST_ZONES,
+  ancientRuin:   ANCIENT_RUIN_BLAST_ZONES,
+  digitalGrid:   DIGITAL_GRID_BLAST_ZONES,
+};
 
 // ── Air-drift scale and input threshold ──────────────────────────────────────
 
@@ -72,104 +119,12 @@ const ROLL_TOTAL_FRAMES            = 30;
 const AIR_DODGE_INVINCIBLE_FRAMES  = 20;
 const AIR_DODGE_TOTAL_FRAMES       = 30;
 const GRAB_TOTAL_FRAMES            = 20;
+const ROLL_SPEED_MULTIPLIER        = toFixed(0.7);
 
-/** Shield health drained per frame while shielding (100 HP / 200 frames ≈ 3.3 s). */
+/** Shield health drained per frame while shielding. */
 const SHIELD_DRAIN_PER_FRAME = 0.5;
 /** Shield health regenerated per frame when not shielding (slow regen). */
 const SHIELD_REGEN_PER_FRAME = 0.1;
-/** Speed multiplier applied to a roll dodge. */
-const ROLL_SPEED_MULTIPLIER  = toFixed(1.2);
-
-// ── Player 1 entity — Kael ────────────────────────────────────────────────────
-
-const player1Id = createEntity();
-
-transformComponents.set(player1Id, {
-  x:          toFixed(-100),
-  y:          FIGHTER_HALF_HEIGHT,
-  prevX:      toFixed(-100),
-  prevY:      FIGHTER_HALF_HEIGHT,
-  facingRight: true,
-});
-
-physicsComponents.set(player1Id, {
-  vx: toFixed(0), vy: toFixed(0),
-  gravityMultiplier: toFixed(1.0),
-  grounded: true, fastFalling: false,
-});
-
-fighterComponents.set(player1Id, {
-  characterId:      'kael',
-  state:            'idle',
-  damagePercent:    toFixed(0),
-  stocks:           3,
-  jumpCount:        0,
-  hitstunFrames:    0,
-  invincibleFrames: 0,
-  hitlagFrames:     0,
-  shieldHealth:     100,
-  shieldBreakFrames: 0,
-  attackFrame:      0,
-  currentMoveId:    null,
-  stats:            KAEL_STATS,
-});
-
-renderableComponents.set(player1Id, {
-  meshUrl:        '/assets/kael/kael.glb',
-  atlasUrl:       '/assets/kael/kael_atlas.png',
-  animationClip:  'idle',
-  animationFrame: 0,
-  animationSpeed: 1.0,
-  loop:           true,
-});
-
-// ── Player 2 entity — Gorun ───────────────────────────────────────────────────
-
-const player2Id = createEntity();
-
-transformComponents.set(player2Id, {
-  x:          toFixed(100),
-  y:          FIGHTER_HALF_HEIGHT,
-  prevX:      toFixed(100),
-  prevY:      FIGHTER_HALF_HEIGHT,
-  facingRight: false,
-});
-
-physicsComponents.set(player2Id, {
-  vx: toFixed(0), vy: toFixed(0),
-  gravityMultiplier: toFixed(1.0),
-  grounded: true, fastFalling: false,
-});
-
-fighterComponents.set(player2Id, {
-  characterId:      'gorun',
-  state:            'idle',
-  damagePercent:    toFixed(0),
-  stocks:           3,
-  jumpCount:        0,
-  hitstunFrames:    0,
-  invincibleFrames: 0,
-  hitlagFrames:     0,
-  shieldHealth:     100,
-  shieldBreakFrames: 0,
-  attackFrame:      0,
-  currentMoveId:    null,
-  stats:            GORUN_STATS,
-});
-
-renderableComponents.set(player2Id, {
-  meshUrl:        '/assets/gorun/gorun.glb',
-  atlasUrl:       '/assets/gorun/gorun_atlas.png',
-  animationClip:  'idle',
-  animationFrame: 0,
-  animationSpeed: 1.0,
-  loop:           true,
-});
-
-// ── Input buffers ─────────────────────────────────────────────────────────────
-
-const buffer1 = new InputBuffer();
-const buffer2 = new InputBuffer();
 
 // ── Player 2 key state (arrow keys + numpad; independent of keyboard.ts) ──────
 
@@ -222,7 +177,8 @@ function samplePlayer2Input(): InputState {
 
 // ── Move helpers ──────────────────────────────────────────────────────────────
 
-// Convenience wrapper — looks up a character's move table from the shared map.
+let MOVE_DATA = new Map<string, Map<string, Move>>();
+
 function getMoves(characterId: string) {
   return MOVE_DATA.get(characterId);
 }
@@ -240,20 +196,21 @@ function syncAnimation(fighter: Fighter, renderable: Renderable): void {
 // ── Attack initiation ─────────────────────────────────────────────────────────
 
 function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: InputState): void {
+  const moves = getMoves(fighter.characterId);
   let moveId: string;
 
   if (phys.grounded) {
     if (Math.abs(input.stickX) > STICK_THRESHOLD) moveId = 'forwardSmash';
     else if (input.stickY > STICK_THRESHOLD)      moveId = 'upSmash';
     else {
-      // Kael has neutralJab1; Gorun has neutralJab
-      moveId = fighter.characterId === 'kael' ? 'neutralJab1' : 'neutralJab';
+      // Try neutralJab1 first (kael), then neutralJab (others)
+      moveId = moves?.has('neutralJab1') ? 'neutralJab1' : 'neutralJab';
     }
   } else {
     moveId = 'neutralAir';
   }
 
-  fighter.attackFrame  = 0;
+  fighter.attackFrame   = 0;
   fighter.currentMoveId = moveId;
   transitionFighterState(playerId, 'attack');
 }
@@ -270,10 +227,8 @@ function processPlayerInput(
   const fighter    = fighterComponents.get(playerId)!;
   const renderable = renderableComponents.get(playerId)!;
 
-  // ── Register shield input for tech detection ───────────────────────────
   setEntityShieldInput(playerId, input.shield);
 
-  // ── Freeze during hitlag / hitstun / KO / active dodge / active grab / shield break ──
   const hitlag = hitlagMap.get(playerId) ?? 0;
   if (
     fighter.state === 'KO'        ||
@@ -288,22 +243,18 @@ function processPlayerInput(
     return;
   }
 
-  // ── Rolling: keep momentum; no new input accepted ─────────────────────
   if (fighter.state === 'rolling') {
     syncAnimation(fighter, renderable);
     return;
   }
 
-  // ── Pass-through flag for one-way platforms ────────────────────────────
   setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
 
-  // ── Record buffered presses ────────────────────────────────────────────
   if (input.jumpJustPressed)    buffer.press('jump',    matchState.frame);
   if (input.attackJustPressed)  buffer.press('attack',  matchState.frame);
   if (input.specialJustPressed) buffer.press('special', matchState.frame);
   if (input.grabJustPressed)    buffer.press('grab',    matchState.frame);
 
-  // ── Shield degradation ────────────────────────────────────────────────
   if (fighter.state === 'shielding') {
     fighter.shieldHealth -= SHIELD_DRAIN_PER_FRAME;
     if (fighter.shieldHealth <= 0) {
@@ -316,7 +267,6 @@ function processPlayerInput(
     fighter.shieldHealth = Math.min(100, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
   }
 
-  // ── Air dodge (shield while airborne, once per airborne sequence) ──────
   if (
     input.shield &&
     !phys.grounded &&
@@ -336,9 +286,7 @@ function processPlayerInput(
     return;
   }
 
-  // ── Shield (grounded) → spot dodge / roll dodge / stay shielding ──────
   if (input.shield && phys.grounded && fighter.state !== 'attack') {
-    // Spot dodge: shield + down
     if (input.stickY < -STICK_THRESHOLD) {
       const canSpot =
         fighter.state === 'shielding' ||
@@ -354,7 +302,6 @@ function processPlayerInput(
       return;
     }
 
-    // Roll dodge: shield + left or right
     if (Math.abs(input.stickX) > STICK_THRESHOLD) {
       const canRoll =
         fighter.state === 'shielding' ||
@@ -374,7 +321,6 @@ function processPlayerInput(
       }
     }
 
-    // Plain shield (no stick direction)
     if (fighter.state !== 'shielding') {
       transitionFighterState(playerId, 'shielding');
     }
@@ -383,12 +329,10 @@ function processPlayerInput(
     return;
   }
 
-  // Shield released: drop out of shielding
   if (fighter.state === 'shielding') {
     transitionFighterState(playerId, 'idle');
   }
 
-  // ── Grab ──────────────────────────────────────────────────────────────
   if (
     phys.grounded &&
     fighter.state !== 'attack'    &&
@@ -403,14 +347,12 @@ function processPlayerInput(
     }
   }
 
-  // ── Attack start ──────────────────────────────────────────────────────
   if (fighter.state !== 'attack') {
     if (buffer.consume('attack', matchState.frame)) {
       startAttack(playerId, fighter, phys, input);
     }
   }
 
-  // ── Attack frame advancement ──────────────────────────────────────────
   if (fighter.state === 'attack') {
     fighter.attackFrame++;
     const moves = getMoves(fighter.characterId);
@@ -422,10 +364,9 @@ function processPlayerInput(
       transitionFighterState(playerId, 'idle');
     }
     syncAnimation(fighter, renderable);
-    return; // no horizontal movement during attack
+    return;
   }
 
-  // ── Horizontal movement ───────────────────────────────────────────────
   if (phys.grounded) {
     if (input.stickX > 0) {
       phys.vx = fighter.stats.runSpeed;
@@ -442,7 +383,6 @@ function processPlayerInput(
       }
     }
   } else {
-    // Air drift at 80% of run speed
     if (input.stickX > 0) {
       phys.vx = fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE);
       transform.facingRight = true;
@@ -454,13 +394,11 @@ function processPlayerInput(
     }
   }
 
-  // ── Fast-fall ─────────────────────────────────────────────────────────
   if (!phys.grounded && input.stickY < -STICK_THRESHOLD && phys.vy <= 0) {
     phys.fastFalling       = true;
     phys.gravityMultiplier = toFixed(2.5);
   }
 
-  // ── Jump (with input buffer) ──────────────────────────────────────────
   if (buffer.consume('jump', matchState.frame)) {
     if (phys.grounded) {
       phys.vy                = fighter.stats.jumpForce;
@@ -484,7 +422,6 @@ function processPlayerInput(
     }
   }
 
-  // Reset gravity multiplier when not fast-falling
   if (!phys.fastFalling) {
     phys.gravityMultiplier = toFixed(1.0);
   }
@@ -496,9 +433,7 @@ function processPlayerInput(
 
 function integratePositions(): void {
   for (const [id, phys] of physicsComponents) {
-    // Skip position integration for entities frozen by hitlag.
     if (isEntityFrozenByHitlag(id)) continue;
-
     const transform = transformComponents.get(id);
     if (!transform) continue;
     transform.prevX = transform.x;
@@ -531,7 +466,14 @@ let fpsAccumMs    = 0;
 let fps           = 0;
 let lastRenderTime = performance.now();
 
+// Mutable player IDs — set by startMatch()
+let player1Id = -1;
+let player2Id = -1;
+let p1CharId  = 'kael';
+let p2CharId  = 'gorun';
+
 function updateDebugOverlay(): void {
+  if (player1Id < 0) return;
   const t1 = transformComponents.get(player1Id);
   const p1 = physicsComponents.get(player1Id);
   const f1 = fighterComponents.get(player1Id);
@@ -554,46 +496,163 @@ function updateDebugOverlay(): void {
 
   debugDiv.textContent = [
     `Frame : ${matchState.frame}   FPS: ${fps}`,
-    `P1 [Kael]  state=${f1?.state ?? '?'}  ${p1Pos}  dmg=${toFloat(f1?.damagePercent ?? 0).toFixed(1)}%  stk=${f1?.stocks ?? 0}  gnd=${p1?.grounded ?? false}`,
-    `P2 [Gorun] state=${f2?.state ?? '?'}  ${p2Pos}  dmg=${toFloat(f2?.damagePercent ?? 0).toFixed(1)}%  stk=${f2?.stocks ?? 0}`,
+    `P1 [${p1CharId}]  state=${f1?.state ?? '?'}  ${p1Pos}  dmg=${toFloat(f1?.damagePercent ?? 0).toFixed(1)}%  stk=${f1?.stocks ?? 0}  gnd=${p1?.grounded ?? false}`,
+    `P2 [${p2CharId}]  state=${f2?.state ?? '?'}  ${p2Pos}  dmg=${toFloat(f2?.damagePercent ?? 0).toFixed(1)}%  stk=${f2?.stocks ?? 0}`,
   ].join('\n');
 }
 
-// ── Initialise and start ──────────────────────────────────────────────────────
+// ── Match startup ─────────────────────────────────────────────────────────────
 
+function startMatch(p1Char: CharacterId, stageId: StageId): void {
+  // The player 2 character is always the "other" one from the lobby default.
+  // In local play we just pick the next character; in the future this would
+  // come from a 2-player select screen. For now we default to gorun/kael.
+  const p2Char = (p1Char === 'kael' ? 'gorun' : 'kael') as CharacterId;
+  p1CharId = p1Char;
+  p2CharId = p2Char;
+
+  // ── Reset simulation state ─────────────────────────────────────────────
+  clearAllComponents();
+  clearStateMachineMaps();
+  resetEntityCounter();
+  resetMatchState();
+  platforms.length = 0;
+
+  // ── Stage ──────────────────────────────────────────────────────────────
+  platforms.push(...(STAGE_PLATFORMS[stageId] ?? AETHER_PLATEAU_PLATFORMS));
+  setBlastZones(STAGE_BLAST_ZONES[stageId] ?? AETHER_PLATEAU_BLAST_ZONES);
+
+  // ── Move data ──────────────────────────────────────────────────────────
+  MOVE_DATA = new Map(
+    Object.entries(CHARACTER_MOVES).map(([id, moves]) => [id, new Map(Object.entries(moves))]),
+  );
+
+  // ── Player 1 entity ────────────────────────────────────────────────────
+  player1Id = createEntity();
+
+  transformComponents.set(player1Id, {
+    x:          toFixed(-100),
+    y:          FIGHTER_HALF_HEIGHT,
+    prevX:      toFixed(-100),
+    prevY:      FIGHTER_HALF_HEIGHT,
+    facingRight: true,
+  });
+  physicsComponents.set(player1Id, {
+    vx: toFixed(0), vy: toFixed(0),
+    gravityMultiplier: toFixed(1.0),
+    grounded: true, fastFalling: false,
+  });
+  fighterComponents.set(player1Id, {
+    characterId:      p1Char,
+    state:            'idle',
+    damagePercent:    toFixed(0),
+    stocks:           3,
+    jumpCount:        0,
+    hitstunFrames:    0,
+    invincibleFrames: 0,
+    hitlagFrames:     0,
+    shieldHealth:     100,
+    shieldBreakFrames: 0,
+    attackFrame:      0,
+    currentMoveId:    null,
+    stats:            CHARACTER_STATS[p1Char] ?? KAEL_STATS,
+  });
+  renderableComponents.set(player1Id, {
+    meshUrl:        `/assets/${p1Char}/${p1Char}.glb`,
+    atlasUrl:       `/assets/${p1Char}/${p1Char}_atlas.png`,
+    animationClip:  'idle',
+    animationFrame: 0,
+    animationSpeed: 1.0,
+    loop:           true,
+  });
+
+  // ── Player 2 entity ────────────────────────────────────────────────────
+  player2Id = createEntity();
+
+  transformComponents.set(player2Id, {
+    x:          toFixed(100),
+    y:          FIGHTER_HALF_HEIGHT,
+    prevX:      toFixed(100),
+    prevY:      FIGHTER_HALF_HEIGHT,
+    facingRight: false,
+  });
+  physicsComponents.set(player2Id, {
+    vx: toFixed(0), vy: toFixed(0),
+    gravityMultiplier: toFixed(1.0),
+    grounded: true, fastFalling: false,
+  });
+  fighterComponents.set(player2Id, {
+    characterId:      p2Char,
+    state:            'idle',
+    damagePercent:    toFixed(0),
+    stocks:           3,
+    jumpCount:        0,
+    hitstunFrames:    0,
+    invincibleFrames: 0,
+    hitlagFrames:     0,
+    shieldHealth:     100,
+    shieldBreakFrames: 0,
+    attackFrame:      0,
+    currentMoveId:    null,
+    stats:            CHARACTER_STATS[p2Char] ?? GORUN_STATS,
+  });
+  renderableComponents.set(player2Id, {
+    meshUrl:        `/assets/${p2Char}/${p2Char}.glb`,
+    atlasUrl:       `/assets/${p2Char}/${p2Char}_atlas.png`,
+    animationClip:  'idle',
+    animationFrame: 0,
+    animationSpeed: 1.0,
+    loop:           true,
+  });
+
+  // ── Input buffers ──────────────────────────────────────────────────────
+  const buffer1 = new InputBuffer();
+  const buffer2 = new InputBuffer();
+
+  // ── HUD ────────────────────────────────────────────────────────────────
+  disposeHud();
+  initHud([player1Id, player2Id]);
+  resetRenderer();
+
+  // ── Game loop ──────────────────────────────────────────────────────────
+  stopLoop();
+  startLoop(
+    () => {
+      tickFighterTimers(player1Id);
+      tickFighterTimers(player2Id);
+
+      const input1 = sampleKeyboard();
+      const input2 = samplePlayer2Input();
+
+      processPlayerInput(player1Id, input1, buffer1);
+      processPlayerInput(player2Id, input2, buffer2);
+
+      integratePositions();
+      applyGravitySystem();
+      platformCollisionSystem();
+      checkHitboxSystem([player1Id, player2Id], MOVE_DATA);
+      blastZoneSystem();
+      updateCamera([player1Id, player2Id]);
+
+      tickFrame();
+    },
+    (alpha) => {
+      render(platforms, alpha);
+      updateHud();
+      updateDebugOverlay();
+    },
+  );
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+
+registerServiceWorker();
 initKeyboard();
-const canvas = initRenderer();
-canvas.style.position = 'absolute';
-canvas.style.top      = '0';
-canvas.style.left     = '0';
+initRenderer();
 
-initHud([player1Id, player2Id]);
-
-startLoop(
-  () => {
-    // ── Physics step (60 Hz) ─────────────────────────────────────────────
-    tickFighterTimers(player1Id);
-    tickFighterTimers(player2Id);
-
-    const input1 = sampleKeyboard();
-    const input2 = samplePlayer2Input();
-
-    processPlayerInput(player1Id, input1, buffer1);
-    processPlayerInput(player2Id, input2, buffer2);
-
-    integratePositions();
-    applyGravitySystem();
-    platformCollisionSystem();
-    checkHitboxSystem([player1Id, player2Id], MOVE_DATA);
-    blastZoneSystem();
-    updateCamera([player1Id, player2Id]);
-
-    tickFrame();
+initScreens({
+  onMatchReady: (characterId, stageId) => {
+    startMatch(characterId, stageId);
   },
-  (alpha) => {
-    // ── Render callback (display refresh rate) ───────────────────────────
-    render(platforms, alpha);
-    updateHud();
-    updateDebugOverlay();
-  },
-);
+});
+

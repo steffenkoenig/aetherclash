@@ -39,6 +39,54 @@ const characterMeshes = new Map<number, THREE.Group>();
 // Tracks which entities have already triggered a GLB swap (to swap only once).
 const glbSwapped      = new Set<number>();
 
+// ── Animation mixer registry ─────────────────────────────────────────────────
+
+// AnimationMixers for GLB-loaded models, keyed by entity id.
+const mixers       = new Map<number, THREE.AnimationMixer>();
+// Per-entity GltfModel references (so we can look up clips).
+const modelRefs    = new Map<number, import('./models.js').GltfModel>();
+// Last clip name played per entity (to avoid restarting the same clip).
+const activeClipNames = new Map<number, string>();
+
+let lastMixerTime = 0;
+
+/** Map fighter state names to GLB animation clip names. */
+const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').FighterState, string>> = {
+  idle:       'idle',
+  walk:       'run',
+  run:        'run',
+  jump:       'jump',
+  doubleJump: 'jump',
+  attack:     'attack',
+  hitstun:    'hitstun',
+  KO:         'KO',
+  shielding:  'idle',
+  spotDodge:  'idle',
+  rolling:    'run',
+  airDodge:   'jump',
+};
+
+function updateMixer(entityId: number, state: import('../engine/ecs/component.js').FighterState): void {
+  const mixer = mixers.get(entityId);
+  const model = modelRefs.get(entityId);
+  if (!mixer || !model || model.clips.length === 0) return;
+
+  const clipName = STATE_TO_CLIP[state] ?? 'idle';
+  const current  = activeClipNames.get(entityId);
+  if (current === clipName) return;
+
+  const clip = THREE.AnimationClip.findByName(model.clips, clipName);
+  if (!clip) return;
+
+  mixer.stopAllAction();
+  const action = mixer.clipAction(clip);
+  const loop = clipName === 'idle' || clipName === 'run';
+  action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+  action.clampWhenFinished = !loop;
+  action.reset().play();
+  activeClipNames.set(entityId, clipName);
+}
+
 // ── Platform mesh registry ────────────────────────────────────────────────────
 
 // Maps a platform reference string to its mesh so we don't recreate every frame.
@@ -241,6 +289,23 @@ function onResize(): void {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 }
 
+/**
+ * Clear all per-match character meshes and mixer state so a new match can be
+ * started with fresh entities.  Call this before creating new entities.
+ */
+export function resetRenderer(): void {
+  for (const group of characterMeshes.values()) {
+    scene?.remove(group);
+  }
+  characterMeshes.clear();
+  glbSwapped.clear();
+  mixers.clear();
+  modelRefs.clear();
+  activeClipNames.clear();
+  lastMixerTime = 0;
+  // Keep platform meshes (they'll be re-used or recreated).
+}
+
 // ── Camera (no-op shim kept for API compatibility) ────────────────────────────
 
 export function setRenderCamera(_offsetX: number, _offsetY: number, _scaleX: number, _scaleY: number): void {
@@ -335,6 +400,17 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
   threeCamera.zoom = camera.zoom;
   threeCamera.updateProjectionMatrix();
 
+  // ── AnimationMixer delta (renderer wall-clock, not physics time) ──────────
+  const nowMs   = performance.now();
+  const deltaMs = lastMixerTime === 0 ? 16.667 : Math.min(nowMs - lastMixerTime, 50);
+  const deltaSec = deltaMs / 1000;
+  lastMixerTime = nowMs;
+
+  // Tick all active mixers
+  for (const mixer of mixers.values()) {
+    mixer.update(deltaSec);
+  }
+
   // ── Platform meshes ───────────────────────────────────────────────────────
   for (const plat of stagePlatforms) {
     const key = platKey(plat);
@@ -365,6 +441,7 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
         if (!model.loaded || model.failed || !model.root) return;
         const old = characterMeshes.get(id);
         if (!old || glbSwapped.has(id)) return;
+
         // Copy current transform to the new root
         model.root.position.copy(old.position);
         model.root.scale.copy(old.scale);
@@ -373,6 +450,14 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
         scene.add(model.root);
         characterMeshes.set(id, model.root as THREE.Group);
         glbSwapped.add(id);
+
+        // Create an AnimationMixer for this GLB model
+        const mixer = new THREE.AnimationMixer(model.root);
+        mixers.set(id, mixer);
+        modelRefs.set(id, model);
+        // Start the idle clip immediately
+        const currentFighter = fighterComponents.get(id);
+        if (currentFighter) updateMixer(id, currentFighter.state);
       }).catch(() => { /* silently ignore */ });
     }
 
@@ -387,8 +472,14 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     const faceSign = transform.facingRight ? 1 : -1;
     group.scale.x = faceSign * Math.abs(group.scale.x);
 
-    // Pose animation
-    applyPose(group, fighter.state);
+    // Pose animation:
+    //  - For GLB models: drive the AnimationMixer (already ticked above)
+    //  - For procedural models: use the applyPose function
+    if (glbSwapped.has(id)) {
+      updateMixer(id, fighter.state);
+    } else {
+      applyPose(group, fighter.state);
+    }
 
     playerIndex++;
   }
