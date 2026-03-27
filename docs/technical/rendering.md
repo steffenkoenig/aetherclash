@@ -1,8 +1,10 @@
 # Technical — Rendering
 
+> Renderer: **Three.js r0.183.2** wrapping WebGL 2.0. Import path: `three` (from npm).
+
 ## Overview
 
-Aether Clash uses **WebGL 2.0** for all in-game rendering. The renderer targets **60 FPS** at 1080p on mid-range hardware (integrated GPU) and degrades gracefully to 30 FPS by halving the render step without affecting the physics simulation.
+Aether Clash uses **Three.js (WebGL 2.0)** for all in-game rendering. The renderer targets **60 FPS** at 1080p on mid-range hardware (integrated GPU) and degrades gracefully to 30 FPS by halving the render step without affecting the physics simulation.
 
 The visual style is **"Retro-Modern 3D"** — low-poly 3D models rendered in a 3D world, while the gameplay is constrained to a 2D side-scrolling plane. Characters look like poseable action figures rendered in real time; environments are clean, thematic 3D geometry with animated background layers providing depth.
 
@@ -41,7 +43,7 @@ The HUD layer is intentionally rendered as **HTML/CSS over the canvas** (not Web
 
 ---
 
-## WebGL Canvas Setup
+## Renderer Setup
 
 The game renders into a `<canvas>` element that is sized using CSS to fill the browser viewport:
 
@@ -51,16 +53,33 @@ canvas.style.height = '100vh';
 canvas.style.objectFit = 'contain';
 ```
 
-The **internal resolution** is fixed at **1920×1080** regardless of display size. The WebGL viewport is set accordingly, and the CSS scaling handles pixel mapping. This means the physics engine always operates at the same reference resolution.
+The **internal resolution** is fixed at **1920×1080** regardless of display size. Three.js handles the WebGL viewport automatically. This means the physics engine always operates at the same reference resolution.
 
 ```typescript
-function resizeRenderer(): void {
-  const dpr = Math.min(window.devicePixelRatio, 2); // cap at 2× to save GPU memory
-  canvas.width  = 1920 * dpr;
-  canvas.height = 1080 * dpr;
-  gl.viewport(0, 0, canvas.width, canvas.height);
+// src/renderer/gl.ts
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(1920, 1080, false);   // internal resolution
+renderer.setClearColor(0x0d0d1e);
+
+const camera = new THREE.OrthographicCamera(
+  -960, 960,   // left / right
+   540, -540,  // top / bottom
+   0.1, 2000,  // near / far
+);
+camera.position.set(0, 0, 1000);
+
+window.addEventListener('resize', () => {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+});
+```
+
+```typescript
+function onResize(): void {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Three.js handles viewport sizing automatically.
 }
-window.addEventListener('resize', resizeRenderer);
 ```
 
 ---
@@ -69,21 +88,31 @@ window.addEventListener('resize', resizeRenderer);
 
 ### 3D Mesh Assets
 
-Each character is a **low-poly 3D mesh** (glTF/GLB format) loaded at runtime and rendered in real time via WebGL 2.0. A texture atlas (2048×2048 PNG) provides the flat-shaded material for all body parts; UV coordinates are baked into the mesh. The same atlas is used across all animation poses, keeping GPU memory usage low.
+Each character is a **low-poly 3D mesh** (glTF/GLB format) loaded at runtime via Three.js `GLTFLoader`. Materials and textures are embedded directly in the GLB file. Three.js `GLTFLoader` parses and uploads them automatically.
 
 ```
 public/assets/kael/
-  kael.glb          # Low-poly rigged mesh
-  kael_atlas.png    # 2048×2048 flat-shaded texture atlas
-  kael_atlas.json   # UV region metadata per body part / surface
+  kael.glb           # Rigged low-poly mesh with embedded animation clips and materials
 ```
 
-This approach keeps draw calls per character at 1 (single mesh, single atlas bind) while still enabling real-time skeletal animation.
+```typescript
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const loader = new GLTFLoader();
+loader.load('/assets/kael/kael.glb', (gltf) => {
+  scene.add(gltf.scene);
+  // gltf.animations contains AnimationClip[]
+});
+```
 
 ### Animation System
 
-Characters cycle through skeletal animation clips based on their **state machine** state (idle, run, jump, attack, hitstun, etc.). Each state has:
+Characters cycle through animation clips based on their **state machine** state (idle, run, jump, attack, hitstun, etc.). There are two complementary approaches:
 
+- **State-driven pose animation:** Applied directly to object transforms in the render loop for immediate responsiveness — used for Phase 1 and 2 placeholder rendering.
+- **GLB-embedded AnimationClips via `THREE.AnimationMixer`:** Clips embedded in the GLB are played via `THREE.AnimationMixer` + `AnimationAction`, enabling smooth blended transitions. This is the target approach for Phase 3+.
+
+Each clip has:
 - A named animation clip embedded in the glTF asset.
 - A playback speed (frames per animation tick, where 1 tick = 1 physics frame at 60 Hz).
 - A loop flag (looping for idle/run, one-shot for attacks).
@@ -95,7 +124,12 @@ Characters are **real-time low-poly 3D models** rendered from a fixed side-on or
 
 - Slight perspective depth effects (characters can be nudged along the Z axis for visual layering).
 - Clean silhouettes with readable body language at small sizes.
-- The "action figure" aesthetic with dynamic lighting and real-time shadows where the hardware budget allows.
+- The "action figure" aesthetic with dynamic lighting.
+
+```typescript
+const material = new THREE.MeshToonMaterial({ color: 0x4488ee });
+const mesh = new THREE.Mesh(new THREE.BoxGeometry(26, 28, 16), material);
+```
 
 ---
 
@@ -150,6 +184,15 @@ camera.zoom += (target.zoom - camera.zoom) * CAMERA_ZOOM_LERP;
 ```
 
 Zoom changes are intentionally slower than position changes to avoid disorienting the player during fast engagements.
+
+### Three.js Camera Integration
+
+```typescript
+// Driven from camera.ts every render frame:
+threeCamera.position.set(camera.x, camera.y, 1000);
+threeCamera.zoom = camera.zoom;     // zoom in/out without changing frustum
+threeCamera.updateProjectionMatrix(); // required after changing zoom
+```
 
 ---
 
@@ -207,7 +250,7 @@ When a player crosses a blast zone, a full-screen white flash (1 frame) followed
 
 ## HUD System
 
-The HUD is rendered as an HTML/CSS overlay above the WebGL canvas. It includes:
+The HUD is rendered as an HTML/CSS overlay above the Three.js canvas. It includes:
 
 ### Damage Display
 
@@ -247,15 +290,17 @@ This prevents a player from being "lost" when launched far off stage during a re
 Stage backgrounds are composed of 3–5 independent 3D geometry layers placed at increasing Z depths. As the camera pans, each layer translates at a different rate, creating a natural parallax depth effect:
 
 ```typescript
-const parallaxLayers = [
-  { mesh: 'sky',       depth: 0.1 }, // barely moves
-  { mesh: 'clouds',    depth: 0.3 },
-  { mesh: 'mountains', depth: 0.6 },
-  { mesh: 'buildings', depth: 0.8 }, // moves close to camera speed
-];
+const bgPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(7680, 4320),
+  new THREE.MeshBasicMaterial({ color: 0x1a1a3e }),
+);
+bgPlane.position.set(0, 0, -400);
+scene.add(bgPlane);
 
-// Per layer:
-layer.x = -camera.x * layer.depth;
+// Parallax: offset each layer by camera.x * depth
+parallaxLayers.forEach(layer => {
+  layer.mesh.position.x = -camera.x * layer.depth;
+});
 ```
 
 Each layer is a low-poly 3D mesh with flat-shaded materials that matches the overall "Retro-Modern 3D" aesthetic of the stage.
@@ -264,18 +309,21 @@ Each layer is a low-poly 3D mesh with flat-shaded materials that matches the ove
 
 ## Performance Budget
 
-| Component | Target GPU Time |
-| :--- | :--- |
-| Background layers | < 0.5 ms |
-| Stage geometry | < 0.3 ms |
-| Character models (×4) | < 1.0 ms |
-| Particles + trails | < 0.5 ms |
-| Total frame budget | < 4 ms GPU (leaves room for 60 FPS on 8ms budget) |
+| Component | Target GPU Time | Note |
+| :--- | :--- | :--- |
+| Background layers | < 0.5 ms | Three.js draw call overhead included |
+| Stage geometry | < 0.3 ms | |
+| Character models (×4) | < 1.0 ms | Three.js AnimationMixer overhead included |
+| Particles + trails | < 0.5 ms | |
+| Total frame budget | < 4 ms GPU | Leaves room for 60 FPS on 8 ms budget |
+
+Three.js r0.183.2 adds negligible CPU overhead on top of raw WebGL for the scene sizes used in Aether Clash.
 
 ---
 
 ## Related Documents
 
 - [Architecture](architecture.md) — Canvas setup, asset pipeline
+- [Renderer Setup](rendering.md) — This document
 - [Stages](../game-design/stages.md) — Stage aesthetics, colour palettes
 - [Characters](../game-design/characters.md) — Character visual design

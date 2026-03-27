@@ -42,7 +42,7 @@ Aether Clash is built as a **single-page web application** (SPA) with no server-
 | **Runtime** | Modern Browser (Chrome 90+, Firefox 88+, Safari 15+) | Execution environment |
 | **Language** | TypeScript | Primary development language |
 | **Bundler** | Vite | Fast HMR development + optimised production builds |
-| **Renderer** | WebGL 2.0 (via Three.js or raw GL) | 3D scene rendering with 2D gameplay |
+| **Renderer** | Three.js r0.183.2 (WebGL 2.0) | 3D scene rendering, MeshToon shading, GLTFLoader |
 | **Physics** | Custom deterministic engine | Fixed-step simulation at 60 Hz |
 | **Networking (Game)** | WebRTC DataChannel | Sub-20ms peer-to-peer input exchange |
 | **Networking (Lobby)** | WebSocket | Matchmaking, lobby management, player profiles |
@@ -100,7 +100,7 @@ Key components:
 | `Hitbox` | Shape, active frames, damage, knockback (s, b, angle) |
 | `Hurtbox` | Shape, intangibility flag, invincibility flag |
 | `Input` | Current frame input state, buffered inputs |
-| `Renderable` | Mesh reference (glTF), animation clip state, material/atlas UV |
+| `Renderable` | Mesh URL (glTF/GLB), atlas URL, animation clip name, frame, speed, loop flag |
 | `Collider` | AABB or convex shape, layer mask |
 
 ### 3. Input System (`engine/input/`)
@@ -122,10 +122,9 @@ See [Networking](networking.md) for full details.
 ### 3D Asset Strategy
 
 All characters and stage elements are real-time low-poly 3D assets:
-- Each character is a **glTF/GLB** file containing the rigged mesh and embedded skeletal animation clips.
-- A **2048×2048 texture atlas** (PNG) provides the flat-shaded material; UV coordinates are baked into the mesh so a single atlas bind covers the entire character.
+- Each character is a **glTF/GLB** file containing the rigged mesh and embedded skeletal animation clips, loaded at runtime via Three.js `GLTFLoader`.
+- Materials and textures are embedded directly in the GLB file. Three.js `GLTFLoader` parses and uploads them automatically.
 - Stage geometry (platforms, structural elements) and background layers are separate low-poly GLB files.
-- Reduces draw calls per character to 1 (single mesh, single atlas bind).
 
 ### Progressive Loading Order
 
@@ -147,6 +146,8 @@ Sound effects are loaded on demand (triggered by first occurrence). Background m
 
 ```bash
 npm install
+# Three.js (runtime renderer dependency — already included via package.json)
+npm install three
 npm run dev       # Vite dev server with HMR at http://localhost:5173
 ```
 

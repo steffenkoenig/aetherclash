@@ -76,6 +76,11 @@ function makeAirborneEntity() {
     jumpCount: 1,
     hitstunFrames: 0,
     invincibleFrames: 0,
+    hitlagFrames: 0,
+    shieldHealth: 100,
+    shieldBreakFrames: 0,
+    attackFrame: 0,
+    currentMoveId: null,
     stats: KAEL_STATS,
   });
   return id;
@@ -200,6 +205,11 @@ describe('collision', () => {
       jumpCount: 1,
       hitstunFrames: 0,
       invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
       stats: KAEL_STATS,
     });
 
@@ -231,6 +241,11 @@ describe('collision', () => {
       jumpCount: 1,
       hitstunFrames: 0,
       invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
       stats: KAEL_STATS,
     });
 
@@ -262,6 +277,11 @@ describe('collision', () => {
       jumpCount: 1,
       hitstunFrames: 0,
       invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
       stats: KAEL_STATS,
     });
 
@@ -299,6 +319,11 @@ describe('collision', () => {
       jumpCount: 1,
       hitstunFrames: 0,
       invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
       stats: KAEL_STATS,
     });
 
