@@ -34,6 +34,22 @@ export const techWindowMap = new Map<EntityId, number>();
  */
 export const airDodgeUsedSet = new Set<EntityId>();
 
+// ── Reset (for headless simulation / tests) ───────────────────────────────────
+
+/**
+ * Clear all per-entity timer maps and sets maintained by the state machine.
+ * Call before starting a new headless simulation to ensure a clean state.
+ */
+export function clearStateMachineMaps(): void {
+  hitlagMap.clear();
+  shieldBreakMap.clear();
+  ledgeHangFramesMap.clear();
+  dodgeFramesMap.clear();
+  grabFramesMap.clear();
+  techWindowMap.clear();
+  airDodgeUsedSet.clear();
+}
+
 // ── Transition table ──────────────────────────────────────────────────────────
 
 const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([

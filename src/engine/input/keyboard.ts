@@ -134,6 +134,80 @@ export function sampleKeyboard(): InputState {
   return state;
 }
 
+// ── Network encoding ──────────────────────────────────────────────────────────
+
+/**
+ * Compact 16-bit wire representation of an InputState.
+ *
+ * Bit layout (from networking.md § Input Encoding):
+ *   0     Jump
+ *   1     Attack
+ *   2     Special
+ *   3     Shield
+ *   4     Grab
+ *   5–6   Stick X  (0 = left, 1 = neutral, 2 = right)
+ *   7–8   Stick Y  (0 = down, 1 = neutral, 2 = up)
+ *   9     C-Stick X pushed (nonzero → set)
+ *   10    C-Stick Y pushed (nonzero → set)
+ *   11–15 Reserved
+ */
+export type PackedInputState = number; // uint16
+
+/** Encode a rich InputState into a compact 16-bit PackedInputState for network transmission. */
+export function encodeInput(state: InputState): PackedInputState {
+  let packed = 0;
+
+  if (state.jump)    packed |= 1 << 0;
+  if (state.attack)  packed |= 1 << 1;
+  if (state.special) packed |= 1 << 2;
+  if (state.shield)  packed |= 1 << 3;
+  if (state.grab)    packed |= 1 << 4;
+
+  // Stick X: 0 = left (< −0.5), 1 = neutral, 2 = right (> 0.5)
+  const stickXCode = state.stickX < -0.5 ? 0 : state.stickX > 0.5 ? 2 : 1;
+  packed |= (stickXCode & 0x3) << 5;
+
+  // Stick Y: 0 = down (< −0.5), 1 = neutral, 2 = up (> 0.5)
+  const stickYCode = state.stickY < -0.5 ? 0 : state.stickY > 0.5 ? 2 : 1;
+  packed |= (stickYCode & 0x3) << 7;
+
+  if (state.cStickX !== 0) packed |= 1 << 9;
+  if (state.cStickY !== 0) packed |= 1 << 10;
+
+  return packed & 0xFFFF;
+}
+
+/**
+ * Decode a 16-bit PackedInputState back into a full InputState.
+ * Edge-detection fields (jumpJustPressed etc.) are always false — they cannot
+ * be round-tripped over the network and must be derived locally.
+ */
+export function decodeInput(packed: PackedInputState): InputState {
+  const jump    = (packed & (1 << 0)) !== 0;
+  const attack  = (packed & (1 << 1)) !== 0;
+  const special = (packed & (1 << 2)) !== 0;
+  const shield  = (packed & (1 << 3)) !== 0;
+  const grab    = (packed & (1 << 4)) !== 0;
+
+  const stickXCode = (packed >> 5) & 0x3;
+  const stickX = stickXCode === 0 ? -1.0 : stickXCode === 2 ? 1.0 : 0;
+
+  const stickYCode = (packed >> 7) & 0x3;
+  const stickY = stickYCode === 0 ? -1.0 : stickYCode === 2 ? 1.0 : 0;
+
+  const cStickX = (packed & (1 << 9))  !== 0 ? 1.0 : 0;
+  const cStickY = (packed & (1 << 10)) !== 0 ? 1.0 : 0;
+
+  return {
+    jump, attack, special, shield, grab,
+    jumpJustPressed:    false,
+    attackJustPressed:  false,
+    specialJustPressed: false,
+    grabJustPressed:    false,
+    stickX, stickY, cStickX, cStickY,
+  };
+}
+
 // Expose for testing / headless simulation
 export function simulateKeyDown(code: string): void {
   if (!keysDown.has(code)) keysPressed.add(code);
