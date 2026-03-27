@@ -26,6 +26,67 @@ const offscreenIndicators: HTMLDivElement[] = [];
 
 let trackedIds: number[] = [];
 
+// ── Connection quality overlay ────────────────────────────────────────────────
+
+let connQualityEl: HTMLDivElement | null = null;
+
+/** Online connection stats updated each render frame. */
+export interface ConnectionStats {
+  rtt: number;        // round-trip time in ms
+  packetLoss: number; // fraction 0–1
+  inputDelay: number; // frames of adaptive input delay
+}
+
+let latestConnStats: ConnectionStats | null = null;
+
+/**
+ * Show or update the connection quality indicator.
+ * Call once when a WebRTC DataChannel is established, then call
+ * `updateConnectionStats` every render frame.
+ */
+export function showConnectionQuality(): void {
+  if (connQualityEl) return;
+  connQualityEl = document.createElement('div');
+  connQualityEl.id = 'conn-quality';
+  Object.assign(connQualityEl.style, {
+    position:      'fixed',
+    top:           '10px',
+    right:         '10px',
+    background:    'rgba(0,0,0,0.65)',
+    color:         '#0f0',
+    fontFamily:    'monospace',
+    fontSize:      '12px',
+    padding:       '6px 10px',
+    borderRadius:  '4px',
+    zIndex:        '60',
+    pointerEvents: 'none',
+    lineHeight:    '1.5',
+  });
+  document.body.appendChild(connQualityEl);
+}
+
+/** Update connection stats shown in the HUD overlay. */
+export function updateConnectionStats(stats: ConnectionStats): void {
+  latestConnStats = stats;
+}
+
+/** Hide and remove the connection quality indicator. */
+export function hideConnectionQuality(): void {
+  connQualityEl?.parentNode?.removeChild(connQualityEl);
+  connQualityEl = null;
+  latestConnStats = null;
+}
+
+function renderConnectionQuality(): void {
+  if (!connQualityEl || !latestConnStats) return;
+  const { rtt, packetLoss, inputDelay } = latestConnStats;
+  const lossColor = packetLoss > 0.1 ? '#FF4444' : packetLoss > 0.02 ? '#FFEE22' : '#0f0';
+  connQualityEl.innerHTML =
+    `RTT: ${rtt.toFixed(0)} ms` +
+    `<br>Loss: <span style="color:${lossColor}">${(packetLoss * 100).toFixed(1)}%</span>` +
+    `<br>Delay: ${inputDelay}f`;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getDamageColor(pct: number): string {
@@ -216,6 +277,8 @@ export function updateHud(): void {
       indicator.style.display = 'none';
     }
   }
+
+  renderConnectionQuality();
 }
 
 /** Remove all HUD DOM elements and reset module state. */
@@ -232,4 +295,6 @@ export function disposeHud(): void {
   stockContainers.length     = 0;
   offscreenIndicators.length = 0;
   trackedIds                 = [];
+
+  hideConnectionQuality();
 }
