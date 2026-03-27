@@ -1,11 +1,23 @@
 // src/renderer/gl.ts
 // WebGL 2.0 canvas setup and placeholder renderer.
 // Internal resolution: 1920×1080 with CSS viewport scaling.
+//
+// Rendering pipeline (layered, back-to-front):
+//   1. Background geometry (3D parallax layers)
+//   2. Stage geometry (3D platform meshes)
+//   3. Character models (low-poly 3D, Z-buffer depth)
+//   4. Projectiles / Items
+//   5. Particle effects
+//   6. HUD (HTML/CSS overlay, not WebGL)
+//
+// Phase 1: characters and platforms are rendered as placeholder coloured quads.
+//          Z-buffer depth testing is already enabled so Phase 2 mesh rendering
+//          will work without further pipeline changes.
 
 import { toFloat } from '../engine/physics/fixednum.js';
 import {
   transformComponents,
-  fighterComponents,
+  renderableComponents,
 } from '../engine/ecs/component.js';
 import type { Platform } from '../engine/physics/collision.js';
 
@@ -83,6 +95,10 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
 
   resizeRenderer();
   window.addEventListener('resize', resizeRenderer);
+
+  // Enable Z-buffer depth testing — required for correct 3D model layering.
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
 
   program = createShaderProgram(VS_SOURCE, FS_SOURCE);
   gl.useProgram(program);
@@ -164,11 +180,13 @@ function drawQuad(x: number, y: number, w: number, h: number, r: number, g: numb
 
 export function render(stagePlatforms: Platform[], _alpha: number): void {
   gl.clearColor(0.05, 0.05, 0.12, 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   gl.useProgram(program);
 
-  // Draw platforms (white rectangles); py is the surface line so offset down by half thickness
+  // ── Stage geometry ────────────────────────────────────────────────────────
+  // Phase 2: draw platform GLB meshes here.
+  // Phase 1 placeholder: white rectangles.
   for (const plat of stagePlatforms) {
     const x1 = toFloat(plat.x1);
     const x2 = toFloat(plat.x2);
@@ -179,7 +197,14 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     drawQuad(cx, py - PLAT_THICKNESS / 2, w, PLAT_THICKNESS, 0.9, 0.9, 0.9);
   }
 
-  // Draw fighters (coloured quads)
+  // ── Character models ──────────────────────────────────────────────────────
+  // Each entity that has both a Transform and a Renderable component is a
+  // 3D model (character, item, etc.).  The Renderable tracks which glTF mesh
+  // and animation clip to display.
+  //
+  // Phase 2: upload transform matrix + animation pose to GPU, bind the atlas
+  //          texture, draw the character GLB mesh.
+  // Phase 1 placeholder: coloured quads sized to roughly match character hitbox.
   const FIGHTER_COLORS = [
     [0.2, 0.6, 1.0],  // blue
     [1.0, 0.3, 0.3],  // red
@@ -189,14 +214,14 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
   let colorIdx = 0;
 
   for (const [id, transform] of transformComponents) {
-    const fighter = fighterComponents.get(id);
-    if (!fighter) continue;
+    const renderable = renderableComponents.get(id);
+    if (!renderable) continue;
 
     const fx = toFloat(transform.x);
     const fy = toFloat(transform.y);
     const [r, g, b] = FIGHTER_COLORS[colorIdx % FIGHTER_COLORS.length]!;
 
-    // Draw fighter as 30×60 pixel quad
+    // Phase 1 placeholder: draw a 30×60 coloured quad in place of the 3D mesh.
     drawQuad(fx, fy, 30, 60, r, g, b);
 
     colorIdx++;

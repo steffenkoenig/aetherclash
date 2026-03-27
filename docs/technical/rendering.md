@@ -4,7 +4,7 @@
 
 Aether Clash uses **WebGL 2.0** for all in-game rendering. The renderer targets **60 FPS** at 1080p on mid-range hardware (integrated GPU) and degrades gracefully to 30 FPS by halving the render step without affecting the physics simulation.
 
-The visual style is **"Retro-Modern 3D"** — low-poly 3D models rendered in a 2D side-scrolling perspective. Characters look like poseable action figures; environments are clean, thematic geometry with animated background layers.
+The visual style is **"Retro-Modern 3D"** — low-poly 3D models rendered in a 3D world, while the gameplay is constrained to a 2D side-scrolling plane. Characters look like poseable action figures rendered in real time; environments are clean, thematic 3D geometry with animated background layers providing depth.
 
 ---
 
@@ -20,8 +20,8 @@ The visual style is **"Retro-Modern 3D"** — low-poly 3D models rendered in a 2
 │  │  (parallax)   │  │   (platforms)│                │
 │  └───────────────┘  └──────────────┘                │
 │  ┌─────────────────────────────────┐                │
-│  │   Character Sprites             │                │
-│  │   (sorted by Y for depth)       │                │
+│  │   Character Models              │                │
+│  │   (low-poly 3D, Z-buffer depth) │                │
 │  └─────────────────────────────────┘                │
 │  ┌─────────────────────────────────┐                │
 │  │   Projectiles / Items           │                │
@@ -67,39 +67,35 @@ window.addEventListener('resize', resizeRenderer);
 
 ## Character Rendering
 
-### Texture Atlas
+### 3D Mesh Assets
 
-All animation frames for a character are packed into a single **2048×2048** texture atlas (PNG, power-of-two dimensions for WebGL compatibility). A JSON sidecar defines UV coordinates per animation frame:
+Each character is a **low-poly 3D mesh** (glTF/GLB format) loaded at runtime and rendered in real time via WebGL 2.0. A texture atlas (2048×2048 PNG) provides the flat-shaded material for all body parts; UV coordinates are baked into the mesh. The same atlas is used across all animation poses, keeping GPU memory usage low.
 
-```json
-{
-  "character": "kael",
-  "frames": {
-    "idle_0": { "u": 0.0,   "v": 0.0,   "w": 0.125, "h": 0.25 },
-    "idle_1": { "u": 0.125, "v": 0.0,   "w": 0.125, "h": 0.25 },
-    "run_0":  { "u": 0.0,   "v": 0.25,  "w": 0.125, "h": 0.25 }
-  }
-}
+```
+public/assets/kael/
+  kael.glb          # Low-poly rigged mesh
+  kael_atlas.png    # 2048×2048 flat-shaded texture atlas
+  kael_atlas.json   # UV region metadata per body part / surface
 ```
 
-This approach reduces the number of WebGL texture binds per frame from N (one per frame) to 1 per character.
+This approach keeps draw calls per character at 1 (single mesh, single atlas bind) while still enabling real-time skeletal animation.
 
 ### Animation System
 
-Characters cycle through frame sequences based on their **state machine** state (idle, run, jump, attack, hitstun, etc.). Each state has:
+Characters cycle through skeletal animation clips based on their **state machine** state (idle, run, jump, attack, hitstun, etc.). Each state has:
 
-- A list of frame indices into the texture atlas.
+- A named animation clip embedded in the glTF asset.
 - A playback speed (frames per animation tick, where 1 tick = 1 physics frame at 60 Hz).
 - A loop flag (looping for idle/run, one-shot for attacks).
 - A callback for "active frames" (when hitboxes should be live).
 
 ### Low-Poly 3D Models
 
-While the gameplay runs in 2D, characters are pre-rendered low-poly 3D models baked into the texture atlas. This allows:
+Characters are **real-time low-poly 3D models** rendered from a fixed side-on orthographic camera. The gameplay plane is 2D (all physics positions are X/Y), but the characters and environments exist in 3D space. This allows:
 
-- Slight perspective depth effects (characters slightly larger when "closer" to camera during certain effects).
+- Slight perspective depth effects (characters can be nudged along the Z axis for visual layering).
 - Clean silhouettes with readable body language at small sizes.
-- The "action figure" aesthetic without needing real-time 3D rendering per character.
+- The "action figure" aesthetic with dynamic lighting and real-time shadows where the hardware budget allows.
 
 ---
 
@@ -248,19 +244,21 @@ This prevents a player from being "lost" when launched far off stage during a re
 
 ## Parallax Background System
 
-Stage backgrounds are composed of 3–5 independent layers that move at different speeds relative to the camera, creating a sense of depth:
+Stage backgrounds are composed of 3–5 independent 3D geometry layers placed at increasing Z depths. As the camera pans, each layer translates at a different rate, creating a natural parallax depth effect:
 
 ```typescript
 const parallaxLayers = [
-  { texture: 'sky',       depth: 0.1 }, // barely moves
-  { texture: 'clouds',    depth: 0.3 },
-  { texture: 'mountains', depth: 0.6 },
-  { texture: 'buildings', depth: 0.8 }, // moves close to camera speed
+  { mesh: 'sky',       depth: 0.1 }, // barely moves
+  { mesh: 'clouds',    depth: 0.3 },
+  { mesh: 'mountains', depth: 0.6 },
+  { mesh: 'buildings', depth: 0.8 }, // moves close to camera speed
 ];
 
 // Per layer:
 layer.x = -camera.x * layer.depth;
 ```
+
+Each layer is a low-poly 3D mesh with flat-shaded materials that matches the overall "Retro-Modern 3D" aesthetic of the stage.
 
 ---
 
@@ -270,7 +268,7 @@ layer.x = -camera.x * layer.depth;
 | :--- | :--- |
 | Background layers | < 0.5 ms |
 | Stage geometry | < 0.3 ms |
-| Character sprites (×4) | < 1.0 ms |
+| Character models (×4) | < 1.0 ms |
 | Particles + trails | < 0.5 ms |
 | Total frame budget | < 4 ms GPU (leaves room for 60 FPS on 8ms budget) |
 

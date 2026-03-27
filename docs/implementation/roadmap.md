@@ -115,8 +115,8 @@
 8. **Implement ledge grabbing.**
    Place ledge colliders at all solid platform edges. Trigger `LEDGE_HANG` when the grab-hand AABB overlaps a ledge collider while the character is airborne and moving downward. Refresh aerial jumps on grab. See [Mechanics § Ledge Mechanics](../game-design/mechanics.md). Commit as `feat(phase-2): ledge grabbing`.
 
-9. **Build the texture atlas pipeline.**
-   Generate a 2048×2048 atlas per character using `free-tex-packer-cli`. Load the JSON sidecar at startup to get UV coordinates. See [Architecture § Asset Pipeline](../technical/architecture.md). Commit as `feat(phase-2): texture atlas`.
+9. **Load 3D character model assets.**
+   Load each character's glTF/GLB file and texture atlas at startup. Parse embedded animation clips. Bind the flat-shaded atlas texture to the mesh. See [Architecture § 3D Asset Strategy](../technical/architecture.md). Commit as `feat(phase-2): 3d-character-models`.
 
 10. **Implement the damage HUD.**
     Render damage percentages and stock icons as HTML over the canvas. Colour-code percentages: white → yellow → orange → red. See [Rendering § HUD System](../technical/rendering.md). Commit as `feat(phase-2): damage HUD`.
@@ -291,8 +291,8 @@ Development is structured into four phases, moving from a playable local prototy
 - [ ] Damage HUD (percentages, stocks)
 - [ ] 2-player local mode (split keyboard or two gamepads)
 - [ ] All 5 competitive/casual stages (Aether Plateau, Forge, Cloud Citadel, Ancient Ruin, Digital Grid)
-- [ ] Character texture atlases (final art assets)
-- [ ] Stage background parallax layers
+- [ ] Character 3D model assets (glTF/GLB with flat-shaded texture atlas — final art)
+- [ ] Stage background 3D parallax layers
 
 ### Success Criteria
 - All 5 characters feel distinct and all moves function correctly.
@@ -469,8 +469,8 @@ Development is structured into four phases, moving from a playable local prototy
 - [ ] Damage HUD (percentages, stocks)
 - [ ] 2-player local mode (split keyboard or two gamepads)
 - [ ] All 5 competitive/casual stages (Aether Plateau, Forge, Cloud Citadel, Ancient Ruin, Digital Grid)
-- [ ] Character texture atlases (final art assets)
-- [ ] Stage background parallax layers
+- [ ] Character 3D model assets (glTF/GLB with flat-shaded texture atlas — final art)
+- [ ] Stage background 3D parallax layers
 
 ### Success Criteria
 - All 5 characters feel distinct and all moves function correctly.
