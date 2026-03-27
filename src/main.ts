@@ -60,6 +60,25 @@ import {
 } from './game/stages/digitalGrid.js';
 import { matchState, tickFrame, resetMatchState } from './game/state.js';
 import {
+  clearItems,
+  trySpawnItem,
+  tickItems,
+  setItemSpawnPoints,
+  setItemSpawnSetting,
+} from './game/items/items.js';
+import {
+  clearHazards,
+  setHazard,
+  tickHazards,
+  initForgeGeysers,
+  initCloudLightning,
+  initDigitalGrid,
+  type HazardType,
+} from './game/hazards/hazards.js';
+import {
+  DIGITAL_GRID_PLATFORMS_PHASE2,
+} from './game/stages/digitalGrid.js';
+import {
   initScreens,
   registerServiceWorker,
   type CharacterId,
@@ -88,6 +107,7 @@ const CHARACTER_MOVES: Record<string, Record<string, Move>> = {
 
 import type { Platform } from './engine/physics/collision.js';
 import type { BlastZones } from './engine/physics/blastZone.js';
+import type { Fixed } from './engine/physics/fixednum.js';
 
 const STAGE_PLATFORMS: Record<string, Platform[]> = {
   aetherPlateau: AETHER_PLATEAU_PLATFORMS,
@@ -103,6 +123,45 @@ const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
   cloudCitadel:  CLOUD_CITADEL_BLAST_ZONES,
   ancientRuin:   ANCIENT_RUIN_BLAST_ZONES,
   digitalGrid:   DIGITAL_GRID_BLAST_ZONES,
+};
+
+/** Item spawn points (floating above platforms) per stage (Q16.16 coordinates). */
+const STAGE_SPAWN_POINTS: Record<string, Array<{ x: Fixed; y: Fixed }>> = {
+  aetherPlateau: [
+    { x: toFixed(-280), y: toFixed(80)  }, // above left platform
+    { x: toFixed(0),    y: toFixed(80)  }, // centre stage
+    { x: toFixed(280),  y: toFixed(80)  }, // above right platform
+    { x: toFixed(0),    y: toFixed(310) }, // above top centre platform
+  ],
+  forge: [
+    { x: toFixed(-250), y: toFixed(80)  },
+    { x: toFixed(0),    y: toFixed(80)  },
+    { x: toFixed(250),  y: toFixed(80)  },
+  ],
+  cloudCitadel: [
+    { x: toFixed(-200), y: toFixed(100) },
+    { x: toFixed(0),    y: toFixed(100) },
+    { x: toFixed(200),  y: toFixed(100) },
+  ],
+  ancientRuin: [
+    { x: toFixed(-150), y: toFixed(80)  },
+    { x: toFixed(0),    y: toFixed(80)  },
+    { x: toFixed(150),  y: toFixed(80)  },
+  ],
+  digitalGrid: [
+    { x: toFixed(-200), y: toFixed(80)  },
+    { x: toFixed(0),    y: toFixed(80)  },
+    { x: toFixed(200),  y: toFixed(80)  },
+  ],
+};
+
+/** Hazard type per stage, or null for none. */
+const STAGE_HAZARD: Record<string, HazardType | null> = {
+  aetherPlateau: null,
+  forge:         'forgeGeysers',
+  cloudCitadel:  'cloudLightning',
+  ancientRuin:   null,
+  digitalGrid:   'digitalGrid',
 };
 
 // ── Air-drift scale and input threshold ──────────────────────────────────────
@@ -594,10 +653,27 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   resetEntityCounter();
   resetMatchState();
   platforms.length = 0;
+  clearItems();
+  clearHazards();
 
   // ── Stage ──────────────────────────────────────────────────────────────
   platforms.push(...(STAGE_PLATFORMS[stageId] ?? AETHER_PLATEAU_PLATFORMS));
   setBlastZones(STAGE_BLAST_ZONES[stageId] ?? AETHER_PLATEAU_BLAST_ZONES);
+
+  // ── Items — spawn points and default setting ───────────────────────────
+  setItemSpawnPoints(STAGE_SPAWN_POINTS[stageId] ?? STAGE_SPAWN_POINTS['aetherPlateau']!);
+  setItemSpawnSetting('medium');
+
+  // ── Stage hazards ──────────────────────────────────────────────────────
+  const hazardType = STAGE_HAZARD[stageId] ?? null;
+  setHazard(hazardType);
+  if (hazardType === 'forgeGeysers') {
+    initForgeGeysers(toFixed(-440), toFixed(440));
+  } else if (hazardType === 'cloudLightning') {
+    initCloudLightning();
+  } else if (hazardType === 'digitalGrid') {
+    initDigitalGrid(DIGITAL_GRID_PLATFORMS_PHASE1, DIGITAL_GRID_PLATFORMS_PHASE2);
+  }
 
   // ── Move data ──────────────────────────────────────────────────────────
   MOVE_DATA = new Map(
@@ -709,6 +785,9 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
       platformCollisionSystem();
       checkHitboxSystem([player1Id, player2Id], MOVE_DATA);
       blastZoneSystem();
+      trySpawnItem(matchState.frame);
+      tickItems(matchState.frame);
+      tickHazards();
 
       // ── Match-end detection ──────────────────────────────────────────────
       const mf1 = fighterComponents.get(player1Id);

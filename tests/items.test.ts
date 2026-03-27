@@ -37,6 +37,16 @@ import {
   hitAssistOrb,
   ORB_COLOURS,
   SPAWN_INTERVAL_FRAMES,
+  EMBER_CORE_FUEL_FRAMES,
+  RUNESHARD_CHARGES,
+  SPEED_BOOTS_FRAMES,
+  MIRROR_SHARD_INVINCIBILITY,
+  BLAST_IMP_STANDBY_FRAMES,
+  BLAST_IMP_WALK_FRAMES,
+  NEXUS_CAPSULE_FLIGHT_FRAMES,
+  NEXUS_CAPSULE_CREATURE_FRAMES,
+  GYROSTONE_STANDBY_FRAMES,
+  THUNDER_BOLT_PULSES,
 } from '../src/game/items/items.ts';
 
 import {
@@ -467,5 +477,382 @@ describe('stage hazards — Digital Grid Phase Transitions', () => {
     for (let f = 0; f < FRAMES; f++) { tickHazards(); phasesB.push(getDigitalGridPhase()); }
 
     expect(phasesA).toEqual(phasesB);
+  });
+});
+
+// ── New item type tests ───────────────────────────────────────────────────────
+
+describe('new item types', () => {
+  beforeEach(() => {
+    resetAll();
+    seedRng(42);
+  });
+
+  // ── helpers ─────────────────────────────────────────────────────────────────
+
+  /** Force an item of the given itemType to spawn by iterating seeds. */
+  function forceSpawn(itemType: string, maxAttempts = 100) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      clearItems();
+      seedRng(attempt * 17 + 3);
+      setItemSpawnSetting('high');
+      setItemSpawnPoints([{ x: toFixed(0), y: toFixed(50) }]);
+      trySpawnItem(720);
+      const found = activeItems.find(i => i.itemType === itemType);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // ── emberCore ────────────────────────────────────────────────────────────────────
+
+  it('emberCore starts with correct fuel frames', () => {
+    const item = forceSpawn('emberCore');
+    if (!item) return; // guard
+    expect(item.fuelFrames).toBe(EMBER_CORE_FUEL_FRAMES);
+    expect(item.category).toBe('meleeAugment');
+  });
+
+  it('emberCore burns out after EMBER_CORE_FUEL_FRAMES ticks while held', () => {
+    const item = forceSpawn('emberCore');
+    if (!item) return;
+
+    const fid = makeGroundedFighter(0, 50);
+    item.heldBy = fid;
+
+    for (let f = 0; f < EMBER_CORE_FUEL_FRAMES; f++) tickItems(f);
+
+    // Item should be removed when fuel hits 0
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  it('emberCore damages nearby fighters while held', () => {
+    const item = forceSpawn('emberCore');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    const victim = makeGroundedFighter(10, 50); // very close
+    item.heldBy = holder;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+
+    const dmgBefore = fighterComponents.get(victim)!.damagePercent;
+    tickItems(0);
+    const dmgAfter = fighterComponents.get(victim)!.damagePercent;
+    expect(dmgAfter).toBeGreaterThan(dmgBefore);
+  });
+
+  // ── runeshard ────────────────────────────────────────────────────────────────────
+
+  it('runeshard starts with RUNESHARD_CHARGES charges', () => {
+    const item = forceSpawn('runeshard');
+    if (!item) return;
+    expect(item.charges).toBe(RUNESHARD_CHARGES);
+    expect(item.category).toBe('meleeAugment');
+  });
+
+  it('runeshard fires and loses charges while held', () => {
+    const item = forceSpawn('runeshard');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    const target = makeGroundedFighter(100, 50); // within range
+    item.heldBy = holder;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+
+    const initialCharges = item.charges;
+    // Tick enough frames for one shot (RUNESHARD_SHOT_INTERVAL = 30 frames)
+    for (let f = 0; f <= 30; f++) tickItems(f);
+
+    expect(item.charges).toBeLessThan(initialCharges);
+    const dmg = fighterComponents.get(target)!.damagePercent;
+    expect(dmg).toBeGreaterThan(0);
+  });
+
+  it('runeshard is removed when all charges are exhausted', () => {
+    const item = forceSpawn('runeshard');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    item.heldBy = holder;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+    makeGroundedFighter(80, 50); // target to absorb shots
+
+    // Tick enough for all RUNESHARD_CHARGES shots (each fires every 30 frames)
+    for (let f = 0; f <= RUNESHARD_CHARGES * 31; f++) tickItems(f);
+
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── speedBoots ──────────────────────────────────────────────────────────────
+
+  it('speedBoots duration expires after SPEED_BOOTS_FRAMES while held', () => {
+    const item = forceSpawn('speedBoots');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    item.heldBy = holder;
+
+    for (let f = 0; f < SPEED_BOOTS_FRAMES; f++) tickItems(f);
+
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  it('speedBoots applies a velocity boost to the holder each tick', () => {
+    const item = forceSpawn('speedBoots');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    item.heldBy = holder;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+
+    const physBefore = physicsComponents.get(holder)!.vx;
+    tickItems(0);
+    const physAfter  = physicsComponents.get(holder)!.vx;
+    // Boost should have changed vx (facingRight=true → positive boost)
+    expect(physAfter).not.toBe(physBefore);
+  });
+
+  // ── mirrorShard ─────────────────────────────────────────────────────────────
+
+  it('mirrorShard grants invincibility to the holder on pickup and disappears', () => {
+    const item = forceSpawn('mirrorShard');
+    if (!item) return;
+
+    const holder = makeGroundedFighter(0, 50);
+    item.heldBy = holder;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+
+    tickItems(0); // pickup tick — grants invincibility and removes item
+
+    const fighter = fighterComponents.get(holder)!;
+    expect(fighter.invincibleFrames).toBeGreaterThanOrEqual(MIRROR_SHARD_INVINCIBILITY);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── blastImp ───────────────────────────────────────────────────────────────────
+
+  it('blastImp starts in standby and does not move immediately', () => {
+    const item = forceSpawn('blastImp');
+    if (!item) return;
+
+    const xBefore = item.x;
+    for (let f = 0; f < 10; f++) tickItems(f);
+    expect(item.walkActive).toBe(false);
+    expect(item.x).toBe(xBefore); // no movement yet
+  });
+
+  it('blastImp starts walking after BLAST_IMP_STANDBY_FRAMES', () => {
+    const item = forceSpawn('blastImp');
+    if (!item) return;
+
+    for (let f = 0; f < BLAST_IMP_STANDBY_FRAMES; f++) tickItems(f);
+    expect(item.walkActive).toBe(true);
+  });
+
+  it('blastImp explodes and damages nearby fighters after walk phase', () => {
+    const item = forceSpawn('blastImp');
+    if (!item) return;
+
+    const victim = makeGroundedFighter(0, 50);
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+    const dmgBefore = fighterComponents.get(victim)!.damagePercent;
+
+    for (let f = 0; f < BLAST_IMP_STANDBY_FRAMES + BLAST_IMP_WALK_FRAMES + 5; f++) {
+      tickItems(f);
+    }
+
+    const dmgAfter = fighterComponents.get(victim)!.damagePercent;
+    expect(dmgAfter).toBeGreaterThan(dmgBefore);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── nexusCapsule ─────────────────────────────────────────────────────────────
+
+  it('nexusCapsule releases a creature after NEXUS_CAPSULE_FLIGHT_FRAMES', () => {
+    const item = forceSpawn('nexusCapsule');
+    if (!item) return;
+
+    item.vx = toFixed(1); // give it some velocity
+
+    for (let f = 0; f < NEXUS_CAPSULE_FLIGHT_FRAMES; f++) tickItems(f);
+
+    expect(item.creatureActive).toBe(true);
+    expect(item.creatureFrames).toBe(NEXUS_CAPSULE_CREATURE_FRAMES);
+  });
+
+  it('nexusCapsule creature damages nearby fighters then disappears', () => {
+    const item = forceSpawn('nexusCapsule');
+    if (!item) return;
+
+    // Put creature right next to the victim
+    item.creatureActive = true;
+    item.creatureFrames = NEXUS_CAPSULE_CREATURE_FRAMES;
+    item.vx = toFixed(0);
+
+    const victim = makeGroundedFighter(0, 50);
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+
+    const dmgBefore = fighterComponents.get(victim)!.damagePercent;
+    // Tick 15 frames (first damage pulse interval)
+    for (let f = 0; f < 15; f++) tickItems(f);
+    const dmgAfter = fighterComponents.get(victim)!.damagePercent;
+    expect(dmgAfter).toBeGreaterThan(dmgBefore);
+
+    // Tick until creature frames run out
+    for (let f = 15; f <= NEXUS_CAPSULE_CREATURE_FRAMES + 5; f++) tickItems(f);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── gyrostone ──────────────────────────────────────────────────────────────────
+
+  it('gyrostone auto-activates after GYROSTONE_STANDBY_FRAMES', () => {
+    const item = forceSpawn('gyrostone');
+    if (!item) return;
+
+    expect(item.deployed).toBe(false);
+    for (let f = 0; f < GYROSTONE_STANDBY_FRAMES; f++) tickItems(f);
+    expect(item.deployed).toBe(true);
+  });
+
+  // ── gravityAnchor ────────────────────────────────────────────────────────────
+
+  it('gravityAnchor deploys as a gravity well and pulls nearby fighters', () => {
+    const item = forceSpawn('gravityAnchor');
+    if (!item) return;
+
+    // Force it deployed at a known position
+    item.deployed     = true;
+    item.deployFrames = 300;
+    item.x = toFixed(0);
+    item.y = toFixed(50);
+    item.vx = toFixed(0);
+
+    const victim = makeGroundedFighter(50, 50); // 50 units to the right
+    const phys   = physicsComponents.get(victim)!;
+    const vxBefore = phys.vx;
+
+    tickItems(0);
+
+    // Fighter should be pulled left (toward anchor at x=0)
+    expect(phys.vx).toBeLessThan(vxBefore);
+  });
+
+  it('gravityAnchor disappears after deployFrames', () => {
+    const item = forceSpawn('gravityAnchor');
+    if (!item) return;
+
+    item.deployed     = true;
+    item.deployFrames = 5;
+    item.vx = toFixed(0);
+
+    for (let f = 0; f < 10; f++) tickItems(f);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── iceTag ───────────────────────────────────────────────────────────────────
+
+  it('iceTag freezes the first fighter it hits', () => {
+    const item = forceSpawn('iceTag');
+    if (!item) return;
+
+    item.vx = toFixed(2);
+    item.y  = toFixed(50);
+    item.x  = toFixed(-5);
+
+    const victim = makeGroundedFighter(0, 50);
+
+    // Tick once — iceTag should hit and freeze
+    tickItems(0);
+
+    const fighter = fighterComponents.get(victim)!;
+    expect(fighter.hitstunFrames).toBe(180);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  it('iceTag expires after 120 flight frames if it hits nothing', () => {
+    const item = forceSpawn('iceTag');
+    if (!item) return;
+
+    item.vx = toFixed(1);
+    item.x  = toFixed(-9999); // far from any fighter
+
+    for (let f = 0; f < 125; f++) tickItems(f);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── thunderBolt ───────────────────────────────────────────────────────────────
+
+  it('thunderBolt delivers multiple shock pulses after initial hit', () => {
+    const item = forceSpawn('thunderBolt');
+    if (!item) return;
+
+    // Place it right on the victim so initial hit fires immediately
+    const victim = makeGroundedFighter(0, 50);
+    item.x  = toFixed(0);
+    item.y  = toFixed(50);
+    item.vx = toFixed(0);
+
+    const dmgBefore = fighterComponents.get(victim)!.damagePercent;
+
+    // Tick enough for initial hit + at least one pulse (60 frame interval)
+    for (let f = 0; f < 70; f++) tickItems(f);
+
+    const dmgAfter = fighterComponents.get(victim)!.damagePercent;
+    expect(dmgAfter).toBeGreaterThan(dmgBefore);
+  });
+
+  it('thunderBolt is removed after all pulses are delivered', () => {
+    const item = forceSpawn('thunderBolt');
+    if (!item) return;
+
+    // Arm it immediately
+    item.boltArmed  = true;
+    item.boltFrames = 1;
+    item.charges    = THUNDER_BOLT_PULSES;
+    item.x = toFixed(-9999); // nothing to hit during pulses
+
+    for (let f = 0; f < THUNDER_BOLT_PULSES * 65; f++) tickItems(f);
+    expect(activeItems.find(i => i === item)).toBeUndefined();
+  });
+
+  // ── all 16 item types span valid categories ──────────────────────────────────
+
+  it('items from all 4 categories spawn with valid item types', () => {
+    const validTypes = new Set([
+      'energyRod', 'heavyMallet', 'emberCore', 'runeshard', 'speedBoots', 'mirrorShard',
+      'explosiveSphere', 'boomerang', 'nexusCapsule', 'blastImp', 'gyrostone',
+      'gravityAnchor', 'iceTag', 'thunderBolt',
+      'assistOrb', 'aetherCrystal',
+    ]);
+    // Run a high number of attempts; collect every item type that appears
+    const found = new Set<string>();
+    for (let attempt = 0; attempt < 2000; attempt++) {
+      clearItems();
+      seedRng(attempt * 31 + 7); // stride 31 for better LCG spread
+      setItemSpawnSetting('high');
+      setItemSpawnPoints([{ x: toFixed(0), y: toFixed(50) }]);
+      trySpawnItem(720);
+      for (const item of activeItems) {
+        expect(validTypes.has(item.itemType)).toBe(true);
+        found.add(item.itemType);
+      }
+    }
+    // All 4 categories produce items — assistOrb and aetherCrystal are unique
+    // per category, so both must appear. MeleeAugment and throwable types are
+    // wide, but 2000 attempts with stride sampling is sufficient for coverage.
+    expect(found.has('assistOrb')).toBe(true);
+    expect(found.has('aetherCrystal')).toBe(true);
+    // Verify at least one type from each of the two wider categories appears
+    const meleeTypes = ['energyRod', 'heavyMallet', 'emberCore', 'runeshard', 'speedBoots', 'mirrorShard'];
+    const throwTypes = ['explosiveSphere', 'boomerang', 'nexusCapsule', 'blastImp', 'gyrostone', 'gravityAnchor', 'iceTag', 'thunderBolt'];
+    expect(meleeTypes.some(t => found.has(t))).toBe(true);
+    expect(throwTypes.some(t => found.has(t))).toBe(true);
   });
 });
