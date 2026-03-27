@@ -2,7 +2,7 @@
 // Phase 2 acceptance tests — Combat Core
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { toFixed, toFloat, fixedAdd } from '../src/engine/physics/fixednum.js';
+import { toFixed, toFloat } from '../src/engine/physics/fixednum.js';
 import {
   transformComponents,
   physicsComponents,
@@ -13,7 +13,6 @@ import {
 } from '../src/engine/ecs/component.js';
 import { createEntity, resetEntityCounter } from '../src/engine/ecs/entity.js';
 import { KAEL_STATS } from '../src/game/characters/kael.js';
-import { GORUN_STATS } from '../src/game/characters/gorun.js';
 import { hitlagMap, shieldBreakMap, transitionFighterState } from '../src/engine/physics/stateMachine.js';
 import { hitRegistry, platforms } from '../src/engine/physics/collision.js';
 import { respawnTimers, setBlastZones } from '../src/engine/physics/blastZone.js';
@@ -50,36 +49,6 @@ function makeGroundedFighter(characterId = 'kael', stats = KAEL_STATS, x = 0, y 
   return id;
 }
 
-function makeAirborneFighter(x = 0, y = 200) {
-  const id = createEntity();
-  transformComponents.set(id, {
-    x: toFixed(x), y: toFixed(y),
-    prevX: toFixed(x), prevY: toFixed(y),
-    facingRight: true,
-  });
-  physicsComponents.set(id, {
-    vx: toFixed(0), vy: toFixed(-1),  // falling
-    gravityMultiplier: toFixed(1.0),
-    grounded: false, fastFalling: false,
-  });
-  fighterComponents.set(id, {
-    characterId: 'kael',
-    state: 'jump',
-    damagePercent: toFixed(0),
-    stocks: 3,
-    jumpCount: 1,
-    hitstunFrames: 0,
-    invincibleFrames: 0,
-    hitlagFrames: 0,
-    shieldHealth: 100,
-    shieldBreakFrames: 0,
-    attackFrame: 0,
-    currentMoveId: null,
-    stats: KAEL_STATS,
-  });
-  return id;
-}
-
 beforeEach(() => {
   clearAllComponents();
   resetEntityCounter();
@@ -112,7 +81,6 @@ describe('knockback formula', () => {
   }
 
   const weightClasses = [0.6, 0.8, 1.0, 1.3, 1.7] as const;
-  const damages = [0, 50, 100, 150] as const;
   const s = 1.2;
   const b = 5.0;
 
