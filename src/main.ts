@@ -211,16 +211,16 @@ function samplePlayer2Input(): InputState {
   else if (left && !right) stickX = -1.0;
 
   const jumpJust    = p2Pressed.has('ArrowUp');
-  const attackJust  = p2Pressed.has('Numpad7');
-  const specialJust = p2Pressed.has('Numpad8');
-  const grabJust    = p2Pressed.has('Numpad9');
+  const attackJust  = p2Pressed.has('Numpad1');
+  const specialJust = p2Pressed.has('Numpad2');
+  const grabJust    = p2Pressed.has('Numpad3');
 
   const result: InputState = {
     jump:    p2Down.has('ArrowUp'),
-    attack:  p2Down.has('Numpad7'),
-    special: p2Down.has('Numpad8'),
+    attack:  p2Down.has('Numpad1'),
+    special: p2Down.has('Numpad2'),
     shield:  p2Down.has('Numpad0'),
-    grab:    p2Down.has('Numpad9'),
+    grab:    p2Down.has('Numpad3'),
     jumpJustPressed:    jumpJust,
     attackJustPressed:  attackJust,
     specialJustPressed: specialJust,
@@ -404,11 +404,14 @@ function processPlayerInput(
     fighter.state !== 'shielding'
   ) {
     if (buffer.consume('grab', matchState.frame)) {
-      transitionFighterState(playerId, 'grabbing');
-      grabFramesMap.set(playerId, GRAB_TOTAL_FRAMES);
-      phys.vx = toFixed(0);
-      syncAnimation(fighter, renderable);
-      return;
+      // If holding an item, grab-press throws/uses it instead of grappling
+      if (!useHeldItem(playerId, transform.facingRight)) {
+        transitionFighterState(playerId, 'grabbing');
+        grabFramesMap.set(playerId, GRAB_TOTAL_FRAMES);
+        phys.vx = toFixed(0);
+        syncAnimation(fighter, renderable);
+        return;
+      }
     }
   }
 

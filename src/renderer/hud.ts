@@ -13,6 +13,7 @@ import { toFloat }                               from '../engine/physics/fixednu
 import { fighterComponents, transformComponents } from '../engine/ecs/component.js';
 import { getCameraTransform }                    from './camera.js';
 import { getKeysDown }                           from '../engine/input/keyboard.js';
+import { activeItems }                           from '../game/items/items.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -20,12 +21,33 @@ const PLAYER_COLORS = ['#4499FF', '#FF4444', '#44FF66', '#FFEE22'] as const;
 /** Rounds damage to one decimal place before display. */
 const DAMAGE_ROUND_FACTOR = 10;
 
+/** Human-readable names for every item type. */
+const ITEM_NAMES: Record<string, string> = {
+  energyRod:       'Energy Rod',
+  heavyMallet:     'Mallet',
+  emberCore:       'Ember Core',
+  runeshard:       'Runeshard',
+  speedBoots:      'Speed Boots',
+  mirrorShard:     'Mirror Shard',
+  explosiveSphere: 'Bomb',
+  boomerang:       'Boomerang',
+  nexusCapsule:    'Nexus Capsule',
+  blastImp:        'Blast Imp',
+  gyrostone:       'Gyrostone',
+  gravityAnchor:   'Gravity Anchor',
+  iceTag:          'Ice Tag',
+  thunderBolt:     'Thunder Bolt',
+  assistOrb:       'Assist Orb',
+  aetherCrystal:   'Aether Crystal',
+};
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 let hudRoot: HTMLDivElement | null = null;
 const panels: HTMLDivElement[]              = [];
 const damageLabels: HTMLDivElement[]        = [];
 const stockContainers: HTMLDivElement[]     = [];
+const itemLabels: HTMLDivElement[]          = [];
 const offscreenIndicators: HTMLDivElement[] = [];
 
 let trackedIds: number[] = [];
@@ -203,6 +225,21 @@ export function initHud(playerEntityIds: number[]): void {
     panel.appendChild(stockCont);
     stockContainers.push(stockCont);
 
+    // Held item indicator (hidden when not holding anything)
+    const itemLabel = document.createElement('div');
+    itemLabel.textContent = '';
+    Object.assign(itemLabel.style, {
+      marginTop:  '6px',
+      fontSize:   '11px',
+      fontFamily: 'monospace',
+      color:      '#FFD700',
+      textAlign:  'center',
+      minHeight:  '14px',
+      letterSpacing: '0.04em',
+    });
+    panel.appendChild(itemLabel);
+    itemLabels.push(itemLabel);
+
     panels.push(panel);
     hudRoot.appendChild(panel);
 
@@ -265,6 +302,13 @@ export function updateHud(): void {
       });
     }
 
+    // ── Held item indicator ─────────────────────────────────────────────────
+    const itemLabel = itemLabels[i];
+    if (itemLabel) {
+      const held = activeItems.find(it => it.heldBy === id);
+      itemLabel.textContent = held ? `⚔ ${ITEM_NAMES[held.itemType] ?? held.itemType}` : '';
+    }
+
     // ── Off-screen indicator ────────────────────────────────────────────────
     const indicator = offscreenIndicators[i];
     if (!indicator || !transform) continue;
@@ -323,6 +367,7 @@ export function disposeHud(): void {
   panels.length              = 0;
   damageLabels.length        = 0;
   stockContainers.length     = 0;
+  itemLabels.length          = 0;
   offscreenIndicators.length = 0;
   trackedIds                 = [];
 
@@ -337,28 +382,27 @@ export function disposeHud(): void {
  * Each entry is a row; each key is { label, code, action }.
  * `null` is a spacer of roughly one key-width.
  *
- * P1 uses WASD + action keys (J attack, K special, I grab, L shield).
- * P2 uses Arrow keys + Numpad action keys (7 attack, 8 special, 9 grab, 0 shield).
+ * P1: WASD movement + Q(special) E(attack) R(grab) F(shield) — all near WASD.
+ * P2: Arrow keys movement + Numpad1(attack) Numpad2(special) Numpad3(grab) Numpad0(shield).
  */
 type KeyDef = { label: string; code: string; wide?: boolean; action?: string } | null;
 
 const KEY_LAYOUT: Array<Array<KeyDef[]>> = [
   // ── P1 rows ────────────────────────────────────────────────────────────────
   [
-    // row 0: W (jump) + I J K L (action keys — consecutive home/top-row keys)
+    // row 0: Q (special) W (jump) E (attack) R (grab) — physical top row near movement
     [
-      { label: 'W', code: 'KeyW',   action: 'jump'    },
-      null,
-      { label: 'I', code: 'KeyI',   action: 'grab'    },
-      { label: 'J', code: 'KeyJ',   action: 'attack'  },
-      { label: 'K', code: 'KeyK',   action: 'special' },
-      { label: 'L', code: 'KeyL',   action: 'shield'  },
+      { label: 'Q', code: 'KeyQ', action: 'special' },
+      { label: 'W', code: 'KeyW', action: 'jump'    },
+      { label: 'E', code: 'KeyE', action: 'attack'  },
+      { label: 'R', code: 'KeyR', action: 'grab'    },
     ],
-    // row 1: A S D movement
+    // row 1: A S D (move) F (shield) — home row
     [
-      { label: 'A', code: 'KeyA',  action: 'left'  },
-      { label: 'S', code: 'KeyS',  action: 'down'  },
-      { label: 'D', code: 'KeyD',  action: 'right' },
+      { label: 'A', code: 'KeyA', action: 'left'   },
+      { label: 'S', code: 'KeyS', action: 'down'   },
+      { label: 'D', code: 'KeyD', action: 'right'  },
+      { label: 'F', code: 'KeyF', action: 'shield' },
     ],
     // row 2: space bar (also jump)
     [
@@ -367,11 +411,11 @@ const KEY_LAYOUT: Array<Array<KeyDef[]>> = [
   ],
   // ── P2 rows ────────────────────────────────────────────────────────────────
   [
-    // row 0: numpad action keys 7 8 9
+    // row 0: numpad action keys 1 2 3
     [
-      { label: '7', code: 'Numpad7', action: 'attack'  },
-      { label: '8', code: 'Numpad8', action: 'special' },
-      { label: '9', code: 'Numpad9', action: 'grab'    },
+      { label: '1', code: 'Numpad1', action: 'attack'  },
+      { label: '2', code: 'Numpad2', action: 'special' },
+      { label: '3', code: 'Numpad3', action: 'grab'    },
     ],
     // row 1: numpad 0 (shield) + arrow up (jump)
     [

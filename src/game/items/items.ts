@@ -945,9 +945,9 @@ export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
     }
 
     // Passive augments (emberCore, runeshard, speedBoots) activate via tickItems.
-    // No explicit "use" action is needed for them.
+    // Don't block the attack action — return false so a normal attack fires too.
     default:
-      break;
+      return false;
   }
   return true;
 }

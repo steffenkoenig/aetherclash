@@ -97,9 +97,9 @@ export function sampleKeyboard(): InputState {
   }
 
   const jumpKeys    = ['KeyW', 'Space'];
-  const attackKeys  = ['KeyJ'];
-  const specialKeys = ['KeyK'];
-  const grabKeys    = ['KeyI'];
+  const attackKeys  = ['KeyE'];
+  const specialKeys = ['KeyQ'];
+  const grabKeys    = ['KeyR'];
 
   const jumpHeld    = jumpKeys.some(k => keysDown.has(k));
   const attackHeld  = attackKeys.some(k => keysDown.has(k));
@@ -116,7 +116,7 @@ export function sampleKeyboard(): InputState {
     jump:    jumpHeld,
     attack:  attackHeld,
     special: specialHeld,
-    shield:  keysDown.has('KeyL'),
+    shield:  keysDown.has('KeyF'),
     grab:    grabHeld,
     jumpJustPressed,
     attackJustPressed,
