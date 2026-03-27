@@ -7,6 +7,7 @@ import {
   transformComponents,
   physicsComponents,
   fighterComponents,
+  renderableComponents,
 } from './engine/ecs/component.js';
 import { addSystem, runSystems } from './engine/ecs/system.js';
 import { applyGravitySystem } from './engine/physics/gravity.js';
@@ -62,6 +63,17 @@ fighterComponents.set(playerId, {
   stats: KAEL_STATS,
 });
 
+// Link the player entity to Kael's 3D model assets.
+// Phase 2: loadGLTF and loadTexture will upload the mesh and atlas to the GPU.
+renderableComponents.set(playerId, {
+  meshUrl:        '/assets/kael/kael.glb',
+  atlasUrl:       '/assets/kael/kael_atlas.png',
+  animationClip:  'idle',
+  animationFrame: 0,
+  animationSpeed: 1.0,
+  loop:           true,
+});
+
 // ── Input state ───────────────────────────────────────────────────────────────
 
 // Air-drift scale: 80% of run speed (Fixed constant)
@@ -72,6 +84,7 @@ function processInput(): void {
   const transform = transformComponents.get(playerId)!;
   const phys = physicsComponents.get(playerId)!;
   const fighter = fighterComponents.get(playerId)!;
+  const renderable = renderableComponents.get(playerId)!;
 
   // Pass-through flag for platforms
   setEntityPassThroughInput(playerId, input.stickY < -0.5);
@@ -130,6 +143,16 @@ function processInput(): void {
   // Reset gravity multiplier when not fast-falling
   if (!phys.fastFalling) {
     phys.gravityMultiplier = toFixed(1.0);
+  }
+
+  // Keep the Renderable animation clip in sync with the fighter's state so the
+  // correct skeletal animation plays on the 3D model.
+  // Phase 2: replace this simple state→loop mapping with the AnimationClip
+  // metadata parsed from the glTF asset (each clip carries its own loop flag).
+  if (renderable.animationClip !== fighter.state) {
+    renderable.animationClip  = fighter.state;
+    renderable.animationFrame = 0;
+    renderable.loop = fighter.state === 'idle' || fighter.state === 'run';
   }
 }
 
