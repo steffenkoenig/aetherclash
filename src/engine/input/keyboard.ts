@@ -225,3 +225,8 @@ export function clearKeyState(): void {
   mostRecentHorizontal = null;
   mostRecentVertical   = null;
 }
+
+/** Read-only snapshot of currently held key codes (for the HUD key display). */
+export function getKeysDown(): ReadonlySet<string> {
+  return keysDown;
+}

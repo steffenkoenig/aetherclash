@@ -39,7 +39,7 @@ import { InputBuffer }                     from './engine/input/buffer.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
 import { initRenderer, render, resetRenderer } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
-import { initHud, updateHud, disposeHud }  from './renderer/hud.js';
+import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
 import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
 import { VELA_STATS, VELA_MOVES }          from './game/characters/vela.js';
@@ -232,6 +232,11 @@ function samplePlayer2Input(): InputState {
 
   p2Pressed.clear();
   return result;
+}
+
+/** Read-only snapshot of currently held P2 key codes (for the HUD key display). */
+export function getP2KeysDown(): ReadonlySet<string> {
+  return p2Down;
 }
 
 // ── Move helpers ──────────────────────────────────────────────────────────────
@@ -764,6 +769,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
 
   // ── HUD ────────────────────────────────────────────────────────────────
   disposeHud();
+  registerP2KeysGetter(getP2KeysDown);
   initHud([player1Id, player2Id]);
   resetRenderer();
 
