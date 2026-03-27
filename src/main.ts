@@ -60,6 +60,11 @@ fighterComponents.set(playerId, {
   jumpCount: 0,
   hitstunFrames: 0,
   invincibleFrames: 0,
+  hitlagFrames: 0,
+  shieldHealth: 100,
+  shieldBreakFrames: 0,
+  attackFrame: 0,
+  currentMoveId: null,
   stats: KAEL_STATS,
 });
 

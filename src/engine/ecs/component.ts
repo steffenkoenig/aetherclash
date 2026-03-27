@@ -56,7 +56,72 @@ export interface Fighter {
   jumpCount: number; // 0 = no jumps used, 1 = first jump used, 2 = both used
   hitstunFrames: number;
   invincibleFrames: number;
+  /** Frames both attacker and victim are frozen after a hit. */
+  hitlagFrames: number;
+  /** Shield health 0–100; depletes while shielding. */
+  shieldHealth: number;
+  /** Frames of shield-break stun remaining. */
+  shieldBreakFrames: number;
+  /** Current frame index within the active move animation. */
+  attackFrame: number;
+  /** ID of the active move, or null when not attacking. */
+  currentMoveId: string | null;
   stats: FighterStats;
+}
+
+// ── Move data types ───────────────────────────────────────────────────────────
+
+export interface Hitbox {
+  /** [firstActiveFrame, lastActiveFrame] (inclusive). */
+  activeFrames: [number, number];
+  offsetX: Fixed;
+  offsetY: Fixed;
+  width: Fixed;
+  height: Fixed;
+  /** Raw damage dealt (plain integer, not Fixed). */
+  damage: number;
+  knockbackScaling: Fixed;
+  baseKnockback: Fixed;
+  /** Launch angle in degrees (0 = right, 90 = up, 180 = left, 270 = down). */
+  launchAngle: number;
+  hitlagFrames: number;
+  /** Unique identifier per move instance to drive the hit registry. */
+  id: string;
+}
+
+export interface Hurtbox {
+  /** [firstActiveFrame, lastActiveFrame] (inclusive). */
+  activeFrames: [number, number];
+  offsetX: Fixed;
+  offsetY: Fixed;
+  width: Fixed;
+  height: Fixed;
+  /** Intangible hurtboxes are not hit but do not grant full invincibility. */
+  intangible: boolean;
+  /** Fully invincible — hits pass through entirely. */
+  invincible: boolean;
+}
+
+export interface Move {
+  totalFrames: number;
+  hitboxes: Hitbox[];
+  hurtboxes: Hurtbox[];
+  /** "Interruptible As Soon As" frame — earliest cancellable frame. */
+  iasa: number;
+  landingLag: number;
+}
+
+// ── Ledge collider ────────────────────────────────────────────────────────────
+
+export interface LedgeCollider {
+  x: Fixed;
+  y: Fixed;
+  /** Which side of the platform this ledge is on. */
+  facingRight: boolean;
+  /** EntityId of the fighter currently holding this ledge, or null if free. */
+  occupiedByEntityId: EntityId | null;
+  /** Cooldown frames remaining before this ledge can be grabbed again. */
+  cooldownFrames: number;
 }
 
 /**
@@ -86,14 +151,16 @@ export interface Renderable {
 
 // ── Registries ────────────────────────────────────────────────────────────────
 
-export const transformComponents  = new Map<EntityId, Transform>();
-export const physicsComponents    = new Map<EntityId, Physics>();
-export const fighterComponents    = new Map<EntityId, Fighter>();
-export const renderableComponents = new Map<EntityId, Renderable>();
+export const transformComponents   = new Map<EntityId, Transform>();
+export const physicsComponents     = new Map<EntityId, Physics>();
+export const fighterComponents     = new Map<EntityId, Fighter>();
+export const renderableComponents  = new Map<EntityId, Renderable>();
+export const ledgeColliderComponents = new Map<EntityId, LedgeCollider>();
 
 export function clearAllComponents(): void {
   transformComponents.clear();
   physicsComponents.clear();
   fighterComponents.clear();
   renderableComponents.clear();
+  ledgeColliderComponents.clear();
 }
