@@ -472,6 +472,82 @@ let player2Id = -1;
 let p1CharId  = 'kael';
 let p2CharId  = 'gorun';
 
+// ── Match result overlay ──────────────────────────────────────────────────────
+
+function showMatchResult(winnerLabel: string): void {
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position:       'fixed',
+    inset:          '0',
+    zIndex:         '300',
+    display:        'flex',
+    flexDirection:  'column',
+    alignItems:     'center',
+    justifyContent: 'center',
+    background:     'rgba(0,0,0,0.80)',
+    fontFamily:     'monospace',
+    color:          '#fff',
+  });
+
+  const title = document.createElement('h1');
+  title.textContent = `${winnerLabel} WINS!`;
+  Object.assign(title.style, {
+    fontSize:      '56px',
+    fontWeight:    'bold',
+    letterSpacing: '0.08em',
+    textShadow:    '0 0 20px #fff',
+    marginBottom:  '32px',
+  });
+
+  const rematch = document.createElement('button');
+  rematch.textContent = '▶ Rematch';
+  Object.assign(rematch.style, {
+    padding:     '14px 40px',
+    fontSize:    '18px',
+    fontFamily:  'monospace',
+    background:  '#4499FF',
+    color:       '#fff',
+    border:      'none',
+    borderRadius: '6px',
+    cursor:      'pointer',
+    marginRight: '16px',
+  });
+  rematch.onclick = () => {
+    overlay.remove();
+    startMatch(p1CharId as import('./ui/screens.js').CharacterId,
+               p2StageId as import('./ui/screens.js').StageId);
+  };
+
+  const menu = document.createElement('button');
+  menu.textContent = '← Menu';
+  Object.assign(menu.style, {
+    padding:     '14px 40px',
+    fontSize:    '18px',
+    fontFamily:  'monospace',
+    background:  '#555',
+    color:       '#fff',
+    border:      'none',
+    borderRadius: '6px',
+    cursor:      'pointer',
+  });
+  menu.onclick = () => {
+    overlay.remove();
+    location.reload();
+  };
+
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.appendChild(rematch);
+  row.appendChild(menu);
+
+  overlay.appendChild(title);
+  overlay.appendChild(row);
+  document.body.appendChild(overlay);
+}
+
+// Tracks the stage used by the current match so Rematch can replay it.
+let p2StageId = 'aetherPlateau';
+
 function updateDebugOverlay(): void {
   if (player1Id < 0) return;
   const t1 = transformComponents.get(player1Id);
@@ -508,8 +584,9 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   // In local play we just pick the next character; in the future this would
   // come from a 2-player select screen. For now we default to gorun/kael.
   const p2Char = (p1Char === 'kael' ? 'gorun' : 'kael') as CharacterId;
-  p1CharId = p1Char;
-  p2CharId = p2Char;
+  p1CharId  = p1Char;
+  p2CharId  = p2Char;
+  p2StageId = stageId;
 
   // ── Reset simulation state ─────────────────────────────────────────────
   clearAllComponents();
@@ -632,6 +709,19 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
       platformCollisionSystem();
       checkHitboxSystem([player1Id, player2Id], MOVE_DATA);
       blastZoneSystem();
+
+      // ── Match-end detection ──────────────────────────────────────────────
+      const mf1 = fighterComponents.get(player1Id);
+      const mf2 = fighterComponents.get(player2Id);
+      if ((mf1 && mf1.stocks <= 0) || (mf2 && mf2.stocks <= 0)) {
+        const winnerLabel = (mf2 && mf2.stocks <= 0)
+          ? p1CharId.charAt(0).toUpperCase() + p1CharId.slice(1)
+          : p2CharId.charAt(0).toUpperCase() + p2CharId.slice(1);
+        stopLoop();
+        showMatchResult(winnerLabel);
+        return;
+      }
+
       updateCamera([player1Id, player2Id]);
 
       tickFrame();
