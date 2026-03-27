@@ -14,7 +14,17 @@ import {
 import { createEntity, resetEntityCounter } from '../src/engine/ecs/entity.js';
 import { KAEL_STATS } from '../src/game/characters/kael.js';
 import { hitlagMap, shieldBreakMap, transitionFighterState } from '../src/engine/physics/stateMachine.js';
-import { hitRegistry, platforms } from '../src/engine/physics/collision.js';
+import { hitRegistry, platforms, platformCollisionSystem } from '../src/engine/physics/collision.js';
+import {
+  dodgeFramesMap,
+  grabFramesMap,
+  techWindowMap,
+  airDodgeUsedSet,
+} from '../src/engine/physics/stateMachine.js';
+import {
+  setEntityShieldInput,
+  FIGHTER_HALF_HEIGHT,
+} from '../src/engine/physics/collision.js';
 import { respawnTimers, setBlastZones } from '../src/engine/physics/blastZone.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -57,6 +67,10 @@ beforeEach(() => {
   hitRegistry.clear();
   platforms.length = 0;
   respawnTimers.clear();
+  dodgeFramesMap.clear();
+  grabFramesMap.clear();
+  techWindowMap.clear();
+  airDodgeUsedSet.clear();
   setBlastZones({
     left:   toFixed(-750),
     right:  toFixed(750),
@@ -709,5 +723,190 @@ describe('hitlag formula', () => {
     expect(computeHitlagFrames(12)).toBe(4);  // max(4, 4) = 4
     expect(computeHitlagFrames(15)).toBe(5);  // max(4, 5) = 5
     expect(computeHitlagFrames(18)).toBe(6);  // max(4, 6) = 6
+  });
+});
+
+// ── Dodge timers ──────────────────────────────────────────────────────────────
+
+describe('dodges via tickFighterTimers', () => {
+  it('spotDodge: fighter transitions to idle after SPOT_DODGE_TOTAL_FRAMES', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'spotDodge');
+    dodgeFramesMap.set(id, 20);
+
+    for (let i = 0; i < 20; i++) {
+      tickFighterTimers(id);
+    }
+
+    expect(fighterComponents.get(id)!.state).toBe('idle');
+  });
+
+  it('rolling: fighter transitions to idle after ROLL_TOTAL_FRAMES', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'rolling');
+    dodgeFramesMap.set(id, 30);
+
+    for (let i = 0; i < 30; i++) {
+      tickFighterTimers(id);
+    }
+
+    expect(fighterComponents.get(id)!.state).toBe('idle');
+  });
+
+  it('airDodge: fighter transitions to idle after AIR_DODGE_TOTAL_FRAMES', () => {
+    const id = makeGroundedFighter();
+    physicsComponents.get(id)!.grounded = false;
+    transitionFighterState(id, 'jump');
+    transitionFighterState(id, 'airDodge');
+    dodgeFramesMap.set(id, 30);
+
+    for (let i = 0; i < 30; i++) {
+      tickFighterTimers(id);
+    }
+
+    expect(fighterComponents.get(id)!.state).toBe('idle');
+  });
+
+  it('dodge countdown decrements each frame', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'spotDodge');
+    dodgeFramesMap.set(id, 10);
+
+    tickFighterTimers(id);
+    expect(dodgeFramesMap.get(id)).toBe(9);
+
+    tickFighterTimers(id);
+    expect(dodgeFramesMap.get(id)).toBe(8);
+  });
+});
+
+// ── Grab timer ────────────────────────────────────────────────────────────────
+
+describe('grab timer via tickFighterTimers', () => {
+  it('grabbing: fighter transitions to idle after GRAB_TOTAL_FRAMES', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'grabbing');
+    grabFramesMap.set(id, 20);
+
+    for (let i = 0; i < 20; i++) {
+      tickFighterTimers(id);
+    }
+
+    expect(fighterComponents.get(id)!.state).toBe('idle');
+  });
+
+  it('grab countdown decrements each frame', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'grabbing');
+    grabFramesMap.set(id, 5);
+
+    tickFighterTimers(id);
+    expect(grabFramesMap.get(id)).toBe(4);
+  });
+});
+
+// ── Tech window ───────────────────────────────────────────────────────────────
+
+describe('tech window', () => {
+  it('entering hitstun starts a 20-frame tech window', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'hitstun', { hitstunFrames: 30 });
+    expect(techWindowMap.get(id)).toBe(20);
+  });
+
+  it('tech window ticks down each frame via tickFighterTimers', () => {
+    const id = makeGroundedFighter();
+    transitionFighterState(id, 'hitstun', { hitstunFrames: 30 });
+    expect(techWindowMap.get(id)).toBe(20);
+
+    tickFighterTimers(id);
+    expect(techWindowMap.get(id)).toBe(19);
+  });
+
+  it('floor tech: landing while in hitstun with shield pressed clears hitstun', () => {
+    const plat = { x1: toFixed(-200), x2: toFixed(200), y: toFixed(0), passThrough: false };
+    platforms.push(plat);
+
+    const id = createEntity();
+    transformComponents.set(id, {
+      x: toFixed(0),
+      prevX: toFixed(0),
+      prevY: toFixed(0) + FIGHTER_HALF_HEIGHT + toFixed(2),
+      y:     toFixed(0) + FIGHTER_HALF_HEIGHT - toFixed(2),
+      facingRight: true,
+    });
+    physicsComponents.set(id, {
+      vx: toFixed(0), vy: toFixed(-3),
+      gravityMultiplier: toFixed(1.0),
+      grounded: false, fastFalling: false,
+    });
+    fighterComponents.set(id, {
+      characterId: 'kael',
+      state: 'hitstun',
+      damagePercent: toFixed(0),
+      stocks: 3,
+      jumpCount: 1,
+      hitstunFrames: 15,
+      invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
+      stats: KAEL_STATS,
+    });
+
+    techWindowMap.set(id, 10);
+    setEntityShieldInput(id, true);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.hitstunFrames).toBe(0);
+    expect(fighter.state).toBe('idle');
+    expect(physicsComponents.get(id)!.grounded).toBe(true);
+  });
+
+  it('hard knockdown: landing while in hitstun without shield press extends hitstun 30 frames', () => {
+    const plat = { x1: toFixed(-200), x2: toFixed(200), y: toFixed(0), passThrough: false };
+    platforms.push(plat);
+
+    const id = createEntity();
+    transformComponents.set(id, {
+      x: toFixed(0),
+      prevX: toFixed(0),
+      prevY: toFixed(0) + FIGHTER_HALF_HEIGHT + toFixed(2),
+      y:     toFixed(0) + FIGHTER_HALF_HEIGHT - toFixed(2),
+      facingRight: true,
+    });
+    physicsComponents.set(id, {
+      vx: toFixed(0), vy: toFixed(-3),
+      gravityMultiplier: toFixed(1.0),
+      grounded: false, fastFalling: false,
+    });
+    fighterComponents.set(id, {
+      characterId: 'kael',
+      state: 'hitstun',
+      damagePercent: toFixed(0),
+      stocks: 3,
+      jumpCount: 1,
+      hitstunFrames: 15,
+      invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null,
+      stats: KAEL_STATS,
+    });
+
+    techWindowMap.set(id, 10);
+    setEntityShieldInput(id, false);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.hitstunFrames).toBe(30);
+    expect(physicsComponents.get(id)!.grounded).toBe(true);
   });
 });

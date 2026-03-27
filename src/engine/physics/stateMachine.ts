@@ -15,12 +15,31 @@ export const shieldBreakMap = new Map<EntityId, number>();
 /** Countdown frames before a fighter auto-releases a ledge (0 = no limit). */
 const ledgeHangFramesMap = new Map<EntityId, number>();
 
+/** Countdown frames for dodge/roll/air-dodge duration. */
+export const dodgeFramesMap = new Map<EntityId, number>();
+
+/** Countdown frames for grab duration. */
+export const grabFramesMap = new Map<EntityId, number>();
+
+/**
+ * Tech-window countdown per fighter.
+ * Set to 20 when a fighter enters hitstun; allows a floor tech if shield is
+ * pressed before the window expires and they land.
+ */
+export const techWindowMap = new Map<EntityId, number>();
+
+/**
+ * Tracks fighters that have already used their air dodge.
+ * Cleared when the fighter lands (grounded again).
+ */
+export const airDodgeUsedSet = new Set<EntityId>();
+
 // ── Transition table ──────────────────────────────────────────────────────────
 
 const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([
-  ['idle',       new Set<FighterState>(['idle', 'walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
-  ['walk',       new Set<FighterState>(['idle', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
-  ['run',        new Set<FighterState>(['idle', 'walk', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
+  ['idle',       new Set<FighterState>(['idle', 'walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
+  ['walk',       new Set<FighterState>(['idle', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
+  ['run',        new Set<FighterState>(['idle', 'walk', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
   ['jump',       new Set<FighterState>(['idle', 'jump', 'doubleJump', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['doubleJump', new Set<FighterState>(['idle', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['attack',     new Set<FighterState>(['idle', 'jump', 'hitstun', 'KO'])],
@@ -100,6 +119,10 @@ export function transitionFighterState(
     ledgeHangFramesMap.set(entityId, data.ledgeHangFrames);
   }
 
+  if (newState === 'hitstun') {
+    techWindowMap.set(entityId, 20);
+  }
+
   for (const cb of transitionCallbacks) {
     cb(entityId, fromState, newState);
   }
@@ -153,5 +176,37 @@ export function tickFighterTimers(entityId: EntityId): void {
   const ledgeHang = ledgeHangFramesMap.get(entityId) ?? 0;
   if (ledgeHang > 0) {
     ledgeHangFramesMap.set(entityId, ledgeHang - 1);
+  }
+
+  // 6. Dodge / roll / air-dodge countdown
+  const dodge = dodgeFramesMap.get(entityId) ?? 0;
+  if (dodge > 0) {
+    const next = dodge - 1;
+    dodgeFramesMap.set(entityId, next);
+    if (next === 0) {
+      if (
+        fighter.state === 'spotDodge' ||
+        fighter.state === 'rolling' ||
+        fighter.state === 'airDodge'
+      ) {
+        transitionFighterState(entityId, 'idle');
+      }
+    }
+  }
+
+  // 7. Grab countdown
+  const grab = grabFramesMap.get(entityId) ?? 0;
+  if (grab > 0) {
+    const next = grab - 1;
+    grabFramesMap.set(entityId, next);
+    if (next === 0 && fighter.state === 'grabbing') {
+      transitionFighterState(entityId, 'idle');
+    }
+  }
+
+  // 8. Tech-window countdown (ticks regardless of other states)
+  const techWin = techWindowMap.get(entityId) ?? 0;
+  if (techWin > 0) {
+    techWindowMap.set(entityId, techWin - 1);
   }
 }

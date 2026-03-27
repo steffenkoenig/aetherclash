@@ -17,6 +17,7 @@ import {
   platforms,
   platformCollisionSystem,
   setEntityPassThroughInput,
+  setEntityShieldInput,
   FIGHTER_HALF_HEIGHT,
   checkHitboxSystem,
   clearHitRegistry,
@@ -26,6 +27,9 @@ import {
   transitionFighterState,
   tickFighterTimers,
   hitlagMap,
+  dodgeFramesMap,
+  grabFramesMap,
+  airDodgeUsedSet,
 } from './engine/physics/stateMachine.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
@@ -57,6 +61,23 @@ const MOVE_DATA = new Map([
 
 const AIR_DRIFT_SCALE = toFixed(0.8);
 const STICK_THRESHOLD = 0.5;
+
+// ── Dodge / grab / shield constants ──────────────────────────────────────────
+
+const SPOT_DODGE_INVINCIBLE_FRAMES = 8;
+const SPOT_DODGE_TOTAL_FRAMES      = 20;
+const ROLL_INVINCIBLE_FRAMES       = 15;
+const ROLL_TOTAL_FRAMES            = 30;
+const AIR_DODGE_INVINCIBLE_FRAMES  = 20;
+const AIR_DODGE_TOTAL_FRAMES       = 30;
+const GRAB_TOTAL_FRAMES            = 20;
+
+/** Shield health drained per frame while shielding (100 HP / 200 frames ≈ 3.3 s). */
+const SHIELD_DRAIN_PER_FRAME = 0.5;
+/** Shield health regenerated per frame when not shielding (slow regen). */
+const SHIELD_REGEN_PER_FRAME = 0.1;
+/** Speed multiplier applied to a roll dodge. */
+const ROLL_SPEED_MULTIPLIER  = toFixed(1.2);
 
 // ── Player 1 entity — Kael ────────────────────────────────────────────────────
 
@@ -243,48 +264,151 @@ function processPlayerInput(
   input:    InputState,
   buffer:   InputBuffer,
 ): void {
-  const transform = transformComponents.get(playerId)!;
-  const phys      = physicsComponents.get(playerId)!;
-  const fighter   = fighterComponents.get(playerId)!;
+  const transform  = transformComponents.get(playerId)!;
+  const phys       = physicsComponents.get(playerId)!;
+  const fighter    = fighterComponents.get(playerId)!;
   const renderable = renderableComponents.get(playerId)!;
 
-  // Freeze during hitlag / hitstun / KO
+  // ── Register shield input for tech detection ───────────────────────────
+  setEntityShieldInput(playerId, input.shield);
+
+  // ── Freeze during hitlag / hitstun / KO / active dodge / active grab ──
   const hitlag = hitlagMap.get(playerId) ?? 0;
-  if (fighter.state === 'KO' || fighter.state === 'hitstun' || hitlag > 0) {
+  if (
+    fighter.state === 'KO'        ||
+    fighter.state === 'hitstun'   ||
+    fighter.state === 'spotDodge' ||
+    fighter.state === 'airDodge'  ||
+    fighter.state === 'grabbing'  ||
+    hitlag > 0
+  ) {
     syncAnimation(fighter, renderable);
     return;
   }
 
-  // Pass-through flag for one-way platforms
+  // ── Rolling: keep momentum; no new input accepted ─────────────────────
+  if (fighter.state === 'rolling') {
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // ── Pass-through flag for one-way platforms ────────────────────────────
   setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
 
-  // Record buffered presses for this frame
+  // ── Record buffered presses ────────────────────────────────────────────
   if (input.jumpJustPressed)    buffer.press('jump',    matchState.frame);
   if (input.attackJustPressed)  buffer.press('attack',  matchState.frame);
   if (input.specialJustPressed) buffer.press('special', matchState.frame);
   if (input.grabJustPressed)    buffer.press('grab',    matchState.frame);
 
-  // ── Shield ────────────────────────────────────────────────────────────────
-  if (input.shield && fighter.state !== 'attack') {
+  // ── Shield degradation ────────────────────────────────────────────────
+  if (fighter.state === 'shielding') {
+    fighter.shieldHealth -= SHIELD_DRAIN_PER_FRAME;
+    if (fighter.shieldHealth <= 0) {
+      fighter.shieldHealth = 0;
+      transitionFighterState(playerId, 'idle', { shieldBreakFrames: 180 });
+      syncAnimation(fighter, renderable);
+      return;
+    }
+  } else {
+    fighter.shieldHealth = Math.min(100, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
+  }
+
+  // ── Air dodge (shield while airborne, once per airborne sequence) ──────
+  if (
+    input.shield &&
+    !phys.grounded &&
+    !airDodgeUsedSet.has(playerId) &&
+    (fighter.state === 'jump' || fighter.state === 'doubleJump')
+  ) {
+    transitionFighterState(playerId, 'airDodge');
+    fighter.invincibleFrames = AIR_DODGE_INVINCIBLE_FRAMES;
+    airDodgeUsedSet.add(playerId);
+    dodgeFramesMap.set(playerId, AIR_DODGE_TOTAL_FRAMES);
+    if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+      phys.vx = input.stickX > 0
+        ? fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER)
+        : fixedNeg(fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER));
+    }
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // ── Shield (grounded) → spot dodge / roll dodge / stay shielding ──────
+  if (input.shield && phys.grounded && fighter.state !== 'attack') {
+    // Spot dodge: shield + down
+    if (input.stickY < -STICK_THRESHOLD) {
+      const canSpot =
+        fighter.state === 'shielding' ||
+        fighter.state === 'idle'      ||
+        fighter.state === 'walk'      ||
+        fighter.state === 'run';
+      if (canSpot) {
+        transitionFighterState(playerId, 'spotDodge');
+        fighter.invincibleFrames = SPOT_DODGE_INVINCIBLE_FRAMES;
+        dodgeFramesMap.set(playerId, SPOT_DODGE_TOTAL_FRAMES);
+      }
+      syncAnimation(fighter, renderable);
+      return;
+    }
+
+    // Roll dodge: shield + left or right
+    if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+      const canRoll =
+        fighter.state === 'shielding' ||
+        fighter.state === 'idle'      ||
+        fighter.state === 'walk'      ||
+        fighter.state === 'run';
+      if (canRoll) {
+        transitionFighterState(playerId, 'rolling');
+        fighter.invincibleFrames = ROLL_INVINCIBLE_FRAMES;
+        dodgeFramesMap.set(playerId, ROLL_TOTAL_FRAMES);
+        phys.vx = input.stickX > 0
+          ? fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER)
+          : fixedNeg(fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER));
+        transform.facingRight = input.stickX > 0;
+        syncAnimation(fighter, renderable);
+        return;
+      }
+    }
+
+    // Plain shield (no stick direction)
     if (fighter.state !== 'shielding') {
       transitionFighterState(playerId, 'shielding');
     }
     phys.vx = toFixed(0);
     syncAnimation(fighter, renderable);
-    return; // no movement or jumps while actively shielding
+    return;
   }
+
+  // Shield released: drop out of shielding
   if (fighter.state === 'shielding') {
     transitionFighterState(playerId, 'idle');
   }
 
-  // ── Attack start ──────────────────────────────────────────────────────────
+  // ── Grab ──────────────────────────────────────────────────────────────
+  if (
+    phys.grounded &&
+    fighter.state !== 'attack'    &&
+    fighter.state !== 'shielding'
+  ) {
+    if (buffer.consume('grab', matchState.frame)) {
+      transitionFighterState(playerId, 'grabbing');
+      grabFramesMap.set(playerId, GRAB_TOTAL_FRAMES);
+      phys.vx = toFixed(0);
+      syncAnimation(fighter, renderable);
+      return;
+    }
+  }
+
+  // ── Attack start ──────────────────────────────────────────────────────
   if (fighter.state !== 'attack') {
     if (buffer.consume('attack', matchState.frame)) {
       startAttack(playerId, fighter, phys, input);
     }
   }
 
-  // ── Attack frame advancement ──────────────────────────────────────────────
+  // ── Attack frame advancement ──────────────────────────────────────────
   if (fighter.state === 'attack') {
     fighter.attackFrame++;
     const moves = getMoves(fighter.characterId);
@@ -299,7 +423,7 @@ function processPlayerInput(
     return; // no horizontal movement during attack
   }
 
-  // ── Horizontal movement ───────────────────────────────────────────────────
+  // ── Horizontal movement ───────────────────────────────────────────────
   if (phys.grounded) {
     if (input.stickX > 0) {
       phys.vx = fighter.stats.runSpeed;
@@ -328,31 +452,30 @@ function processPlayerInput(
     }
   }
 
-  // ── Fast-fall ─────────────────────────────────────────────────────────────
+  // ── Fast-fall ─────────────────────────────────────────────────────────
   if (!phys.grounded && input.stickY < -STICK_THRESHOLD && phys.vy <= 0) {
-    phys.fastFalling        = true;
-    phys.gravityMultiplier  = toFixed(2.5);
+    phys.fastFalling       = true;
+    phys.gravityMultiplier = toFixed(2.5);
   }
 
-  // ── Jump (with input buffer) ───────────────────────────────────────────────
+  // ── Jump (with input buffer) ──────────────────────────────────────────
   if (buffer.consume('jump', matchState.frame)) {
     if (phys.grounded) {
-      phys.vy               = fighter.stats.jumpForce;
-      phys.grounded         = false;
-      phys.fastFalling      = false;
+      phys.vy                = fighter.stats.jumpForce;
+      phys.grounded          = false;
+      phys.fastFalling       = false;
       phys.gravityMultiplier = toFixed(1.0);
       transitionFighterState(playerId, 'jump');
       fighter.jumpCount = 1;
     } else if (fighter.jumpCount < 1) {
-      // First aerial jump (walked off a platform without jumping)
-      phys.vy               = fighter.stats.jumpForce;
-      phys.fastFalling      = false;
+      phys.vy                = fighter.stats.jumpForce;
+      phys.fastFalling       = false;
       phys.gravityMultiplier = toFixed(1.0);
       transitionFighterState(playerId, 'jump');
       fighter.jumpCount = 1;
     } else if (fighter.jumpCount < 2) {
-      phys.vy               = fighter.stats.doubleJumpForce;
-      phys.fastFalling      = false;
+      phys.vy                = fighter.stats.doubleJumpForce;
+      phys.fastFalling       = false;
       phys.gravityMultiplier = toFixed(1.0);
       transitionFighterState(playerId, 'doubleJump');
       fighter.jumpCount = 2;

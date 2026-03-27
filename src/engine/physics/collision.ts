@@ -12,7 +12,7 @@ import {
   type Move,
 } from '../ecs/component.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
-import { hitlagMap, transitionFighterState } from './stateMachine.js';
+import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet } from './stateMachine.js';
 
 export interface Platform {
   x1: Fixed;
@@ -86,16 +86,34 @@ export function platformCollisionSystem(): void {
     for (const platform of platforms) {
       if (checkPlatformLanding(id, platform)) {
         const transform = transformComponents.get(id)!;
-        // Snap to surface
-        transform.y = platform.y + FIGHTER_HALF_HEIGHT;
-        phys.vy = 0;
-        phys.grounded = true;
+        transform.y      = platform.y + FIGHTER_HALF_HEIGHT;
+        phys.vy          = 0;
+        phys.grounded    = true;
         phys.fastFalling = false;
+
+        // Clear air-dodge used flag on landing.
+        airDodgeUsedSet.delete(id);
 
         const fighter = fighterComponents.get(id);
         if (fighter) {
           fighter.jumpCount = 0;
-          if (fighter.state === 'jump' || fighter.state === 'doubleJump' || fighter.state === 'airDodge') {
+
+          if (fighter.state === 'hitstun' && fighter.hitstunFrames > 0) {
+            // Floor tech: if shield was pressed within the tech window, normal landing.
+            // Otherwise, add hard-knockdown frames (stay in grounded hitstun).
+            const techWin = techWindowMap.get(id) ?? 0;
+            if (getEntityShieldInput(id) && techWin > 0) {
+              fighter.hitstunFrames = 0;
+              techWindowMap.set(id, 0);
+              transitionFighterState(id, 'idle');
+            } else {
+              fighter.hitstunFrames = 30;
+            }
+          } else if (
+            fighter.state === 'jump' ||
+            fighter.state === 'doubleJump' ||
+            fighter.state === 'airDodge'
+          ) {
             fighter.state = 'idle';
           }
         }
@@ -123,6 +141,21 @@ export function getEntityPassThroughInput(entityId: number): boolean {
 
 export function clearPassThroughInputs(): void {
   passThroughInputs.clear();
+}
+
+// Per-entity shield input; set by the input system each frame.
+const shieldInputs = new Map<number, boolean>();
+
+export function setEntityShieldInput(entityId: number, shielding: boolean): void {
+  if (shielding) {
+    shieldInputs.set(entityId, true);
+  } else {
+    shieldInputs.delete(entityId);
+  }
+}
+
+export function getEntityShieldInput(entityId: number): boolean {
+  return shieldInputs.get(entityId) ?? false;
 }
 
 // ── Hit registry ──────────────────────────────────────────────────────────────
