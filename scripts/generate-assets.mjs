@@ -229,10 +229,6 @@ function buildAnimations(id) {
   return clips;
 }
 
-// Stage decoration depth/position constants
-const CLOUD_Y_OFFSET = 150;   // world Y for aetherPlateau cloud puffs
-const CLOUD_Z_DEPTH  = -150;  // world Z for aetherPlateau cloud puffs
-
 // ---------------------------------------------------------------------------
 // Stage definitions
 // ---------------------------------------------------------------------------
@@ -250,13 +246,15 @@ const stages = [
     passColor: 0xD8B87E,
     bgColor:   0xFFD580,
     decorations(group) {
+      const cloudY = 150;   // world Y for cloud puffs
+      const cloudZ = -150;  // world Z for cloud puffs
       for (const x of [-300, 300]) {
         const cloud = new THREE.Mesh(
           new THREE.SphereGeometry(60, 6, 4),
           new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0, roughness: 1 }),
         );
         cloud.scale.set(2, 1, 1);
-        cloud.position.set(x, CLOUD_Y_OFFSET, CLOUD_Z_DEPTH);
+        cloud.position.set(x, cloudY, cloudZ);
         group.add(cloud);
       }
     },
