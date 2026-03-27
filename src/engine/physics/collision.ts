@@ -2,7 +2,7 @@
 // Continuous AABB-vs-line-segment platform collision detection.
 
 import type { Fixed } from './fixednum.js';
-import { FRAC_SCALE, toFixed, fixedAdd, fixedSub } from './fixednum.js';
+import { FRAC_SCALE, toFixed, fixedAdd, fixedSub, fixedNeg } from './fixednum.js';
 import type { EntityId } from '../ecs/entity.js';
 import {
   transformComponents,
@@ -243,7 +243,7 @@ export function checkHitboxSystem(
             if (activeHurtbox && !activeHurtbox.intangible && !activeHurtbox.invincible) {
               const hbOffX = victimTransform.facingRight
                 ? activeHurtbox.offsetX
-                : (-activeHurtbox.offsetX) as Fixed;
+                : fixedNeg(activeHurtbox.offsetX);
               hurtX = fixedAdd(victimTransform.x, hbOffX);
               hurtY = fixedAdd(victimTransform.y, activeHurtbox.offsetY);
               hurtW = activeHurtbox.width;

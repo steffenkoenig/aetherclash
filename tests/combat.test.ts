@@ -14,6 +14,9 @@ import {
 import { createEntity, resetEntityCounter } from '../src/engine/ecs/entity.js';
 import { KAEL_STATS } from '../src/game/characters/kael.js';
 import { GORUN_STATS } from '../src/game/characters/gorun.js';
+import { hitlagMap, shieldBreakMap, transitionFighterState } from '../src/engine/physics/stateMachine.js';
+import { hitRegistry, platforms } from '../src/engine/physics/collision.js';
+import { respawnTimers, setBlastZones } from '../src/engine/physics/blastZone.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -80,24 +83,16 @@ function makeAirborneFighter(x = 0, y = 200) {
 beforeEach(() => {
   clearAllComponents();
   resetEntityCounter();
-
-  // Clear module-level state
-  import('../src/engine/physics/stateMachine.js').then(({ hitlagMap, shieldBreakMap }) => {
-    hitlagMap.clear();
-    shieldBreakMap.clear();
-  });
-  import('../src/engine/physics/collision.js').then(({ hitRegistry, platforms }) => {
-    hitRegistry.clear();
-    platforms.length = 0;
-  });
-  import('../src/engine/physics/blastZone.js').then(({ respawnTimers, setBlastZones }) => {
-    respawnTimers.clear();
-    setBlastZones({
-      left:   toFixed(-750),
-      right:  toFixed(750),
-      top:    toFixed(580),
-      bottom: toFixed(-320),
-    });
+  hitlagMap.clear();
+  shieldBreakMap.clear();
+  hitRegistry.clear();
+  platforms.length = 0;
+  respawnTimers.clear();
+  setBlastZones({
+    left:   toFixed(-750),
+    right:  toFixed(750),
+    top:    toFixed(580),
+    bottom: toFixed(-320),
   });
 });
 
@@ -287,7 +282,7 @@ describe('hitstun', () => {
 
 // ── Hitbox / Hurtbox ──────────────────────────────────────────────────────────
 
-import { hitRegistry, checkHitboxSystem } from '../src/engine/physics/collision.js';
+import { checkHitboxSystem } from '../src/engine/physics/collision.js';
 
 function makeAttacker(x: number, moveId: string, frame: number) {
   const id = makeGroundedFighter('kael', KAEL_STATS, x, 30);
@@ -374,7 +369,7 @@ describe('hitbox / hurtbox', () => {
 
 // ── Hitlag freeze via tickFighterTimers ────────────────────────────────────────
 
-import { tickFighterTimers, hitlagMap } from '../src/engine/physics/stateMachine.js';
+import { tickFighterTimers } from '../src/engine/physics/stateMachine.js';
 
 describe('hitlag', () => {
   it('tickFighterTimers returns early while hitlag > 0 (hitstun does not tick down)', () => {
@@ -412,7 +407,7 @@ describe('hitlag', () => {
 
 // ── Blast zones ───────────────────────────────────────────────────────────────
 
-import { checkBlastZones, setBlastZones, RESPAWN_INVINCIBILITY_FRAMES } from '../src/engine/physics/blastZone.js';
+import { checkBlastZones, RESPAWN_INVINCIBILITY_FRAMES } from '../src/engine/physics/blastZone.js';
 
 const TEST_BLAST_ZONES = {
   left:   toFixed(-750),
@@ -518,11 +513,9 @@ describe('stocks', () => {
     expect(fighter.state).toBe('KO');
 
     // Ensure the state machine blocks further transitions out of KO
-    import('../src/engine/physics/stateMachine.js').then(({ transitionFighterState }) => {
-      const result = transitionFighterState(id, 'idle');
-      expect(result).toBe(false);
-      expect(fighter.state).toBe('KO');
-    });
+    const result = transitionFighterState(id, 'idle');
+    expect(result).toBe(false);
+    expect(fighter.state).toBe('KO');
   });
 });
 
@@ -584,8 +577,6 @@ describe('input buffer', () => {
 
 // ── Shield break ──────────────────────────────────────────────────────────────
 
-import { transitionFighterState, shieldBreakMap } from '../src/engine/physics/stateMachine.js';
-
 describe('shield', () => {
   it('shield break stuns for ~3 s (180 frames) when shield is fully depleted', () => {
     const id = makeGroundedFighter();
@@ -614,7 +605,7 @@ describe('shield', () => {
 
 // ── Ledge: aerial jumps refreshed on grab ─────────────────────────────────────
 
-import { ledgeGrabSystem, platforms } from '../src/engine/physics/collision.js';
+import { ledgeGrabSystem } from '../src/engine/physics/collision.js';
 
 describe('ledge mechanics', () => {
   it('aerial jumps are refreshed when a fighter grabs a ledge', () => {

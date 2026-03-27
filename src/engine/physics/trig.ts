@@ -31,8 +31,9 @@ function normaliseDeg(degrees: number): number {
  * Returns a plain float — convert to Fixed with toFixed() at the call site.
  */
 export function sinDeg(degrees: number): number {
-  const index = Math.round((normaliseDeg(degrees) / 360) * LUT_SIZE) % LUT_SIZE;
-  return SIN_LUT[index];
+  // Math.floor ensures the index is always in [0, LUT_SIZE-1].
+  const index = Math.floor((normaliseDeg(degrees) / 360) * LUT_SIZE) % LUT_SIZE;
+  return SIN_LUT[index]!;
 }
 
 /**
@@ -40,6 +41,6 @@ export function sinDeg(degrees: number): number {
  * Returns a plain float — convert to Fixed with toFixed() at the call site.
  */
 export function cosDeg(degrees: number): number {
-  const index = Math.round((normaliseDeg(degrees) / 360) * LUT_SIZE) % LUT_SIZE;
-  return COS_LUT[index];
+  const index = Math.floor((normaliseDeg(degrees) / 360) * LUT_SIZE) % LUT_SIZE;
+  return COS_LUT[index]!;
 }
