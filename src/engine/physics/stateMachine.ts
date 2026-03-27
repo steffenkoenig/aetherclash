@@ -73,6 +73,16 @@ const transitionCallbacks: TransitionCallback[] = [];
 // ── API ───────────────────────────────────────────────────────────────────────
 
 /**
+ * Returns true if the entity is currently frozen by hitlag.
+ * Use this guard in physics systems (gravity, position integration, collision)
+ * to skip updates for entities that should be frozen mid-hit.
+ */
+export function isEntityFrozenByHitlag(entityId: EntityId): boolean {
+  const fighter = fighterComponents.get(entityId);
+  return (fighter?.hitlagFrames ?? 0) > 0;
+}
+
+/**
  * Register a callback invoked on every valid state transition.
  * Callbacks are fired after the fighter component has been mutated.
  */

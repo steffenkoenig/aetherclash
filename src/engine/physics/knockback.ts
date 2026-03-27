@@ -126,9 +126,9 @@ export function applyKnockback(
   angle = ((angle % 360) + 360) % 360;
 
   // Step 3: velocity components via the deterministic trig LUT.
-  // toFixed() converts the LUT float to Q16.16; fixedMul scales by force.
-  const vx: Fixed = fixedMul(toFixed(cosDeg(angle)), force);
-  const vy: Fixed = fixedMul(toFixed(sinDeg(angle)), force);
+  // sinDeg/cosDeg return Q16.16 Fixed values directly; fixedMul scales by force.
+  const vx: Fixed = fixedMul(cosDeg(angle), force);
+  const vy: Fixed = fixedMul(sinDeg(angle), force);
 
   phys.vx       = vx;
   phys.vy       = vy;

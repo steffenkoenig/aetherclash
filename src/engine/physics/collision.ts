@@ -12,7 +12,7 @@ import {
   type Move,
 } from '../ecs/component.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
-import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet } from './stateMachine.js';
+import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag } from './stateMachine.js';
 
 export interface Platform {
   x1: Fixed;
@@ -60,6 +60,9 @@ export function checkPlatformLanding(
 // Called by the collision system each physics step
 export function platformCollisionSystem(): void {
   for (const [id, phys] of physicsComponents) {
+    // Skip collision detection for entities frozen by hitlag.
+    if (isEntityFrozenByHitlag(id)) continue;
+
     if (phys.grounded) {
       // Re-check: is the entity still above the platform it landed on?
       const transform = transformComponents.get(id);
@@ -114,7 +117,7 @@ export function platformCollisionSystem(): void {
             fighter.state === 'doubleJump' ||
             fighter.state === 'airDodge'
           ) {
-            fighter.state = 'idle';
+            transitionFighterState(id, 'idle');
           }
         }
         break;

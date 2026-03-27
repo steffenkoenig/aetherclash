@@ -13,17 +13,20 @@ export interface GltfModel {
   failed: boolean;   // true if the fetch returned an error
 }
 
-const modelCache = new Map<string, GltfModel>();
+const modelCache   = new Map<string, GltfModel>();
+/** Cache of in-flight (or settled) Promises so every caller for the same URL
+ *  always receives the same Promise and resolves only after the load settles. */
+const promiseCache = new Map<string, Promise<GltfModel>>();
 const loader = new GLTFLoader();
 
 export function loadGLTF(url: string): Promise<GltfModel> {
-  const cached = modelCache.get(url);
-  if (cached) return Promise.resolve(cached);
+  const inflight = promiseCache.get(url);
+  if (inflight) return inflight;
 
   const model: GltfModel = { url, root: null, clips: [], loaded: false, failed: false };
   modelCache.set(url, model);
 
-  return new Promise<GltfModel>((resolve) => {
+  const promise = new Promise<GltfModel>((resolve) => {
     loader.load(
       url,
       (gltf) => {
@@ -42,8 +45,12 @@ export function loadGLTF(url: string): Promise<GltfModel> {
       },
     );
   });
+
+  promiseCache.set(url, promise);
+  return promise;
 }
 
 export function clearModelCache(): void {
   modelCache.clear();
+  promiseCache.clear();
 }

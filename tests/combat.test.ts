@@ -689,26 +689,26 @@ describe('trig LUT', () => {
   });
 
   it('sin(0°) ≈ 0', () => {
-    expect(Math.abs(sinDeg(0))).toBeLessThan(0.001);
+    expect(Math.abs(toFloat(sinDeg(0)))).toBeLessThan(0.001);
   });
 
   it('sin(90°) ≈ 1', () => {
-    expect(Math.abs(sinDeg(90) - 1)).toBeLessThan(0.01);
+    expect(Math.abs(toFloat(sinDeg(90)) - 1)).toBeLessThan(0.01);
   });
 
   it('cos(0°) ≈ 1', () => {
-    expect(Math.abs(cosDeg(0) - 1)).toBeLessThan(0.001);
+    expect(Math.abs(toFloat(cosDeg(0)) - 1)).toBeLessThan(0.001);
   });
 
   it('cos(90°) ≈ 0', () => {
-    expect(Math.abs(cosDeg(90))).toBeLessThan(0.01);
+    expect(Math.abs(toFloat(cosDeg(90)))).toBeLessThan(0.01);
   });
 
   it('sin²(θ) + cos²(θ) ≈ 1 for several angles', () => {
     const angles = [0, 30, 45, 60, 90, 120, 180, 270, 360];
     for (const a of angles) {
-      const s = sinDeg(a);
-      const c = cosDeg(a);
+      const s = toFloat(sinDeg(a));
+      const c = toFloat(cosDeg(a));
       expect(Math.abs(s * s + c * c - 1)).toBeLessThan(0.001);
     }
   });

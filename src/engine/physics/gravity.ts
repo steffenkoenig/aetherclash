@@ -6,6 +6,7 @@ import {
   physicsComponents,
   fighterComponents,
 } from '../ecs/component.js';
+import { isEntityFrozenByHitlag } from './stateMachine.js';
 
 // Gravity constant: −0.09 units/frame² (Q16.16)
 export const GRAVITY = toFixed(-0.09);
@@ -16,6 +17,9 @@ export function applyGravitySystem(): void {
 
     const fighter = fighterComponents.get(id);
     if (fighter?.state === 'ledgeHang') continue;
+
+    // Skip gravity for entities frozen by hitlag.
+    if (isEntityFrozenByHitlag(id)) continue;
 
     // Determine gravity multiplier
     let gravMul = phys.gravityMultiplier;

@@ -30,6 +30,7 @@ import {
   dodgeFramesMap,
   grabFramesMap,
   airDodgeUsedSet,
+  isEntityFrozenByHitlag,
 } from './engine/physics/stateMachine.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
@@ -272,7 +273,7 @@ function processPlayerInput(
   // ── Register shield input for tech detection ───────────────────────────
   setEntityShieldInput(playerId, input.shield);
 
-  // ── Freeze during hitlag / hitstun / KO / active dodge / active grab ──
+  // ── Freeze during hitlag / hitstun / KO / active dodge / active grab / shield break ──
   const hitlag = hitlagMap.get(playerId) ?? 0;
   if (
     fighter.state === 'KO'        ||
@@ -280,6 +281,7 @@ function processPlayerInput(
     fighter.state === 'spotDodge' ||
     fighter.state === 'airDodge'  ||
     fighter.state === 'grabbing'  ||
+    fighter.shieldBreakFrames > 0 ||
     hitlag > 0
   ) {
     syncAnimation(fighter, renderable);
@@ -494,6 +496,9 @@ function processPlayerInput(
 
 function integratePositions(): void {
   for (const [id, phys] of physicsComponents) {
+    // Skip position integration for entities frozen by hitlag.
+    if (isEntityFrozenByHitlag(id)) continue;
+
     const transform = transformComponents.get(id);
     if (!transform) continue;
     transform.prevX = transform.x;
