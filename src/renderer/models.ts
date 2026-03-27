@@ -38,8 +38,21 @@ export interface GltfModel {
 
 // ── Caches ────────────────────────────────────────────────────────────────────
 
-const modelCache   = new Map<string, GltfModel>();
-const textureCache = new Map<string, WebGLTexture>();
+const modelCache = new Map<string, GltfModel>();
+
+// Texture cache is scoped per WebGL2RenderingContext so that a re-initialized
+// renderer (new canvas, context loss/restore) never receives a texture that was
+// created for a different context.
+const textureCache = new WeakMap<WebGL2RenderingContext, Map<string, WebGLTexture>>();
+
+function getContextTextureCache(gl: WebGL2RenderingContext): Map<string, WebGLTexture> {
+  let cache = textureCache.get(gl);
+  if (!cache) {
+    cache = new Map();
+    textureCache.set(gl, cache);
+  }
+  return cache;
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -70,7 +83,8 @@ export async function loadTexture(
   gl: WebGL2RenderingContext,
   url: string,
 ): Promise<WebGLTexture> {
-  const cached = textureCache.get(url);
+  const cache = getContextTextureCache(gl);
+  const cached = cache.get(url);
   if (cached) return cached;
 
   const img = new Image();
@@ -87,14 +101,25 @@ export async function loadTexture(
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.bindTexture(gl.TEXTURE_2D, null);
 
-  textureCache.set(url, tex);
+  cache.set(url, tex);
   return tex;
 }
 
 /**
- * Clear both caches.  Call this during hot-reload or between test runs.
+ * Clear both caches and release associated GPU resources.
+ *
+ * Call this during hot-reload or between test runs, passing the active
+ * `WebGL2RenderingContext` so that cached textures can be deleted from the GPU.
  */
-export function clearModelCache(): void {
+export function clearModelCache(gl: WebGL2RenderingContext): void {
+  // Delete all cached textures from the GPU before dropping references.
+  const cache = textureCache.get(gl);
+  if (cache) {
+    for (const tex of cache.values()) {
+      gl.deleteTexture(tex);
+    }
+    cache.clear();
+  }
+
   modelCache.clear();
-  textureCache.clear();
 }

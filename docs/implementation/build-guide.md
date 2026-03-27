@@ -340,10 +340,13 @@ public/assets/kael/
 Load character assets at runtime using the standard `fetch` + WebGL buffer upload path:
 
 ```typescript
-import { loadGLTF } from '../renderer/models';
+import { loadGLTF, loadTexture } from '../renderer/models';
+
+const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
 
 const kaelModel = await loadGLTF('/assets/kael/kael.glb');
-const kaelAtlas = await loadTexture('/assets/kael/kael_atlas.png');
+const kaelAtlas = await loadTexture(gl, '/assets/kael/kael_atlas.png');
 ```
 
 ### Service Worker for Caching
