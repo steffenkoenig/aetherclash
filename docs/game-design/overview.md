@@ -12,9 +12,9 @@ The game draws inspiration from classic platform fighters while innovating on ac
 
 | Attribute | Value |
 | :--- | :--- |
-| Primary Genre | 2D Platform Fighter |
+| Primary Genre | Platform Fighter |
 | Secondary Genre | Physics-Based Brawler |
-| Perspective | Side-scrolling 2.5D (3D models on a 2D play field) |
+| Perspective | Side-scrolling (3D world constrained to a 2D play plane) |
 | Player Count | 2–4 players (local or online) |
 | Session Length | 2–8 minutes per match (Stock or Time mode) |
 
@@ -84,8 +84,8 @@ Spawn → Build Damage % → Land KO → Respawn (invincible for 3 s) → Repeat
 
 Aether Clash adopts a **"Retro-Modern 3D"** aesthetic:
 
-- **Models:** Low-poly "action figure" characters with clean, flat-shaded textures. Instantly readable silhouettes.
-- **Stages:** Vibrant, thematic environments (sky islands, ancient ruins, digital grid) with subtle animated backgrounds.
+- **Models:** Low-poly "action figure" characters built as real-time 3D meshes with clean, flat-shaded materials. Instantly readable silhouettes rendered from a fixed side-on camera.
+- **Stages:** Vibrant, thematic 3D environments (sky islands, ancient ruins, digital grid) built from low-poly geometry, with animated 3D background layers providing depth.
 - **UI:** Minimal and clean — large damage percentages, simple stock indicators, no clutter.
 - **Audio:** Punchy impact sounds, dynamic music that escalates during close match situations, satisfying KO jingle.
 

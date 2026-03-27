@@ -57,7 +57,7 @@ aetherclash/
 │   ├── renderer/
 │   │   ├── gl.ts            # WebGL context setup
 │   │   ├── camera.ts
-│   │   ├── sprites.ts
+│   │   ├── models.ts
 │   │   ├── particles.ts
 │   │   └── hud.ts
 │   ├── audio/
@@ -324,20 +324,31 @@ Pre-allocating the `Uint8Array` pool avoids garbage collection during rollback.
 
 ## 6. Asset Pipeline
 
-### Generating Texture Atlases
+### 3D Model Assets
 
-Use a sprite-packing tool to build texture atlases during the build step:
+All character and stage assets are low-poly **glTF/GLB** files. Each character GLB contains the rigged mesh, skeletal animation clips, and UV mapping for the flat-shaded texture atlas. Stage assets are split into platform geometry GLBs and background layer GLBs.
 
-```bash
-# Install a sprite packer (example using free-tex-packer CLI)
-npx free-tex-packer-cli --source ./art/kael/ --output ./public/assets/kael --format json
+Expected file layout per character:
+
+```
+public/assets/kael/
+  kael.glb           # Rigged low-poly mesh with embedded animation clips
+  kael_atlas.png     # 2048×2048 flat-shaded texture atlas
+  kael_atlas.json    # UV region metadata per surface (optional, for tooling)
 ```
 
-Add this to your Vite build configuration as a pre-build hook. The resulting atlas and JSON sidecar are referenced at runtime.
+Load character assets at runtime using the standard `fetch` + WebGL buffer upload path:
+
+```typescript
+import { loadGLTF } from '../renderer/models';
+
+const kaelModel = await loadGLTF('/assets/kael/kael.glb');
+const kaelAtlas = await loadTexture('/assets/kael/kael_atlas.png');
+```
 
 ### Service Worker for Caching
 
-After Phase 4, add a service worker that caches the compiled JS bundle and all atlas textures:
+After Phase 4, add a service worker that caches the compiled JS bundle and all 3D assets:
 
 ```typescript
 // public/sw.js
@@ -347,8 +358,8 @@ self.addEventListener('install', (event) => {
       cache.addAll([
         '/',
         '/assets/index.js',
-        '/assets/kael.png',
-        '/assets/kael.json',
+        '/assets/kael/kael.glb',
+        '/assets/kael/kael_atlas.png',
         // ... all stage and character assets
       ])
     )

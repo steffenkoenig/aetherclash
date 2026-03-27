@@ -100,7 +100,7 @@ Key components:
 | `Hitbox` | Shape, active frames, damage, knockback (s, b, angle) |
 | `Hurtbox` | Shape, intangibility flag, invincibility flag |
 | `Input` | Current frame input state, buffered inputs |
-| `Renderable` | Mesh reference, animation state, texture atlas UV |
+| `Renderable` | Mesh reference (glTF), animation clip state, material/atlas UV |
 | `Collider` | AABB or convex shape, layer mask |
 
 ### 3. Input System (`engine/input/`)
@@ -119,12 +119,13 @@ See [Networking](networking.md) for full details.
 
 ## Asset Pipeline
 
-### Texture Atlas Strategy
+### 3D Asset Strategy
 
-All character art is packed into a single texture atlas per character:
-- All animation frames for all moves are packed into one 2048×2048 PNG.
-- UV coordinates are stored in a JSON sidecar file loaded once at startup.
-- Reduces draw calls per character from N (one per frame) to 1.
+All characters and stage elements are real-time low-poly 3D assets:
+- Each character is a **glTF/GLB** file containing the rigged mesh and embedded skeletal animation clips.
+- A **2048×2048 texture atlas** (PNG) provides the flat-shaded material; UV coordinates are baked into the mesh so a single atlas bind covers the entire character.
+- Stage geometry (platforms, structural elements) and background layers are separate low-poly GLB files.
+- Reduces draw calls per character to 1 (single mesh, single atlas bind).
 
 ### Progressive Loading Order
 

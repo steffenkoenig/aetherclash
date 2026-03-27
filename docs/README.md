@@ -1,6 +1,6 @@
 # Aether Clash — Project Documentation
 
-**Aether Clash** is a competitive multiplayer 2D platform fighter running entirely in a modern web browser. It uses physics-based knockback ("Impact Percentage") instead of traditional health bars, and targets a "desktop-quality" online experience with zero installation required.
+**Aether Clash** is a competitive multiplayer platform fighter running entirely in a modern web browser. It features a **"Retro-Modern 3D"** visual style — low-poly 3D models and environments rendered in a 3D world, with gameplay constrained to a 2D side-scrolling plane. It uses physics-based knockback ("Impact Percentage") instead of traditional health bars, and targets a "desktop-quality" online experience with zero installation required.
 
 ---
 
@@ -50,6 +50,6 @@ Browser → WebSocket (matchmaking) → WebRTC (P2P combat) → Rollback Netcode
 | Field | Value |
 | :--- | :--- |
 | Whitepaper Version | 1.0 |
-| Genre | 2D Platform Fighter / Physics-Based Brawler |
+| Genre | Platform Fighter (3D world, 2D gameplay) / Physics-Based Brawler |
 | Platform | Web Browser (HTML5 / WebGL) |
 | Target Players | 2–4 simultaneous online |
