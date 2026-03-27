@@ -58,10 +58,10 @@ function onKeyDown(e: KeyboardEvent): void {
   }
   keysDown.add(e.code);
 
-  if (e.code === 'KeyA' || e.code === 'ArrowLeft')  mostRecentHorizontal = 'left';
-  if (e.code === 'KeyD' || e.code === 'ArrowRight') mostRecentHorizontal = 'right';
-  if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') mostRecentVertical = 'up';
-  if (e.code === 'KeyS' || e.code === 'ArrowDown')  mostRecentVertical = 'down';
+  if (e.code === 'KeyA') mostRecentHorizontal = 'left';
+  if (e.code === 'KeyD') mostRecentHorizontal = 'right';
+  if (e.code === 'KeyW' || e.code === 'Space') mostRecentVertical = 'up';
+  if (e.code === 'KeyS') mostRecentVertical = 'down';
 }
 
 function onKeyUp(e: KeyboardEvent): void {
@@ -72,10 +72,10 @@ function onKeyUp(e: KeyboardEvent): void {
 // ── Sampling ──────────────────────────────────────────────────────────────────
 
 export function sampleKeyboard(): InputState {
-  const left  = keysDown.has('KeyA') || keysDown.has('ArrowLeft');
-  const right = keysDown.has('KeyD') || keysDown.has('ArrowRight');
-  const up    = keysDown.has('KeyW') || keysDown.has('ArrowUp') || keysDown.has('Space');
-  const down  = keysDown.has('KeyS') || keysDown.has('ArrowDown');
+  const left  = keysDown.has('KeyA');
+  const right = keysDown.has('KeyD');
+  const up    = keysDown.has('KeyW') || keysDown.has('Space');
+  const down  = keysDown.has('KeyS');
 
   // SOCD: Last Input Wins
   let stickX = 0;
@@ -96,7 +96,7 @@ export function sampleKeyboard(): InputState {
     stickY = -1.0;
   }
 
-  const jumpKeys    = ['KeyW', 'ArrowUp', 'Space'];
+  const jumpKeys    = ['KeyW', 'Space'];
   const attackKeys  = ['KeyJ'];
   const specialKeys = ['KeyK'];
   const grabKeys    = ['KeyI'];

@@ -43,6 +43,14 @@ const characterMeshes = new Map<number, THREE.Group>();
 // Tracks which entities have already triggered a GLB swap (to swap only once).
 const glbSwapped      = new Set<number>();
 
+// Per-entity smoothed Y-rotation for the turn-around animation (renderer-only).
+// Keyed by entity id; value is the current rotation.y in radians.
+const characterFaceAngles = new Map<number, number>();
+
+// How quickly the character rotates toward its target facing angle per frame.
+// At 60 Hz, ~12 frames to reach 90 % of the target — snappy but visibly smooth.
+const TURN_LERP = 0.18;
+
 // ── Animation mixer registry ─────────────────────────────────────────────────
 
 // AnimationMixers for GLB-loaded models, keyed by entity id.
@@ -303,6 +311,7 @@ export function resetRenderer(): void {
   }
   characterMeshes.clear();
   glbSwapped.clear();
+  characterFaceAngles.clear();
   mixers.clear();
   modelRefs.clear();
   activeClipNames.clear();
@@ -474,11 +483,20 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     const wy = toFloat(transform.y);
     group.position.set(wx, wy, zOffset);
 
-    // Facing direction: rotate character around Y so they truly turn to face
-    // their movement direction in 3D (face toward +Z in model space).
-    // rotation.y = -π/2 → face points to world +X (right)
-    // rotation.y = +π/2 → face points to world -X (left)
-    group.rotation.y = transform.facingRight ? -Math.PI / 2 : Math.PI / 2;
+    // Facing direction — smooth turn-around via lerped rotation.y.
+    // The procedural character's face (eyes) is on the local +Z side.
+    // Rotating Y by +π/2 points local +Z toward world +X (character faces right).
+    // Rotating Y by −π/2 points local +Z toward world −X (character faces left).
+    // The lerp passes through 0 (facing the camera) for a natural pivot effect.
+    const targetFaceAngle = transform.facingRight ? Math.PI / 2 : -Math.PI / 2;
+    if (!characterFaceAngles.has(id)) {
+      // First frame: snap directly to target so there is no startup spin.
+      characterFaceAngles.set(id, targetFaceAngle);
+    }
+    const prevAngle = characterFaceAngles.get(id)!;
+    const newAngle  = prevAngle + (targetFaceAngle - prevAngle) * TURN_LERP;
+    characterFaceAngles.set(id, newAngle);
+    group.rotation.y = newAngle;
 
     // Pose animation:
     //  - For GLB models: drive the AnimationMixer (already ticked above)
