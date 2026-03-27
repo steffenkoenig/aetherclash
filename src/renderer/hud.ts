@@ -8,13 +8,11 @@
 //
 // Also renders:
 //   - Per-player keyboard help overlays in the bottom corners (keys glow when held)
-//   - Active item dots drawn on a 2D canvas overlay
 
 import { toFloat }                               from '../engine/physics/fixednum.js';
 import { fighterComponents, transformComponents } from '../engine/ecs/component.js';
 import { getCameraTransform }                    from './camera.js';
 import { getKeysDown }                           from '../engine/input/keyboard.js';
-import { activeItems }                           from '../game/items/items.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,20 +43,6 @@ export function registerP2KeysGetter(fn: () => ReadonlySet<string>): void {
 // DOM elements for keyboard key caps (one array per player)
 const keyCapEls: Array<Array<{ el: HTMLElement; code: string }>> = [[], []];
 let keyOverlayRoots: Array<HTMLDivElement | null> = [null, null];
-
-// ── Item dot canvas ────────────────────────────────────────────────────────────
-
-/** 2-D canvas overlay used to draw item dots in world space. */
-let itemCanvas: HTMLCanvasElement | null = null;
-let itemCtx: CanvasRenderingContext2D | null = null;
-
-/** Colour for each ItemType category visible on the dot overlay. */
-const ITEM_CATEGORY_COLOR: Record<string, string> = {
-  meleeAugment:       '#FFD700', // gold
-  throwableProjectile:'#FF6633', // orange-red
-  assistOrb:          '#CC88FF', // purple
-  healingCharm:       '#44FF88', // green
-};
 
 // ── Connection quality overlay ────────────────────────────────────────────────
 
@@ -244,23 +228,6 @@ export function initHud(playerEntityIds: number[]): void {
   // ── Keyboard overlays ──────────────────────────────────────────────────────
   buildKeyboardOverlay(0); // P1 bottom-left
   buildKeyboardOverlay(1); // P2 bottom-right
-
-  // ── Item dot canvas ────────────────────────────────────────────────────────
-  if (!itemCanvas) {
-    itemCanvas = document.createElement('canvas');
-    itemCanvas.id = 'item-overlay';
-    Object.assign(itemCanvas.style, {
-      position:      'fixed',
-      top:           '0',
-      left:          '0',
-      width:         '100%',
-      height:        '100%',
-      pointerEvents: 'none',
-      zIndex:        '49',
-    });
-    document.body.appendChild(itemCanvas);
-    itemCtx = itemCanvas.getContext('2d');
-  }
 }
 
 /**
@@ -335,7 +302,6 @@ export function updateHud(): void {
 
   renderConnectionQuality();
   renderKeyboardOverlays();
-  renderItemDots();
 }
 
 /** Remove all HUD DOM elements and reset module state. */
@@ -353,11 +319,6 @@ export function disposeHud(): void {
     keyOverlayRoots[p] = null;
     keyCapEls[p]!.length = 0;
   }
-
-  // Remove item canvas
-  if (itemCanvas?.parentNode) itemCanvas.parentNode.removeChild(itemCanvas);
-  itemCanvas = null;
-  itemCtx   = null;
 
   panels.length              = 0;
   damageLabels.length        = 0;
@@ -555,73 +516,4 @@ function renderKeyboardOverlays(): void {
 function hexToRgb(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   return `${(n >> 16) & 0xff},${(n >> 8) & 0xff},${n & 0xff}`;
-}
-
-// ── Item dot canvas rendering ──────────────────────────────────────────────────
-
-/**
- * Draw one coloured dot per active item on the transparent overlay canvas.
- * World coordinates are projected to screen pixels using the camera transform
- * from getCameraTransform(), which maps world→clip space (−1 to +1).
- */
-function renderItemDots(): void {
-  if (!itemCanvas || !itemCtx) return;
-
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-
-  // Resize canvas to match viewport when the window is resized
-  if (itemCanvas.width !== vw || itemCanvas.height !== vh) {
-    itemCanvas.width  = vw;
-    itemCanvas.height = vh;
-  }
-  itemCtx.clearRect(0, 0, vw, vh);
-
-  if (activeItems.length === 0) return;
-
-  const { offsetX, offsetY, scaleX, scaleY } = getCameraTransform();
-
-  for (const item of activeItems) {
-    // Items held by a fighter move with their carrier — no dot needed
-    if (item.heldBy !== null) continue;
-
-    const wx = toFloat(item.x);
-    const wy = toFloat(item.y);
-
-    // World → clip (−1 to +1 in each axis)
-    const clipX = wx * scaleX + offsetX;
-    const clipY = wy * scaleY + offsetY;
-
-    // Clip → CSS pixel (Y is flipped: +1 clip = top of screen)
-    const px = (clipX + 1) / 2 * vw;
-    const py = (1 - clipY) / 2 * vh;
-
-    // Cull items outside the viewport
-    if (px < -20 || px > vw + 20 || py < -20 || py > vh + 20) continue;
-
-    const color = ITEM_CATEGORY_COLOR[item.category] ?? '#FFFFFF';
-
-    itemCtx.save();
-
-    // Outer glow ring
-    itemCtx.beginPath();
-    itemCtx.arc(px, py, 9, 0, Math.PI * 2);
-    itemCtx.fillStyle = color + '44';
-    itemCtx.fill();
-
-    // Solid coloured dot
-    itemCtx.beginPath();
-    itemCtx.arc(px, py, 5, 0, Math.PI * 2);
-    itemCtx.fillStyle = color;
-    itemCtx.fill();
-
-    // White highlight rim
-    itemCtx.beginPath();
-    itemCtx.arc(px, py, 5, 0, Math.PI * 2);
-    itemCtx.strokeStyle = 'rgba(255,255,255,0.7)';
-    itemCtx.lineWidth   = 1;
-    itemCtx.stroke();
-
-    itemCtx.restore();
-  }
 }

@@ -37,7 +37,7 @@ import {
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
-import { initRenderer, render, resetRenderer } from './renderer/gl.js';
+import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
@@ -771,6 +771,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   disposeHud();
   registerP2KeysGetter(getP2KeysDown);
   initHud([player1Id, player2Id]);
+  resetItemMeshes();
   resetRenderer();
 
   // ── Game loop ──────────────────────────────────────────────────────────

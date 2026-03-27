@@ -5,8 +5,9 @@
 // Rendering layers (back to front):
 //   1. Deep-space background + star field
 //   2. Stage geometry (platform meshes)
-//   3. Character models (procedural humanoid groups; swapped for GLBs on load)
-//   4. HUD (HTML/CSS overlay — not managed here)
+//   3. Item pickups (glowing 3D shapes, one per active item)
+//   4. Character models (procedural humanoid groups; swapped for GLBs on load)
+//   5. HUD (HTML/CSS overlay — not managed here)
 
 import * as THREE from 'three';
 import { toFloat } from '../engine/physics/fixednum.js';
@@ -20,6 +21,7 @@ import type { Platform } from '../engine/physics/collision.js';
 import { fixedSub } from '../engine/physics/fixednum.js';
 import { camera } from './camera.js';
 import { loadGLTF } from './models.js';
+import { activeItems, type ItemCategory } from '../game/items/items.js';
 
 // ── Internal resolution ───────────────────────────────────────────────────────
 
@@ -50,6 +52,46 @@ const characterFaceAngles = new Map<number, number>();
 // How quickly the character rotates toward its target facing angle per frame.
 // At 60 Hz, ~12 frames to reach 90 % of the target — snappy but visibly smooth.
 const TURN_LERP = 0.18;
+
+// ── Item mesh registry ────────────────────────────────────────────────────────
+
+// Maps item entityId → Three.js Mesh currently in the scene.
+const itemMeshes = new Map<number, THREE.Mesh>();
+
+/** Category-specific colours (hex) for item pickup meshes. */
+const ITEM_MESH_COLOR: Record<ItemCategory, number> = {
+  meleeAugment:        0xFFD700, // gold
+  throwableProjectile: 0xFF6633, // orange-red
+  assistOrb:           0xCC88FF, // purple
+  healingCharm:        0x44FF88, // green
+};
+
+/** Build a glowing octahedron mesh for a given item category. */
+function buildItemMesh(category: ItemCategory): THREE.Mesh {
+  const hex = ITEM_MESH_COLOR[category];
+  const geo = new THREE.OctahedronGeometry(14, 0);
+  const mat = new THREE.MeshStandardMaterial({
+    color:            hex,
+    emissive:         hex,
+    emissiveIntensity: 0.55,
+    metalness:        0.35,
+    roughness:        0.35,
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+/**
+ * Remove all item meshes from the scene.
+ * Call at match start / end to avoid stale meshes carrying over.
+ */
+export function resetItemMeshes(): void {
+  for (const mesh of itemMeshes.values()) {
+    scene?.remove(mesh);
+    (mesh.material as THREE.Material).dispose();
+    mesh.geometry.dispose();
+  }
+  itemMeshes.clear();
+}
 
 // ── Animation mixer registry ─────────────────────────────────────────────────
 
@@ -433,6 +475,59 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
       const mesh = buildPlatformMesh(plat);
       scene.add(mesh);
       platformMeshes.set(key, mesh);
+    }
+  }
+
+  // ── Item meshes ────────────────────────────────────────────────────────────
+  {
+    // Gentle float: bob ±5 units in Y and rotate around Y-axis.
+    // performance.now() is renderer-only — never touches physics state.
+    const timeSec = performance.now() / 1000;
+
+    // Track which entity IDs are in the current activeItems list so we can
+    // remove meshes for items that have expired.
+    const liveIds = new Set<number>();
+    for (const item of activeItems) {
+      liveIds.add(item.entityId);
+    }
+
+    // Remove meshes for items that no longer exist
+    for (const [id, mesh] of itemMeshes) {
+      if (!liveIds.has(id)) {
+        scene.remove(mesh);
+        (mesh.material as THREE.Material).dispose();
+        mesh.geometry.dispose();
+        itemMeshes.delete(id);
+      }
+    }
+
+    // Create / update meshes for current items
+    for (const item of activeItems) {
+      let mesh = itemMeshes.get(item.entityId);
+      if (!mesh) {
+        mesh = buildItemMesh(item.category);
+        scene.add(mesh);
+        itemMeshes.set(item.entityId, mesh);
+      }
+
+      if (item.heldBy !== null) {
+        // Item is held by a fighter — follow the fighter's position
+        const holderTransform = transformComponents.get(item.heldBy);
+        if (holderTransform) {
+          const hx = toFloat(holderTransform.x);
+          const hy = toFloat(holderTransform.y);
+          mesh.position.set(hx, hy + 30, 2); // float above holder's head
+        }
+      } else {
+        // Item is on-stage — float gently above its physics position
+        const wx = toFloat(item.x);
+        const wy = toFloat(item.y);
+        const bob = Math.sin(timeSec * 2.5 + item.entityId * 0.7) * 5;
+        mesh.position.set(wx, wy + 18 + bob, 0);
+      }
+
+      // Slow spin around Y-axis
+      mesh.rotation.y = timeSec * 1.8 + item.entityId * 0.9;
     }
   }
 
