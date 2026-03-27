@@ -18,7 +18,7 @@ const ledgeHangFramesMap = new Map<EntityId, number>();
 // ── Transition table ──────────────────────────────────────────────────────────
 
 const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([
-  ['idle',       new Set<FighterState>(['walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
+  ['idle',       new Set<FighterState>(['idle', 'walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
   ['walk',       new Set<FighterState>(['idle', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
   ['run',        new Set<FighterState>(['idle', 'walk', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'KO', 'ledgeHang'])],
   ['jump',       new Set<FighterState>(['idle', 'jump', 'doubleJump', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
