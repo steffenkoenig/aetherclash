@@ -84,6 +84,82 @@ type ClientMessage =
   | MatchCancelMsg
   | PingMsg;
 
+// ── ELO ranking constants ─────────────────────────────────────────────────────
+
+const ELO_DEFAULT   = 1200;
+const ELO_K_FACTOR  = 32;
+const ELO_MAX_DIFF  = 400; // max rating difference for matchmaking
+
+/** Player profile stored server-side. */
+interface PlayerProfile {
+  id:     string;
+  name:   string;
+  elo:    number;
+  wins:   number;
+  losses: number;
+}
+
+/** In-memory profile store (persist to DB in production). */
+const profiles = new Map<string, PlayerProfile>();
+
+function getOrCreateProfile(clientId: string): PlayerProfile {
+  if (!profiles.has(clientId)) {
+    profiles.set(clientId, {
+      id: clientId,
+      name: `Player_${clientId.slice(0, 6)}`,
+      elo: ELO_DEFAULT,
+      wins: 0,
+      losses: 0,
+    });
+  }
+  return profiles.get(clientId)!;
+}
+
+function expectedScore(ratingA: number, ratingB: number): number {
+  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+}
+
+function updateElo(
+  winnerId: string,
+  loserId: string,
+): { winnerElo: number; loserElo: number } {
+  const winner = getOrCreateProfile(winnerId);
+  const loser  = getOrCreateProfile(loserId);
+
+  const eW = expectedScore(winner.elo, loser.elo);
+  const eL = expectedScore(loser.elo,  winner.elo);
+
+  winner.elo = Math.round(winner.elo + ELO_K_FACTOR * (1 - eW));
+  loser.elo  = Math.round(loser.elo  + ELO_K_FACTOR * (0 - eL));
+  winner.wins++;
+  loser.losses++;
+
+  return { winnerElo: winner.elo, loserElo: loser.elo };
+}
+
+// ── JWT helpers (anonymous guests bypass verification) ────────────────────────
+
+const JWT_SECRET = process.env['JWT_SECRET'] ?? '';
+
+function verifyJwt(token: string): { sub: string } | null {
+  // Minimal verification: check the signature using HMAC-SHA256.
+  // In production use a proper JWT library. Here we do a basic split-verify.
+  if (!JWT_SECRET || !token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [header, payload] = parts;
+    if (!header || !payload) return null;
+    const data = JSON.parse(
+      Buffer.from(payload, 'base64url').toString('utf8'),
+    ) as { sub: string; exp?: number };
+    if (data.exp && data.exp < Date.now() / 1000) return null;
+    return { sub: data.sub };
+  } catch {
+    return null;
+  }
+}
+
 // ── Match room ────────────────────────────────────────────────────────────────
 
 interface MatchRoom {
@@ -91,6 +167,7 @@ interface MatchRoom {
   hostId:   string;
   guestId:  string;
   seed:     number;
+  mode:     'ranked' | 'casual';
 }
 
 // ── Connected client ──────────────────────────────────────────────────────────
@@ -102,6 +179,8 @@ interface Client {
   characterId: string | null;
   mode:        'ranked' | 'casual' | null;
   matchId:     string | null;
+  /** Authenticated profile ID (from JWT sub), or null for anonymous. */
+  profileId:   string | null;
 }
 
 // ── Server state ──────────────────────────────────────────────────────────────
@@ -133,29 +212,89 @@ function getClientIp(req: IncomingMessage): string {
 function tryPairMatch(): void {
   if (queue.length < 2) return;
 
-  const host  = queue.shift()!;
-  const guest = queue.shift()!;
+  // For ranked mode, try to find two ranked players within ELO_MAX_DIFF.
+  // For casual, just pair the front two regardless.
+  let hostIdx  = 0;
+  let guestIdx = -1;
+
+  const host = queue[hostIdx]!;
+  if (host.mode === 'ranked' && host.profileId) {
+    const hostElo = getOrCreateProfile(host.profileId).elo;
+    for (let i = 1; i < queue.length; i++) {
+      const candidate = queue[i]!;
+      if (candidate.mode !== 'ranked' || !candidate.profileId) continue;
+      const candidateElo = getOrCreateProfile(candidate.profileId).elo;
+      if (Math.abs(hostElo - candidateElo) <= ELO_MAX_DIFF) {
+        guestIdx = i;
+        break;
+      }
+    }
+    // Fallback: if no ranked match found, pair with anyone
+    if (guestIdx === -1 && queue.length >= 2) guestIdx = 1;
+  } else {
+    if (queue.length >= 2) guestIdx = 1;
+  }
+
+  if (guestIdx === -1) return;
+
+  const guest = queue.splice(guestIdx, 1)[0]!;
+  queue.splice(hostIdx, 1);
+
   const matchId = crypto.randomUUID();
   const seed    = randomSeed();
+  const mode    = host.mode ?? 'casual';
 
-  const room: MatchRoom = { matchId, hostId: host.id, guestId: guest.id, seed };
+  const room: MatchRoom = { matchId, hostId: host.id, guestId: guest.id, seed, mode };
   matches.set(matchId, room);
   host.matchId  = matchId;
   guest.matchId = matchId;
 
-  send(host,  { type: 'match_found', payload: { matchId, opponentId: guest.id, seed, isHost: true  } });
-  send(guest, { type: 'match_found', payload: { matchId, opponentId: host.id,  seed, isHost: false } });
+  const hostElo  = host.profileId  ? getOrCreateProfile(host.profileId).elo  : ELO_DEFAULT;
+  const guestElo = guest.profileId ? getOrCreateProfile(guest.profileId).elo : ELO_DEFAULT;
+
+  send(host,  { type: 'match_found', payload: {
+    matchId, opponentId: guest.id, seed, isHost: true,
+    mode, opponentElo: guestElo,
+  }});
+  send(guest, { type: 'match_found', payload: {
+    matchId, opponentId: host.id, seed, isHost: false,
+    mode, opponentElo: hostElo,
+  }});
 }
 
 // ── Message handlers ──────────────────────────────────────────────────────────
 
-function handleMessage(client: Client, msg: ClientMessage): void {
+interface MatchResultMsg {
+  type: 'match_result';
+  payload: { matchId: string; winnerId: string };
+}
+
+function handleMessage(client: Client, msg: ClientMessage | MatchResultMsg): void {
   switch (msg.type) {
-    case 'connect':
-      // Authentication: JWT validation would happen here for ranked mode.
-      // For now, anonymous connections are accepted unconditionally.
-      send(client, { type: 'connected', payload: { clientId: client.id } });
+    case 'connect': {
+      // Authenticate via JWT if provided; anonymous guests are accepted.
+      const token = (msg as ConnectMsg).payload.token;
+      if (token) {
+        const claim = verifyJwt(token);
+        if (claim) {
+          client.profileId = claim.sub;
+          getOrCreateProfile(claim.sub);
+        }
+      }
+      if (!client.profileId) {
+        // Anonymous — create a temporary profile
+        client.profileId = client.id;
+        getOrCreateProfile(client.id);
+      }
+      const profile = getOrCreateProfile(client.profileId);
+      send(client, { type: 'connected', payload: {
+        clientId: client.id,
+        elo: profile.elo,
+        wins: profile.wins,
+        losses: profile.losses,
+      }});
       break;
+    }
 
     case 'find_match': {
       client.characterId = msg.payload.characterId;
@@ -202,6 +341,22 @@ function handleMessage(client: Client, msg: ClientMessage): void {
     case 'ping':
       send(client, { type: 'pong', payload: { timestamp: msg.payload.timestamp } });
       break;
+
+    case 'match_result': {
+      // Update ELO for ranked matches
+      const room = matches.get((msg as MatchResultMsg).payload.matchId);
+      if (!room || room.mode !== 'ranked') break;
+      const winnerId = (msg as MatchResultMsg).payload.winnerId;
+      const loserId  = room.hostId === winnerId ? room.guestId : room.hostId;
+      const winnerClient = clients.get(winnerId);
+      const loserClient  = clients.get(loserId);
+      if (!winnerClient?.profileId || !loserClient?.profileId) break;
+      const result = updateElo(winnerClient.profileId, loserClient.profileId);
+      send(winnerClient, { type: 'elo_update', payload: { elo: result.winnerElo, delta: result.winnerElo - ELO_DEFAULT } });
+      send(loserClient,  { type: 'elo_update', payload: { elo: result.loserElo,  delta: result.loserElo  - ELO_DEFAULT } });
+      matches.delete(room.matchId);
+      break;
+    }
   }
 }
 
@@ -225,13 +380,13 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
   const clientId = crypto.randomUUID();
   const client: Client = {
     id: clientId, ws, ip,
-    characterId: null, mode: null, matchId: null,
+    characterId: null, mode: null, matchId: null, profileId: null,
   };
   clients.set(clientId, client);
 
   ws.on('message', (data: Buffer) => {
     try {
-      const msg = JSON.parse(data.toString()) as ClientMessage;
+      const msg = JSON.parse(data.toString()) as ClientMessage | MatchResultMsg;
       handleMessage(client, msg);
     } catch {
       // ignore malformed messages

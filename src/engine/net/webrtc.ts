@@ -48,7 +48,6 @@ export class GamePeerConnection {
 
   private sentPackets   = 0;
   private lostPackets   = 0;
-  private lastPingTime  = 0;
 
   /** Fired when an InputPacket is received from the opponent. */
   public onInput: ((packet: InputPacket) => void) | null = null;
@@ -154,7 +153,6 @@ export class GamePeerConnection {
     view.setUint8(0, 0xFF); // ping marker
     view.setFloat32(1, performance.now(), true);
     this.channel.send(buf);
-    this.lastPingTime = performance.now();
   }
 
   /** Close the peer connection. */

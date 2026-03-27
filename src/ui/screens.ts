@@ -4,6 +4,30 @@
 // All screens are implemented as absolutely-positioned HTML overlay panels
 // layered above the WebGL canvas.  The game loop does not start until the
 // player has chosen a character and a stage.
+//
+// Accessibility features:
+//   - All interactive elements are keyboard-navigable (tabIndex, Enter/Space).
+//   - ARIA labels on cards and buttons.
+//   - Colour-blind-friendly palette: uses distinct shapes + labels, not colour alone.
+//   - Respects `prefers-reduced-motion` by removing CSS transitions when set.
+//   - Keyboard shortcut: Escape cancels / goes back.
+
+// ── Service Worker registration ───────────────────────────────────────────────
+
+export function registerServiceWorker(): void {
+  if (typeof navigator === 'undefined') return;
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').catch(() => {
+    // SW registration failure is non-fatal — the game works without it.
+  });
+}
+
+// ── Reduced-motion detection ──────────────────────────────────────────────────
+
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 // ── Character / stage metadata ────────────────────────────────────────────────
 

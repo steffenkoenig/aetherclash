@@ -19,7 +19,6 @@ import { GORUN_STATS, GORUN_MOVES } from '../src/game/characters/gorun.js';
 import {
   platforms,
   platformCollisionSystem,
-  FIGHTER_HALF_HEIGHT,
   hitRegistry,
 } from '../src/engine/physics/collision.js';
 import {
@@ -30,7 +29,6 @@ import {
 import {
   clearStateMachineMaps,
   tickFighterTimers,
-  transitionFighterState,
   hitlagMap,
   shieldBreakMap,
   dodgeFramesMap,

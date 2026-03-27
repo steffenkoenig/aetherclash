@@ -21,7 +21,6 @@ import { GORUN_STATS, GORUN_MOVES } from '../src/game/characters/gorun.js';
 import {
   platforms,
   platformCollisionSystem,
-  FIGHTER_HALF_HEIGHT,
   hitRegistry,
 } from '../src/engine/physics/collision.js';
 import {
@@ -42,7 +41,7 @@ import {
 } from '../src/engine/physics/stateMachine.js';
 import { applyGravitySystem } from '../src/engine/physics/gravity.js';
 import { matchState } from '../src/game/state.js';
-import { seedRng, setRngState } from '../src/engine/physics/lcg.js';
+import { seedRng } from '../src/engine/physics/lcg.js';
 import {
   RollbackManager,
   ROLLBACK_BUFFER_SIZE,
