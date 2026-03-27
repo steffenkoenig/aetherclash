@@ -883,7 +883,7 @@ describe('getHeldItem and useHeldItem', () => {
       fuelFrames: 0, charges: 0, shotCooldown: 0,
       walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
       reflectReady: false, flightFrames: 0, creatureActive: false,
-      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
     });
     expect(getHeldItem(fid)).not.toBeNull();
     expect(getHeldItem(fid)!.itemType).toBe('energyRod');
@@ -901,7 +901,7 @@ describe('getHeldItem and useHeldItem', () => {
       fuelFrames: 0, charges: 0, shotCooldown: 0,
       walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
       reflectReady: false, flightFrames: 0, creatureActive: false,
-      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
     });
 
     const victimFighter = fighterComponents.get(victim)!;
@@ -927,7 +927,7 @@ describe('getHeldItem and useHeldItem', () => {
       fuelFrames: 0, charges: 0, shotCooldown: 0,
       walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
       reflectReady: false, flightFrames: 0, creatureActive: false,
-      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
     });
 
     expect(getHeldItem(fid)).not.toBeNull();
@@ -940,6 +940,44 @@ describe('getHeldItem and useHeldItem', () => {
     // Item has positive vx (thrown right)
     expect(activeItems[0]!.heldBy).toBeNull();
     expect(activeItems[0]!.vx).toBeGreaterThan(0);
+    // throwArmFrames is set — prevents immediate re-pickup
+    expect(activeItems[0]!.throwArmFrames).toBeGreaterThan(0);
+  });
+
+  it('thrown item is not immediately re-picked up by the thrower', () => {
+    // nexusCapsule has no immediate hit check, making it safe for this test.
+    const fid = makeGroundedFighter(0, 30);
+
+    activeItems.push({
+      entityId: 990, itemType: 'nexusCapsule', category: 'throwableProjectile',
+      heldBy: fid, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30), vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    // Throw the item
+    useHeldItem(fid, true);
+    expect(getHeldItem(fid)).toBeNull();
+    // throwArmFrames must be set so re-pickup is blocked
+    expect(activeItems[0]!.throwArmFrames).toBeGreaterThan(0);
+
+    // The tickItems call that runs in the same game-loop iteration must NOT
+    // re-attach the item to the thrower (this was the original bug).
+    tickItems(0);
+    expect(getHeldItem(fid)).toBeNull();
+
+    // Once the arm window expires, the fighter can pick it up again by walking
+    // onto it.
+    activeItems[0]!.throwArmFrames = 0;
+    const transform = transformComponents.get(fid)!;
+    transform.x = activeItems[0]!.x;
+    transform.y = activeItems[0]!.y;
+    tickItems(1);
+    expect(getHeldItem(fid)).not.toBeNull();
   });
 
   it('useHeldItem with heavyMallet deals more damage than energyRod', () => {
@@ -954,7 +992,7 @@ describe('getHeldItem and useHeldItem', () => {
       fuelFrames: 0, charges: 0, shotCooldown: 0,
       walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
       reflectReady: false, flightFrames: 0, creatureActive: false,
-      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
     });
 
     useHeldItem(attacker, true);

@@ -157,6 +157,11 @@ export interface ItemEntity {
   boltArmed:     boolean;
   /** thunderBolt: frames until the shock pulse repeats. */
   boltFrames:    number;
+  /**
+   * Frames remaining where the item cannot be re-picked up after being thrown.
+   * Set by `useHeldItem` for all throwable items; counts down in `tickItems`.
+   */
+  throwArmFrames: number;
 }
 
 // ── Active items (module-level state) ────────────────────────────────────────
@@ -300,6 +305,7 @@ function buildItem(category: ItemCategory, x: Fixed, y: Fixed): ItemEntity {
     creatureFrames: 0,
     boltArmed:      false,
     boltFrames:     0,
+    throwArmFrames: 0,
   };
 }
 
@@ -395,6 +401,12 @@ export function tickItems(currentFrame: number): void {
 
     // ── On-stage item simulation ───────────────────────────────────────────
 
+    // Arm-frame guard: newly-thrown items cannot be re-picked up until the
+    // counter reaches zero (prevents the thrower from immediately reclaiming).
+    if (item.throwArmFrames > 0) {
+      item.throwArmFrames--;
+    }
+
     // Boomerang movement
     if (item.itemType === 'boomerang') {
       item.x = fixedAdd(item.x, item.vx);
@@ -407,9 +419,13 @@ export function tickItems(currentFrame: number): void {
       }
     }
 
-    // Explosive sphere proximity trap countdown
+    // Explosive sphere proximity trap: slide to its landing spot, then countdown
     if (item.itemType === 'explosiveSphere' && item.proxTrap) {
       if (item.proxArmFrames > 0) {
+        // Slide while arming
+        item.x = fixedAdd(item.x, item.vx);
+        item.y = fixedAdd(item.y, item.vy);
+        if ((item.y | 0) < 0) { item.y = 0; item.vy = 0; }
         item.proxArmFrames--;
       } else {
         explodeItem(item);
@@ -745,6 +761,10 @@ function checkFighterPickup(
   idx: number,
   _currentFrame: number,
 ): void {
+  // Newly-thrown items are guarded by throwArmFrames to prevent the thrower
+  // from immediately re-picking up their own projectile.
+  if (item.throwArmFrames > 0) return;
+
   for (const [fid, fighter] of fighterComponents) {
     if (fighter.state === 'KO') continue;
     const t = transformComponents.get(fid);
@@ -866,6 +886,7 @@ export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
       item.vy        = toFixed(1);
       item.proxTrap  = true;
       item.proxArmFrames = 120;
+      item.throwArmFrames = 30;
       break;
 
     case 'boomerang':
@@ -873,12 +894,14 @@ export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
       item.vx = toFixed(5 * dir);
       item.vy = toFixed(0);
       item.boomerangReturnFrame = 40;
+      item.throwArmFrames = 30;
       break;
 
     case 'nexusCapsule':
       item.heldBy = null;
       item.vx = toFixed(4 * dir);
       item.vy = toFixed(1);
+      item.throwArmFrames = 30;
       break;
 
     case 'blastImp':
@@ -886,6 +909,7 @@ export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
       item.walkActive = true;
       item.walkFrames = BLAST_IMP_WALK_FRAMES;
       item.vx         = toFixed(0.8 * dir);
+      item.throwArmFrames = 30;
       break;
 
     case 'gyrostone':
@@ -893,24 +917,28 @@ export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
       item.deployed     = true;
       item.deployFrames = 60;
       item.vx           = toFixed(6 * dir);
+      item.throwArmFrames = 30;
       break;
 
     case 'gravityAnchor':
       item.heldBy = null;
       item.vx = toFixed(4 * dir);
       item.vy = toFixed(1);
+      item.throwArmFrames = 30;
       break;
 
     case 'iceTag':
       item.heldBy = null;
       item.vx = toFixed(5 * dir);
       item.vy = toFixed(0);
+      item.throwArmFrames = 30;
       break;
 
     case 'thunderBolt':
       item.heldBy = null;
       item.vx = toFixed(4 * dir);
       item.vy = toFixed(0);
+      item.throwArmFrames = 30;
       break;
 
     // ── Melee augments — swing at nearest opponent in range ─────────────────
