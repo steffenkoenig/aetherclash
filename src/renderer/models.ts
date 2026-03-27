@@ -1,125 +1,49 @@
 // src/renderer/models.ts
-// glTF/GLB model loader and flat-shaded texture atlas loader.
-//
-// Every character and stage element uses two asset files:
-//   <name>.glb         — low-poly rigged mesh with embedded skeletal animation clips
-//   <name>_atlas.png   — 2048×2048 flat-shaded texture atlas (UVs baked into mesh)
-//
-// Phase 1: lightweight stubs that wire up the asset pipeline (url registration,
-//          texture upload) without a full glTF parser.
-// Phase 2: populate GltfModel with parsed vertex/index buffers and animation data.
+// Three.js glTF/GLB model loader.
+// Tries to load the real asset; falls back to a procedural placeholder if not found.
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-/**
- * A named skeletal animation clip embedded in a glTF asset.
- * Phase 2 will add keyframe data.
- */
-export interface AnimationClip {
-  name: string;
-  frameCount: number;
-  loop: boolean;
-}
-
-/**
- * A loaded glTF/GLB model.
- *
- * Phase 1 fields: `url` only (used for cache keying and debug).
- * Phase 2 will add: `vertexBuffer`, `indexBuffer`, `animationClips`.
- */
 export interface GltfModel {
-  /** Original asset URL. */
   url: string;
-  // Phase 2 additions (populated by the glTF parser):
-  // vertexBuffer:   WebGLBuffer;
-  // indexBuffer:    WebGLBuffer;
-  // animationClips: Map<string, AnimationClip>;
+  root: THREE.Group | null;          // null = not yet loaded or load failed
+  clips: THREE.AnimationClip[];
+  loaded: boolean;   // true once the load attempt has settled (success or failure)
+  failed: boolean;   // true if the fetch returned an error
 }
-
-// ── Caches ────────────────────────────────────────────────────────────────────
 
 const modelCache = new Map<string, GltfModel>();
+const loader = new GLTFLoader();
 
-// Texture cache is scoped per WebGL2RenderingContext so that a re-initialized
-// renderer (new canvas, context loss/restore) never receives a texture that was
-// created for a different context.
-const textureCache = new WeakMap<WebGL2RenderingContext, Map<string, WebGLTexture>>();
-
-function getContextTextureCache(gl: WebGL2RenderingContext): Map<string, WebGLTexture> {
-  let cache = textureCache.get(gl);
-  if (!cache) {
-    cache = new Map();
-    textureCache.set(gl, cache);
-  }
-  return cache;
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-/**
- * Load (or return the cached) glTF/GLB model at `url`.
- *
- * Phase 1: registers a placeholder entry so callers can wire up the asset
- * pipeline without a full parser.  Phase 2 will fetch the GLB binary and upload
- * parsed vertex/index buffers to the GPU.
- */
-export async function loadGLTF(url: string): Promise<GltfModel> {
+export function loadGLTF(url: string): Promise<GltfModel> {
   const cached = modelCache.get(url);
-  if (cached) return cached;
+  if (cached) return Promise.resolve(cached);
 
-  // Phase 2: fetch(url), parse ArrayBuffer as glTF binary, build WebGLBuffers.
-  const model: GltfModel = { url };
+  const model: GltfModel = { url, root: null, clips: [], loaded: false, failed: false };
   modelCache.set(url, model);
-  return model;
-}
 
-/**
- * Load (or return the cached) WebGL texture from `url`.
- *
- * Uploads the decoded image to the GPU and generates mipmaps.
- * Pass the active `WebGL2RenderingContext` — the same context used by gl.ts.
- */
-export async function loadTexture(
-  gl: WebGL2RenderingContext,
-  url: string,
-): Promise<WebGLTexture> {
-  const cache = getContextTextureCache(gl);
-  const cached = cache.get(url);
-  if (cached) return cached;
-
-  const img = new Image();
-  img.src = url;
-  await new Promise<void>((resolve, reject) => {
-    img.onload  = () => resolve();
-    img.onerror = () => reject(new Error(`Failed to load texture: ${url}`));
+  return new Promise<GltfModel>((resolve) => {
+    loader.load(
+      url,
+      (gltf) => {
+        model.root   = gltf.scene;
+        model.clips  = gltf.animations ?? [];
+        model.loaded = true;
+        resolve(model);
+      },
+      undefined,
+      (_err) => {
+        // Not found or parse error — mark as failed and resolve (don't reject)
+        // so the caller can fall back to procedural geometry.
+        model.failed = true;
+        model.loaded = true;
+        resolve(model);
+      },
+    );
   });
-
-  const tex = gl.createTexture();
-  if (!tex) throw new Error(`WebGL createTexture failed — context may be lost (url: ${url})`);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-
-  cache.set(url, tex);
-  return tex;
 }
 
-/**
- * Clear both caches and release associated GPU resources.
- *
- * Call this during hot-reload or between test runs, passing the active
- * `WebGL2RenderingContext` so that cached textures can be deleted from the GPU.
- */
-export function clearModelCache(gl: WebGL2RenderingContext): void {
-  // Delete all cached textures from the GPU before dropping references.
-  const cache = textureCache.get(gl);
-  if (cache) {
-    for (const tex of cache.values()) {
-      gl.deleteTexture(tex);
-    }
-    cache.clear();
-  }
-
+export function clearModelCache(): void {
   modelCache.clear();
 }

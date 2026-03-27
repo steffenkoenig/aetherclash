@@ -30,8 +30,8 @@ import {
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
 import { startLoop }                       from './engine/loop.js';
-import { initRenderer, render, setRenderCamera } from './renderer/gl.js';
-import { updateCamera, getCameraTransform } from './renderer/camera.js';
+import { initRenderer, render } from './renderer/gl.js';
+import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud }              from './renderer/hud.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
 import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
@@ -464,8 +464,6 @@ startLoop(
   },
   (alpha) => {
     // ── Render callback (display refresh rate) ───────────────────────────
-    const cam = getCameraTransform();
-    setRenderCamera(cam.offsetX, cam.offsetY, cam.scaleX, cam.scaleY);
     render(platforms, alpha);
     updateHud();
     updateDebugOverlay();
