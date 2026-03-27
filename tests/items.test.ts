@@ -35,6 +35,8 @@ import {
   trySpawnItem,
   tickItems,
   hitAssistOrb,
+  getHeldItem,
+  useHeldItem,
   ORB_COLOURS,
   SPAWN_INTERVAL_FRAMES,
   EMBER_CORE_FUEL_FRAMES,
@@ -854,5 +856,111 @@ describe('new item types', () => {
     const throwTypes = ['explosiveSphere', 'boomerang', 'nexusCapsule', 'blastImp', 'gyrostone', 'gravityAnchor', 'iceTag', 'thunderBolt'];
     expect(meleeTypes.some(t => found.has(t))).toBe(true);
     expect(throwTypes.some(t => found.has(t))).toBe(true);
+  });
+});
+
+// ── getHeldItem / useHeldItem tests ───────────────────────────────────────────
+
+describe('getHeldItem and useHeldItem', () => {
+  beforeEach(() => {
+    resetAll();
+    seedRng(42);
+  });
+
+  it('getHeldItem returns null when no item held', () => {
+    const fid = makeGroundedFighter(0, 30);
+    expect(getHeldItem(fid)).toBeNull();
+  });
+
+  it('getHeldItem returns item when held', () => {
+    const fid = makeGroundedFighter(0, 30);
+    // Manually create and attach an item
+    activeItems.push({
+      entityId: 999, itemType: 'energyRod', category: 'meleeAugment',
+      heldBy: fid, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30), vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+    });
+    expect(getHeldItem(fid)).not.toBeNull();
+    expect(getHeldItem(fid)!.itemType).toBe('energyRod');
+  });
+
+  it('useHeldItem with energyRod deals damage to nearby opponent and removes item', () => {
+    const attacker = makeGroundedFighter(0, 30);
+    const victim   = makeGroundedFighter(30, 30); // within 60-unit swing range
+
+    activeItems.push({
+      entityId: 998, itemType: 'energyRod', category: 'meleeAugment',
+      heldBy: attacker, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30), vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+    });
+
+    const victimFighter = fighterComponents.get(victim)!;
+    expect(toFloat(victimFighter.damagePercent)).toBeCloseTo(0);
+
+    useHeldItem(attacker, true);
+
+    // Victim should have taken damage
+    expect(toFloat(victimFighter.damagePercent)).toBeGreaterThan(0);
+    // Item should be removed
+    expect(getHeldItem(attacker)).toBeNull();
+    expect(activeItems.length).toBe(0);
+  });
+
+  it('useHeldItem with throwable detaches item and gives it velocity', () => {
+    const fid = makeGroundedFighter(0, 30);
+
+    activeItems.push({
+      entityId: 997, itemType: 'boomerang', category: 'throwableProjectile',
+      heldBy: fid, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30), vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+    });
+
+    expect(getHeldItem(fid)).not.toBeNull();
+    useHeldItem(fid, true);
+
+    // Item detached from holder
+    expect(getHeldItem(fid)).toBeNull();
+    // Item still in activeItems (not removed — it flies now)
+    expect(activeItems.length).toBe(1);
+    // Item has positive vx (thrown right)
+    expect(activeItems[0]!.heldBy).toBeNull();
+    expect(activeItems[0]!.vx).toBeGreaterThan(0);
+  });
+
+  it('useHeldItem with heavyMallet deals more damage than energyRod', () => {
+    const attacker = makeGroundedFighter(0, 30);
+    const victim1  = makeGroundedFighter(20, 30);
+
+    activeItems.push({
+      entityId: 996, itemType: 'heavyMallet', category: 'meleeAugment',
+      heldBy: attacker, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30), vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0,
+    });
+
+    useHeldItem(attacker, true);
+
+    const victimFighter = fighterComponents.get(victim1)!;
+    // heavyMallet deals 20% — more than energyRod's 12%
+    expect(toFloat(victimFighter.damagePercent)).toBeGreaterThanOrEqual(20);
   });
 });

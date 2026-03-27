@@ -807,3 +807,147 @@ export function hitAssistOrb(item: ItemEntity, damage: number): OrbColour | null
   }
   return null;
 }
+
+/** Return the item currently held by `entityId`, or null if none. */
+export function getHeldItem(entityId: EntityId): ItemEntity | null {
+  for (const item of activeItems) {
+    if (item.heldBy === entityId) return item;
+  }
+  return null;
+}
+
+/**
+ * Activate or throw the item held by `entityId`.
+ *
+ * - **Throwable** items (`explosiveSphere`, `boomerang`, etc.) are detached
+ *   from the holder and launched in `facingRight` direction.
+ * - **Melee augments** (`energyRod`, `heavyMallet`) deal bonus damage to the
+ *   nearest opponent within range and are then removed.
+ * - **Passive augments** held in hand (`emberCore`, `runeshard`, `speedBoots`)
+ *   are not consumed by this call — they activate via `tickItems` already.
+ *
+ * Returns `true` if an item was activated (so the caller can skip normal
+ * attack logic), `false` when the fighter holds nothing.
+ */
+export function useHeldItem(entityId: EntityId, facingRight: boolean): boolean {
+  const item = getHeldItem(entityId);
+  if (!item) return false;
+
+  const tf = transformComponents.get(entityId);
+  if (!tf) return false;
+
+  const dir = facingRight ? 1 : -1;
+
+  switch (item.itemType) {
+    // ── Throwables ──────────────────────────────────────────────────────────
+    case 'explosiveSphere':
+      item.heldBy    = null;
+      item.vx        = toFixed(3 * dir);
+      item.vy        = toFixed(1);
+      item.proxTrap  = true;
+      item.proxArmFrames = 120;
+      break;
+
+    case 'boomerang':
+      item.heldBy = null;
+      item.vx = toFixed(5 * dir);
+      item.vy = toFixed(0);
+      item.boomerangReturnFrame = 40;
+      break;
+
+    case 'nexusCapsule':
+      item.heldBy = null;
+      item.vx = toFixed(4 * dir);
+      item.vy = toFixed(1);
+      break;
+
+    case 'blastImp':
+      item.heldBy     = null;
+      item.walkActive = true;
+      item.walkFrames = BLAST_IMP_WALK_FRAMES;
+      item.vx         = toFixed(0.8 * dir);
+      break;
+
+    case 'gyrostone':
+      item.heldBy       = null;
+      item.deployed     = true;
+      item.deployFrames = 60;
+      item.vx           = toFixed(6 * dir);
+      break;
+
+    case 'gravityAnchor':
+      item.heldBy = null;
+      item.vx = toFixed(4 * dir);
+      item.vy = toFixed(1);
+      break;
+
+    case 'iceTag':
+      item.heldBy = null;
+      item.vx = toFixed(5 * dir);
+      item.vy = toFixed(0);
+      break;
+
+    case 'thunderBolt':
+      item.heldBy = null;
+      item.vx = toFixed(4 * dir);
+      item.vy = toFixed(0);
+      break;
+
+    // ── Melee augments — swing at nearest opponent in range ─────────────────
+    case 'energyRod': {
+      const SWING_RANGE = 60 * 65536;
+      const DAMAGE = toFixed(12);
+      for (const [fid, fighter] of fighterComponents) {
+        if (fid === entityId) continue;
+        if (fighter.state === 'KO') continue;
+        const t = transformComponents.get(fid);
+        if (!t) continue;
+        if (Math.abs((t.x - tf.x) | 0) <= SWING_RANGE &&
+            Math.abs((t.y - tf.y) | 0) <= SWING_RANGE) {
+          fighter.damagePercent = fixedAdd(fighter.damagePercent, DAMAGE);
+          const phys = physicsComponents.get(fid);
+          if (phys) {
+            phys.vx = fixedAdd(phys.vx, toFixed(2 * dir));
+            phys.vy = fixedAdd(phys.vy, toFixed(2));
+            phys.grounded = false;
+          }
+        }
+      }
+      // Energy rod is consumed on use
+      const idx = activeItems.indexOf(item);
+      if (idx !== -1) removeItem(idx);
+      break;
+    }
+
+    case 'heavyMallet': {
+      const SWING_RANGE = 70 * 65536;
+      const DAMAGE = toFixed(20);
+      for (const [fid, fighter] of fighterComponents) {
+        if (fid === entityId) continue;
+        if (fighter.state === 'KO') continue;
+        const t = transformComponents.get(fid);
+        if (!t) continue;
+        if (Math.abs((t.x - tf.x) | 0) <= SWING_RANGE &&
+            Math.abs((t.y - tf.y) | 0) <= SWING_RANGE) {
+          fighter.damagePercent = fixedAdd(fighter.damagePercent, DAMAGE);
+          const phys = physicsComponents.get(fid);
+          if (phys) {
+            phys.vx = fixedAdd(phys.vx, toFixed(3 * dir));
+            phys.vy = fixedAdd(phys.vy, toFixed(4));
+            phys.grounded = false;
+          }
+        }
+      }
+      // Heavy mallet is consumed on use
+      const idx = activeItems.indexOf(item);
+      if (idx !== -1) removeItem(idx);
+      break;
+    }
+
+    // Passive augments (emberCore, runeshard, speedBoots) activate via tickItems.
+    // No explicit "use" action is needed for them.
+    default:
+      break;
+  }
+  return true;
+}

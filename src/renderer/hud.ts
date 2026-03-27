@@ -334,76 +334,57 @@ export function disposeHud(): void {
 /**
  * Key layout definitions.
  *
- * Each entry is a row; each key is { label, code }.
+ * Each entry is a row; each key is { label, code, action }.
  * `null` is a spacer of roughly one key-width.
  *
  * P1 uses WASD + action keys (J attack, K special, I grab, L shield).
  * P2 uses Arrow keys + Numpad action keys (7 attack, 8 special, 9 grab, 0 shield).
  */
-type KeyDef = { label: string; code: string; wide?: boolean } | null;
+type KeyDef = { label: string; code: string; wide?: boolean; action?: string } | null;
 
 const KEY_LAYOUT: Array<Array<KeyDef[]>> = [
   // ── P1 rows ────────────────────────────────────────────────────────────────
   [
-    // row 0: top action keys (arranged as I K _ L on keyboard)
+    // row 0: W (jump) + I J K L (action keys — consecutive home/top-row keys)
     [
-      { label: 'I', code: 'KeyI' },   // grab
-      { label: 'K', code: 'KeyK' },   // special
+      { label: 'W', code: 'KeyW',   action: 'jump'    },
       null,
-      { label: 'L', code: 'KeyL' },   // shield
+      { label: 'I', code: 'KeyI',   action: 'grab'    },
+      { label: 'J', code: 'KeyJ',   action: 'attack'  },
+      { label: 'K', code: 'KeyK',   action: 'special' },
+      { label: 'L', code: 'KeyL',   action: 'shield'  },
     ],
-    // row 1: W (jump) + J (attack)
+    // row 1: A S D movement
     [
-      { label: 'W', code: 'KeyW' },   // jump / up
-      null,
-      { label: 'J', code: 'KeyJ' },   // attack
+      { label: 'A', code: 'KeyA',  action: 'left'  },
+      { label: 'S', code: 'KeyS',  action: 'down'  },
+      { label: 'D', code: 'KeyD',  action: 'right' },
     ],
-    // row 2: A S D movement
+    // row 2: space bar (also jump)
     [
-      { label: 'A', code: 'KeyA' },   // left
-      { label: 'S', code: 'KeyS' },   // down
-      { label: 'D', code: 'KeyD' },   // right
-    ],
-    // row 3: space bar (also jump)
-    [
-      { label: 'SPACE', code: 'Space', wide: true },
+      { label: 'SPACE', code: 'Space', wide: true, action: 'jump' },
     ],
   ],
   // ── P2 rows ────────────────────────────────────────────────────────────────
   [
     // row 0: numpad action keys 7 8 9
     [
-      { label: '7', code: 'Numpad7' }, // attack
-      { label: '8', code: 'Numpad8' }, // special
-      { label: '9', code: 'Numpad9' }, // grab
+      { label: '7', code: 'Numpad7', action: 'attack'  },
+      { label: '8', code: 'Numpad8', action: 'special' },
+      { label: '9', code: 'Numpad9', action: 'grab'    },
     ],
     // row 1: numpad 0 (shield) + arrow up (jump)
     [
-      { label: '0', code: 'Numpad0', wide: true }, // shield
+      { label: '0', code: 'Numpad0', wide: true, action: 'shield' },
       null,
-      { label: '↑', code: 'ArrowUp' },             // jump
+      { label: '↑', code: 'ArrowUp', action: 'jump' },
     ],
     // row 2: arrow cluster
     [
-      { label: '←', code: 'ArrowLeft'  },  // left
-      { label: '↓', code: 'ArrowDown'  },  // down
-      { label: '→', code: 'ArrowRight' },  // right
+      { label: '←', code: 'ArrowLeft',  action: 'left'  },
+      { label: '↓', code: 'ArrowDown',  action: 'down'  },
+      { label: '→', code: 'ArrowRight', action: 'right' },
     ],
-  ],
-];
-
-// Action captions (same shape as KEY_LAYOUT rows/keys, used as tooltips)
-const KEY_CAPTIONS: Array<Array<Array<string>>> = [
-  [
-    ['grab', 'special', '', 'shield'],
-    ['jump', '', 'attack'],
-    ['left', 'down', 'right'],
-    ['jump'],
-  ],
-  [
-    ['attack', 'special', 'grab'],
-    ['shield', '', 'jump'],
-    ['left', 'down', 'right'],
   ],
 ];
 
@@ -429,28 +410,36 @@ function buildKeyboardOverlay(playerIndex: 0 | 1): void {
 
   const caps: Array<{ el: HTMLElement; code: string }> = [];
 
-  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-    const rowDef     = rows[rowIdx]!;
-    const captionRow = KEY_CAPTIONS[playerIndex]?.[rowIdx] ?? [];
-
+  for (const rowDef of rows) {
     const rowEl = document.createElement('div');
     Object.assign(rowEl.style, { display: 'flex', gap: '3px' });
 
-    for (let keyIdx = 0; keyIdx < rowDef.length; keyIdx++) {
-      const keyDef = rowDef[keyIdx];
+    for (const keyDef of rowDef) {
       if (keyDef === null) {
         const spacer = document.createElement('div');
-        Object.assign(spacer.style, { width: '24px', flexShrink: '0' });
+        Object.assign(spacer.style, { width: '28px', flexShrink: '0' });
         rowEl.appendChild(spacer);
         continue;
       }
 
+      // Outer wrapper: key cap + action label stacked vertically
+      const wrapper = document.createElement('div');
+      Object.assign(wrapper.style, {
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
+        gap:            '1px',
+        flexShrink:     '0',
+        width:          keyDef.wide ? '56px' : '28px',
+      });
+
+      // Key cap (the "button" visual)
       const cap = document.createElement('div');
       Object.assign(cap.style, {
         display:        'flex',
         alignItems:     'center',
         justifyContent: 'center',
-        width:          keyDef.wide ? '56px' : '24px',
+        width:          '100%',
         height:         '22px',
         borderRadius:   '4px',
         border:         '1px solid rgba(255,255,255,0.18)',
@@ -462,14 +451,25 @@ function buildKeyboardOverlay(playerIndex: 0 | 1): void {
         lineHeight:     '1',
         textAlign:      'center',
         boxSizing:      'border-box',
-        flexShrink:     '0',
       });
       cap.textContent = keyDef.label;
 
-      const caption = captionRow[keyIdx] ?? '';
-      if (caption) cap.title = caption;
+      // Visible action label below the key cap
+      const actionEl = document.createElement('div');
+      Object.assign(actionEl.style, {
+        color:       'rgba(255,255,255,0.45)',
+        fontSize:    '7px',
+        fontFamily:  'monospace',
+        lineHeight:  '1',
+        textAlign:   'center',
+        whiteSpace:  'nowrap',
+        overflow:    'hidden',
+      });
+      actionEl.textContent = keyDef.action ?? '';
 
-      rowEl.appendChild(cap);
+      wrapper.appendChild(cap);
+      wrapper.appendChild(actionEl);
+      rowEl.appendChild(wrapper);
       caps.push({ el: cap, code: keyDef.code });
     }
     root.appendChild(rowEl);

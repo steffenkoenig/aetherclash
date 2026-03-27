@@ -65,6 +65,7 @@ import {
   tickItems,
   setItemSpawnPoints,
   setItemSpawnSetting,
+  useHeldItem,
 } from './game/items/items.js';
 import {
   clearHazards,
@@ -413,7 +414,9 @@ function processPlayerInput(
 
   if (fighter.state !== 'attack') {
     if (buffer.consume('attack', matchState.frame)) {
-      startAttack(playerId, fighter, phys, input);
+      if (!useHeldItem(playerId, transform.facingRight)) {
+        startAttack(playerId, fighter, phys, input);
+      }
     }
   }
 
