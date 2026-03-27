@@ -128,31 +128,33 @@ const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
 
 /** Item spawn points (floating above platforms) per stage (Q16.16 coordinates). */
 const STAGE_SPAWN_POINTS: Record<string, Array<{ x: Fixed; y: Fixed }>> = {
+  // Y values must be at FIGHTER_HALF_HEIGHT (30) above the platform surface so
+  // fighters standing on that platform can reach the item (pickup range = 60).
   aetherPlateau: [
-    { x: toFixed(-280), y: toFixed(80)  }, // above left platform
-    { x: toFixed(0),    y: toFixed(80)  }, // centre stage
-    { x: toFixed(280),  y: toFixed(80)  }, // above right platform
-    { x: toFixed(0),    y: toFixed(310) }, // above top centre platform
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT }, // main stage left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main stage centre
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT }, // main stage right
+    { x: toFixed(0),    y: toFixed(260)         }, // top centre platform (y=230+30)
   ],
   forge: [
-    { x: toFixed(-250), y: toFixed(80)  },
-    { x: toFixed(0),    y: toFixed(80)  },
-    { x: toFixed(250),  y: toFixed(80)  },
+    { x: toFixed(-250), y: FIGHTER_HALF_HEIGHT }, // main stage left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main stage centre
+    { x: toFixed(250),  y: FIGHTER_HALF_HEIGHT }, // main stage right
   ],
   cloudCitadel: [
-    { x: toFixed(-200), y: toFixed(100) },
-    { x: toFixed(0),    y: toFixed(100) },
-    { x: toFixed(200),  y: toFixed(100) },
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT }, // main stage left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main stage centre
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT }, // main stage right
   ],
   ancientRuin: [
-    { x: toFixed(-150), y: toFixed(80)  },
-    { x: toFixed(0),    y: toFixed(80)  },
-    { x: toFixed(150),  y: toFixed(80)  },
+    { x: toFixed(-150), y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(150),  y: FIGHTER_HALF_HEIGHT },
   ],
   digitalGrid: [
-    { x: toFixed(-200), y: toFixed(80)  },
-    { x: toFixed(0),    y: toFixed(80)  },
-    { x: toFixed(200),  y: toFixed(80)  },
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT },
   ],
 };
 

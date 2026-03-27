@@ -14,6 +14,7 @@ import {
   fighterComponents,
 } from '../../engine/ecs/component.js';
 import { nextRng } from '../../engine/physics/lcg.js';
+import { GRAVITY } from '../../engine/physics/gravity.js';
 
 // ── Item categories ───────────────────────────────────────────────────────────
 
@@ -552,6 +553,25 @@ export function tickItems(currentFrame: number): void {
       }
     }
 
+    // ── Item gravity for idle pickup items ────────────────────────────────────
+    // Melee-augments and healing charms don't self-integrate their position.
+    // Apply gravity so they fall from spawn height to the stage floor (y ≥ 0).
+    switch (item.itemType) {
+      case 'energyRod':
+      case 'heavyMallet':
+      case 'emberCore':
+      case 'runeshard':
+      case 'speedBoots':
+      case 'mirrorShard':
+      case 'aetherCrystal':
+        item.vy = fixedAdd(item.vy, GRAVITY);
+        item.y  = fixedAdd(item.y,  item.vy);
+        if ((item.y | 0) < 0) { item.y = 0; item.vy = 0; }
+        break;
+      default:
+        break;
+    }
+
     // Auto-pick-up check for healing charms, assist orbs, and held augments
     checkFighterPickup(item, i, currentFrame);
   }
@@ -732,8 +752,8 @@ function checkFighterPickup(
 
     const dx = (t.x - item.x) | 0;
     const dy = (t.y - item.y) | 0;
-    // Integer distance check (avoid sqrt)
-    if (Math.abs(dx) > 40 * 65536 || Math.abs(dy) > 40 * 65536) continue;
+    // Integer distance check (avoid sqrt). 60 world-units ≈ 2 character widths.
+    if (Math.abs(dx) > 60 * 65536 || Math.abs(dy) > 60 * 65536) continue;
 
     switch (item.itemType) {
       case 'aetherCrystal':
