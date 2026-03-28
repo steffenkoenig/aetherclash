@@ -415,7 +415,9 @@ export class RollbackManager {
     const predSlot = packet.frame % ROLLBACK_BUFFER_SIZE;
     if (packet.inputs !== this.predictedInputs[predSlot]) {
       // Prediction was wrong — rollback and resimulate.
-      this.restoreSnapshot(packet.frame - 1);
+      // Guard: frame 0 has no prior state to restore; clamp to 0.
+      const rollbackFrame = packet.frame > 0 ? packet.frame - 1 : 0;
+      this.restoreSnapshot(rollbackFrame);
       this.resimulationCount++;
 
       for (let f = packet.frame; f <= currentFrame; f++) {
