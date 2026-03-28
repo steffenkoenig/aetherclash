@@ -40,15 +40,16 @@ export const CHARACTERS = [
 ] as const;
 
 export const STAGES = [
-  { id: 'aetherPlateau',  label: 'Aether Plateau',           icon: '🏔️',  type: 'STANDARD',  description: 'Classic three-platform layout. No hazards.' },
-  { id: 'windyHeights',   label: 'Windy Heights',            icon: '🍃',  type: 'BREEZY',    description: 'Sun-drenched meadow swept by gusting winds.' },
-  { id: 'forge',          label: 'Cargo Bay Omega',          icon: '🚀',  type: 'DYNAMIC',   description: 'Asymmetric freight deck. Watch the drone.' },
-  { id: 'cloudCitadel',   label: 'Pastel Paper Peaks',       icon: '☁️',  type: 'CASUAL',    description: 'Bouncy cloud platforms and gusting winds.' },
-  { id: 'ancientRuin',    label: 'Clockwork Spire',          icon: '🏛️',  type: 'STANDARD',  description: 'Stone bridges over an ancient forest.' },
-  { id: 'digitalGrid',    label: 'Neon Polygon Grid',        icon: '💻',  type: 'EXTREME',   description: 'The terrain itself shifts mid-fight.' },
-  { id: 'crystalCavern',  label: 'Crystal Caverns',          icon: '💎',  type: 'DYNAMIC',   description: 'Stalactites crash down without warning.' },
-  { id: 'voidRift',       label: 'Void Rift',                icon: '🌌',  type: 'INTENSE',   description: 'Sparse platforms above infinite darkness.' },
-  { id: 'solarPinnacle',  label: 'Solar Pinnacle',           icon: '☀️',  type: 'DYNAMIC',   description: 'Solar flares scorch the right flank.' },
+  { id: 'battlefield',    label: 'Battlefield',               icon: '⚔️',  type: 'STANDARD',  description: 'Iconic three-platform competitive layout. No hazards.' },
+  { id: 'aetherPlateau',  label: 'Aether Plateau',            icon: '🏔️',  type: 'STANDARD',  description: 'Classic three-platform layout. No hazards.' },
+  { id: 'windyHeights',   label: 'Windy Heights',             icon: '🍃',  type: 'BREEZY',    description: 'Sun-drenched meadow swept by gusting winds.' },
+  { id: 'forge',          label: 'Cargo Bay Omega',           icon: '🚀',  type: 'DYNAMIC',   description: 'Asymmetric freight deck. Watch the drone.' },
+  { id: 'cloudCitadel',   label: 'Pastel Paper Peaks',        icon: '☁️',  type: 'CASUAL',    description: 'Bouncy cloud platforms and gusting winds.' },
+  { id: 'ancientRuin',    label: 'Clockwork Spire',           icon: '🏛️',  type: 'STANDARD',  description: 'Stone bridges over an ancient forest.' },
+  { id: 'digitalGrid',    label: 'Neon Polygon Grid',         icon: '💻',  type: 'EXTREME',   description: 'The terrain itself shifts mid-fight.' },
+  { id: 'crystalCavern',  label: 'Crystal Caverns',           icon: '💎',  type: 'DYNAMIC',   description: 'Stalactites crash down without warning.' },
+  { id: 'voidRift',       label: 'Void Rift',                 icon: '🌌',  type: 'INTENSE',   description: 'Sparse platforms above infinite darkness.' },
+  { id: 'solarPinnacle',  label: 'Solar Pinnacle',            icon: '☀️',  type: 'DYNAMIC',   description: 'Solar flares scorch the right flank.' },
 ] as const;
 
 export type CharacterId = (typeof CHARACTERS)[number]['id'];

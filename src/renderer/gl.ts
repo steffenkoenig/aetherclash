@@ -199,6 +199,7 @@ const STAGE_SKY_COLOR: Record<string, number> = {
   voidRift:       0x000008,
   solarPinnacle:  0xff8c00,
   windyHeights:   0x5ec8f0,
+  battlefield:    0x1a2a3a,
 };
 
 interface StageLighting {
@@ -216,6 +217,7 @@ const STAGE_LIGHTING: Record<string, StageLighting> = {
   voidRift:      { ambient: 0x100028, aIntensity: 0.25, dir: 0x9933ff, dIntensity: 1.0,  fog: new THREE.FogExp2(0x080012, 0.0005) },
   solarPinnacle: { ambient: 0x402808, aIntensity: 0.55, dir: 0xffcc22, dIntensity: 1.4,  fog: new THREE.Fog(0xff8000, 600, 2000) },
   windyHeights:  { ambient: 0xfff8e0, aIntensity: 0.80, dir: 0xfff0a0, dIntensity: 1.15, fog: new THREE.Fog(0xa8e4f8, 900, 2800) },
+  battlefield:   { ambient: 0x304050, aIntensity: 0.60, dir: 0x88aacc, dIntensity: 1.10, fog: new THREE.Fog(0x0a1520, 800, 2400) },
 };
 
 /**
@@ -864,8 +866,8 @@ function applyPose(
   // Reset arm/leg positions before any pose branch so all states start clean.
   armR.position.z = 0;
   armL.position.z = 0;
-  armR.position.y = armR.userData['baseY'] as number ?? armR.position.y;
-  armL.position.y = armL.userData['baseY'] as number ?? armL.position.y;
+  armR.position.y = (armR.userData['baseY'] as number) ?? armR.position.y;
+  armL.position.y = (armL.userData['baseY'] as number) ?? armL.position.y;
 
   // ── Special-move emissive glow ──────────────────────────────────────────
   // When the fighter is executing a special move, pulse the character meshes
@@ -930,7 +932,7 @@ function applyPose(
         // directly extends the arm toward the opponent.
         const mid = moveId ?? '';
 
-        if (mid.startsWith('up') || mid === 'upAir' || mid === 'upSpecial') {
+        if (mid.startsWith('up')) {
           // Up attacks: both arms raised overhead
           armL.rotation.x = -Math.PI * 0.85;
           armR.rotation.x = -Math.PI * 0.85;

@@ -31,6 +31,8 @@ import {
   techWindowMap,
   airDodgeUsedSet,
   ledgeHangFramesMap,
+  landingLagMap,
+  lCancelWindowMap,
 } from '../physics/stateMachine.js';
 import { hitRegistry } from '../physics/collision.js';
 import { getRngState, setRngState } from '../physics/lcg.js';
@@ -98,9 +100,12 @@ const FIGHTER_STATE_TO_IDX = new Map<FighterState, number>(
 //     [+63] ledgeHang        Uint16LE
 //   Sets:
 //     [+65] airDodgeUsed     Uint8  (0|1)
-//   Total: 66 bytes
+//   Landing lag:
+//     [+66] landingLag       Uint16LE
+//     [+68] lCancelWindow    Uint16LE
+//   Total: 70 bytes
 
-const PER_ENTITY_BYTES = 66;
+const PER_ENTITY_BYTES = 70;
 
 /** Total snapshot buffer size per slot. */
 const SNAPSHOT_DATA_BYTES = 8 + MAX_FIGHTERS * PER_ENTITY_BYTES;
@@ -242,6 +247,10 @@ export class RollbackManager {
 
       // Sets
       view.setUint8(off, airDodgeUsedSet.has(id) ? 1 : 0); off += 1;
+
+      // Landing lag
+      view.setUint16(off, landingLagMap.get(id)    ?? 0, true); off += 2;
+      view.setUint16(off, lCancelWindowMap.get(id) ?? 0, true); off += 2;
     }
   }
 
@@ -321,6 +330,12 @@ export class RollbackManager {
       // Sets
       const adu = view.getUint8(off); off += 1;
       if (adu) airDodgeUsedSet.add(id); else airDodgeUsedSet.delete(id);
+
+      // Landing lag
+      const ll  = view.getUint16(off, true); off += 2;
+      const lcw = view.getUint16(off, true); off += 2;
+      if (ll  > 0) landingLagMap.set(id, ll);     else landingLagMap.delete(id);
+      if (lcw > 0) lCancelWindowMap.set(id, lcw); else lCancelWindowMap.delete(id);
     }
 
     // The hit registry is NOT restored; it will be rebuilt by re-simulation.
@@ -382,6 +397,8 @@ export class RollbackManager {
       view.setUint16(off, respawnTimers.get(id)  ?? 0, true); off += 2;
       view.setUint16(off, ledgeHangFramesMap.get(id) ?? 0, true); off += 2;
       view.setUint8(off,  airDodgeUsedSet.has(id) ? 1 : 0); off += 1;
+      view.setUint16(off, landingLagMap.get(id)    ?? 0, true); off += 2;
+      view.setUint16(off, lCancelWindowMap.get(id) ?? 0, true); off += 2;
     }
 
     return crc32(this.checksumBuf.subarray(0, off));

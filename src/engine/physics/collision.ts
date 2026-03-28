@@ -13,7 +13,7 @@ import {
 } from '../ecs/component.js';
 import type { InputState } from '../input/keyboard.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
-import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag } from './stateMachine.js';
+import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap } from './stateMachine.js';
 
 export interface Platform {
   x1: Fixed;
@@ -126,6 +126,25 @@ export function platformCollisionSystem(): void {
             fighter.state === 'airDodge'
           ) {
             transitionFighterState(id, 'idle');
+          } else if (fighter.state === 'attack' && fighter.currentMoveId !== null) {
+            // Landing while in an aerial attack: apply landing lag.
+            // L-cancel: pressing shield within L_CANCEL_WINDOW frames before
+            // landing halves the lag (a core SSB64/Melee mechanic).
+            const move = getAttackLandingLag(id, fighter.currentMoveId);
+            const rawLag = move?.landingLag ?? 4;
+            if (rawLag > 0) {
+              const lCancelActive = (lCancelWindowMap.get(id) ?? 0) > 0;
+              // Integer halving ensures identical results across all platforms
+              // (determinism requirement). >> 1 === floor(rawLag/2); add 1 first
+              // to round up odd values (e.g. 7 → 4, not 3).
+              const lag = lCancelActive ? (rawLag + 1) >> 1 : rawLag;
+              landingLagMap.set(id, lag);
+              lCancelWindowMap.delete(id);
+            }
+            // Clear attack state on landing
+            fighter.currentMoveId = null;
+            fighter.attackFrame   = 0;
+            transitionFighterState(id, 'idle');
           }
         }
         break;
@@ -137,6 +156,20 @@ export function platformCollisionSystem(): void {
 // Per-entity pass-through input flag; set by the input system each frame.
 // Entries are removed when the flag is cleared to prevent stale accumulation.
 const passThroughInputs = new Map<number, boolean>();
+
+// ── Landing lag lookup (injected by main.ts to avoid circular deps) ───────────
+
+type LandingLagLookup = (entityId: number, moveId: string) => import('../ecs/component.js').Move | undefined;
+let _landingLagLookup: LandingLagLookup | null = null;
+
+/** Register the move-lookup function for landing lag resolution. */
+export function setLandingLagLookup(fn: LandingLagLookup): void {
+  _landingLagLookup = fn;
+}
+
+function getAttackLandingLag(entityId: number, moveId: string): import('../ecs/component.js').Move | undefined {
+  return _landingLagLookup?.(entityId, moveId);
+}
 
 export function setEntityPassThroughInput(entityId: number, down: boolean): void {
   if (down) {

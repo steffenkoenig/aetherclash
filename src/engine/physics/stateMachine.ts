@@ -34,6 +34,22 @@ export const techWindowMap = new Map<EntityId, number>();
  */
 export const airDodgeUsedSet = new Set<EntityId>();
 
+/**
+ * Frames of landing lag remaining after an aerial attack lands.
+ * During landing lag the fighter is grounded but cannot act (except be hit).
+ */
+export const landingLagMap = new Map<EntityId, number>();
+
+/**
+ * Frames remaining in the L-cancel window.
+ * When shield is pressed in the air this counter is set to L_CANCEL_WINDOW.
+ * If the fighter lands while this counter > 0, landing lag is halved.
+ */
+export const lCancelWindowMap = new Map<EntityId, number>();
+
+/** Frames the L-cancel window stays open after shield is pressed. */
+export const L_CANCEL_WINDOW = 7;
+
 // ── Reset (for headless simulation / tests) ───────────────────────────────────
 
 /**
@@ -48,6 +64,8 @@ export function clearStateMachineMaps(): void {
   grabFramesMap.clear();
   techWindowMap.clear();
   airDodgeUsedSet.clear();
+  landingLagMap.clear();
+  lCancelWindowMap.clear();
 }
 
 // ── Transition table ──────────────────────────────────────────────────────────
@@ -234,5 +252,17 @@ export function tickFighterTimers(entityId: EntityId): void {
   const techWin = techWindowMap.get(entityId) ?? 0;
   if (techWin > 0) {
     techWindowMap.set(entityId, techWin - 1);
+  }
+
+  // 9. Landing lag countdown
+  const landingLag = landingLagMap.get(entityId) ?? 0;
+  if (landingLag > 0) {
+    landingLagMap.set(entityId, landingLag - 1);
+  }
+
+  // 10. L-cancel window countdown
+  const lCancel = lCancelWindowMap.get(entityId) ?? 0;
+  if (lCancel > 0) {
+    lCancelWindowMap.set(entityId, lCancel - 1);
   }
 }

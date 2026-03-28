@@ -1,7 +1,7 @@
 // src/main.ts
 // Entry point — shows start menu (character + stage select), then runs the match.
 
-import { toFixed, toFloat, fixedAdd, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
+import { toFixed, toFloat, fixedAdd, fixedSub, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
 import { createEntity, resetEntityCounter }      from './engine/ecs/entity.js';
 import {
   transformComponents,
@@ -24,6 +24,7 @@ import {
   FIGHTER_HALF_HEIGHT,
   checkHitboxSystem,
   clearHitRegistry,
+  setLandingLagLookup,
 } from './engine/physics/collision.js';
 import { blastZoneSystem, setBlastZones } from './engine/physics/blastZone.js';
 import { seedRng } from './engine/physics/lcg.js';
@@ -36,6 +37,9 @@ import {
   airDodgeUsedSet,
   isEntityFrozenByHitlag,
   clearStateMachineMaps,
+  landingLagMap,
+  lCancelWindowMap,
+  L_CANCEL_WINDOW,
 } from './engine/physics/stateMachine.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
@@ -93,6 +97,7 @@ import { CRYSTAL_CAVERN_PLATFORMS, CRYSTAL_CAVERN_BLAST_ZONES } from './game/sta
 import { VOID_RIFT_PLATFORMS, VOID_RIFT_BLAST_ZONES }           from './game/stages/voidRift.js';
 import { SOLAR_PINNACLE_PLATFORMS, SOLAR_PINNACLE_BLAST_ZONES } from './game/stages/solarPinnacle.js';
 import { WINDY_HEIGHTS_PLATFORMS, WINDY_HEIGHTS_BLAST_ZONES }   from './game/stages/windyHeights.js';
+import { BATTLEFIELD_PLATFORMS, BATTLEFIELD_BLAST_ZONES }       from './game/stages/battlefield.js';
 import { matchState, tickFrame, resetMatchState } from './game/state.js';
 import {
   clearItems,
@@ -160,6 +165,7 @@ const STAGE_PLATFORMS: Record<string, Platform[]> = {
   voidRift:      VOID_RIFT_PLATFORMS,
   solarPinnacle: SOLAR_PINNACLE_PLATFORMS,
   windyHeights:  WINDY_HEIGHTS_PLATFORMS,
+  battlefield:   BATTLEFIELD_PLATFORMS,
 };
 
 const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
@@ -172,6 +178,7 @@ const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
   voidRift:      VOID_RIFT_BLAST_ZONES,
   solarPinnacle: SOLAR_PINNACLE_BLAST_ZONES,
   windyHeights:  WINDY_HEIGHTS_BLAST_ZONES,
+  battlefield:   BATTLEFIELD_BLAST_ZONES,
 };
 
 /** Item spawn points (floating above platforms) per stage (Q16.16 coordinates). */
@@ -233,6 +240,14 @@ const STAGE_SPAWN_POINTS: Record<string, Array<{ x: Fixed; y: Fixed }>> = {
     { x: toFixed(187),  y: toFixed(185) },                 // right cloud ledge (y=155+30)
     { x: toFixed(0),    y: toFixed(298) },                 // top centre cloud (y=268+30)
   ],
+  battlefield: [
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT },          // main platform left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },          // main platform centre
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT },          // main platform right
+    { x: toFixed(-170), y: toFixed(170) },                 // left platform (y=140+30)
+    { x: toFixed(0),    y: toFixed(250) },                 // centre platform (y=220+30)
+    { x: toFixed(170),  y: toFixed(170) },                 // right platform (y=140+30)
+  ],
 };
 
 /** Hazard type per stage, or null for none. */
@@ -246,11 +261,17 @@ const STAGE_HAZARD: Record<string, HazardType | null> = {
   voidRift:      null,
   solarPinnacle: 'solarFlare',
   windyHeights:  'windGust',
+  battlefield:   null,
 };
 
 // ── Air-drift scale and input threshold ──────────────────────────────────────
 
 const AIR_DRIFT_SCALE = toFixed(0.8);
+/** Minimum stick magnitude to begin walking (partial tilt). */
+const WALK_THRESHOLD  = 0.30;
+/** Minimum stick magnitude to transition from walk to run (full tilt). */
+const RUN_THRESHOLD   = 0.85;
+/** Legacy alias — used for jump/attack/dodge checks. */
 const STICK_THRESHOLD = 0.5;
 
 // ── Short hop ─────────────────────────────────────────────────────────────────
@@ -265,6 +286,12 @@ const SHORT_HOP_SCALE = toFixed(0.4);
  * a single-frame tap → short hop.
  */
 const jumpHeldFrames = new Map<number, number>();
+
+/**
+ * Per-player C-stick active state from the previous frame.
+ * Used to detect the transition from neutral to active (trigger-on-press, not hold).
+ */
+const prevCStickActive = new Map<number, boolean>();
 
 // ── Dodge / grab / shield constants ──────────────────────────────────────────
 
@@ -452,6 +479,20 @@ function processPlayerInput(
     return;
   }
 
+  // ── Landing lag — fighter is grounded but cannot act yet ─────────────────
+  const currentLandingLag = landingLagMap.get(playerId) ?? 0;
+  if (currentLandingLag > 0) {
+    // Still in landing lag; no action allowed. Allow L-cancel window update.
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // ── L-cancel window: pressing shield while airborne opens a 7-frame window ─
+  // If the fighter lands during this window, their aerial landing lag is halved.
+  if (!phys.grounded && input.shield) {
+    lCancelWindowMap.set(playerId, L_CANCEL_WINDOW);
+  }
+
   setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
 
   // ── Jump hold tracking (for short-hop detection) ──────────────────────────
@@ -568,32 +609,98 @@ function processPlayerInput(
       }
     } else if (buffer.consume('special', matchState.frame)) {
       startSpecial(playerId, fighter, phys, input);
+    } else if (!phys.grounded) {
+      // C-stick triggers aerial attacks in the air (SSB64 smash-stick behaviour).
+      // Only trigger on the frame the c-stick first crosses the threshold (not held).
+      const cActive = Math.abs(input.cStickX) > STICK_THRESHOLD || Math.abs(input.cStickY) > STICK_THRESHOLD;
+      const wasActive = prevCStickActive.get(playerId) ?? false;
+      prevCStickActive.set(playerId, cActive);
+      if (cActive && !wasActive) {
+        const cInput: InputState = {
+          ...input,
+          stickX: input.cStickX,
+          stickY: input.cStickY,
+        };
+        startAttack(playerId, fighter, phys, cInput);
+      }
     }
+  }
+
+  // Clear c-stick tracking when grounded (reset edge-detection state).
+  if (phys.grounded) {
+    prevCStickActive.set(playerId, false);
   }
 
   if (fighter.state === 'attack') {
     fighter.attackFrame++;
     const moves = getMoves(fighter.characterId);
     const move  = moves?.get(fighter.currentMoveId ?? '');
-    if (move && fighter.attackFrame >= move.totalFrames) {
-      clearHitRegistry(playerId);
-      fighter.currentMoveId = null;
-      fighter.attackFrame   = 0;
-      transitionFighterState(playerId, 'idle');
+    if (move) {
+      // IASA (Interruptible As Soon As): at the IASA frame, allow jumps and
+      // dodge-cancels out of the attack — matching SSB64 behaviour.
+      const pastIasa = fighter.attackFrame >= move.iasa;
+      if (pastIasa) {
+        // Allow jump out of IASA
+        if (buffer.consume('jump', matchState.frame)) {
+          const heldFor = jumpHeldFrames.get(playerId) ?? 0;
+          const isShortHop = heldFor <= 1;
+          clearHitRegistry(playerId);
+          fighter.currentMoveId = null;
+          fighter.attackFrame   = 0;
+          if (phys.grounded) {
+            phys.vy = isShortHop
+              ? fixedMul(fighter.stats.jumpForce, SHORT_HOP_SCALE)
+              : fighter.stats.jumpForce;
+            phys.grounded          = false;
+            phys.fastFalling       = false;
+            phys.gravityMultiplier = toFixed(1.0);
+            transitionFighterState(playerId, 'jump');
+            fighter.jumpCount = 1;
+          } else if (fighter.jumpCount < 2) {
+            phys.vy                = fighter.stats.doubleJumpForce;
+            phys.fastFalling       = false;
+            phys.gravityMultiplier = toFixed(1.0);
+            transitionFighterState(playerId, 'doubleJump');
+            fighter.jumpCount = 2;
+          }
+          syncAnimation(fighter, renderable);
+          return;
+        }
+      }
+      if (fighter.attackFrame >= move.totalFrames) {
+        clearHitRegistry(playerId);
+        fighter.currentMoveId = null;
+        fighter.attackFrame   = 0;
+        transitionFighterState(playerId, 'idle');
+      }
     }
     syncAnimation(fighter, renderable);
     return;
   }
 
   if (phys.grounded) {
-    if (input.stickX > 0) {
-      phys.vx = fighter.stats.runSpeed;
+    const absX = Math.abs(input.stickX);
+    if (input.stickX > WALK_THRESHOLD) {
+      // Walk vs Run: partial stick = walk, full stick = run
+      const isRun = absX >= RUN_THRESHOLD || fighter.state === 'run';
+      if (isRun) {
+        phys.vx = fighter.stats.runSpeed;
+        if (fighter.state !== 'run') transitionFighterState(playerId, 'run');
+      } else {
+        phys.vx = fighter.stats.walkSpeed;
+        if (fighter.state !== 'walk' && fighter.state !== 'run') transitionFighterState(playerId, 'walk');
+      }
       transform.facingRight = true;
-      if (fighter.state !== 'run') transitionFighterState(playerId, 'run');
-    } else if (input.stickX < 0) {
-      phys.vx = fixedNeg(fighter.stats.runSpeed);
+    } else if (input.stickX < -WALK_THRESHOLD) {
+      const isRun = absX >= RUN_THRESHOLD || fighter.state === 'run';
+      if (isRun) {
+        phys.vx = fixedNeg(fighter.stats.runSpeed);
+        if (fighter.state !== 'run') transitionFighterState(playerId, 'run');
+      } else {
+        phys.vx = fixedNeg(fighter.stats.walkSpeed);
+        if (fighter.state !== 'walk' && fighter.state !== 'run') transitionFighterState(playerId, 'walk');
+      }
       transform.facingRight = false;
-      if (fighter.state !== 'run') transitionFighterState(playerId, 'run');
     } else {
       phys.vx = toFixed(0);
       if (fighter.state === 'run' || fighter.state === 'walk') {
@@ -611,18 +718,18 @@ function processPlayerInput(
       // Accelerate toward +maxAirSpeed
       const target = maxAirSpeed;
       if (phys.vx < target) {
-        phys.vx = Math.min((phys.vx + AIR_ACCEL) | 0, target);
+        phys.vx = Math.min(fixedAdd(phys.vx, AIR_ACCEL), target);
       } else {
         // Already at or above target (e.g. from knockback) — slow toward it
-        phys.vx = Math.max((phys.vx - AIR_ACCEL) | 0, target);
+        phys.vx = Math.max(fixedSub(phys.vx, AIR_ACCEL), target);
       }
     } else if (input.stickX < -STICK_THRESHOLD) {
       transform.facingRight = false;
       const target = fixedNeg(maxAirSpeed);
       if (phys.vx > target) {
-        phys.vx = Math.max((phys.vx - AIR_ACCEL) | 0, target);
+        phys.vx = Math.max(fixedSub(phys.vx, AIR_ACCEL), target);
       } else {
-        phys.vx = Math.min((phys.vx + AIR_ACCEL) | 0, target);
+        phys.vx = Math.min(fixedAdd(phys.vx, AIR_ACCEL), target);
       }
     } else {
       // No stick input: apply light air friction — gradually reduce speed
@@ -630,9 +737,9 @@ function processPlayerInput(
       // when the player isn't actively DI-ing.
       const AIR_FRICTION = toFixed(0.08);
       if (phys.vx > AIR_FRICTION) {
-        phys.vx = (phys.vx - AIR_FRICTION) | 0;
+        phys.vx = fixedSub(phys.vx, AIR_FRICTION);
       } else if (phys.vx < fixedNeg(AIR_FRICTION)) {
-        phys.vx = (phys.vx + AIR_FRICTION) | 0;
+        phys.vx = fixedAdd(phys.vx, AIR_FRICTION);
       } else {
         phys.vx = toFixed(0);
       }
@@ -981,6 +1088,14 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   MOVE_DATA = new Map(
     Object.entries(CHARACTER_MOVES).map(([id, moves]) => [id, new Map(Object.entries(moves))]),
   );
+
+  // Register landing-lag lookup for the collision system.
+  // This lets collision.ts resolve move.landingLag without importing MOVE_DATA directly.
+  setLandingLagLookup((entityId, moveId) => {
+    const fighter = fighterComponents.get(entityId);
+    if (!fighter) return undefined;
+    return MOVE_DATA.get(fighter.characterId)?.get(moveId);
+  });
 
   // ── Player 1 entity ────────────────────────────────────────────────────
   player1Id = createEntity();
