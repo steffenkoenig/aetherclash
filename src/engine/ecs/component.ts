@@ -131,8 +131,8 @@ export interface LedgeCollider {
  * fixed side-on orthographic camera.
  *
  * Asset layout (per character):
- *   public/assets/<id>/<id>.glb          — rigged low-poly mesh + animation clips
- *   public/assets/<id>/<id>_atlas.png    — 2048×2048 flat-shaded texture atlas
+ *   public/assets/characters/<id>/<id>.glb          — rigged low-poly mesh + animation clips
+ *   public/assets/characters/<id>/<id>_atlas.png    — 2048×2048 flat-shaded texture atlas
  */
 export interface Renderable {
   /** Path to the glTF/GLB rigged mesh asset (relative to /public). */

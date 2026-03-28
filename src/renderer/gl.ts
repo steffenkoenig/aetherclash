@@ -57,6 +57,14 @@ const characterFaceAngles = new Map<number, number>();
 // At 60 Hz, ~12 frames to reach 90 % of the target — snappy but visibly smooth.
 const TURN_LERP = 0.18;
 
+// ── Shield bubble registry ────────────────────────────────────────────────────
+
+// Maps entity id → semi-transparent sphere shown while shielding.
+const shieldBubbleMeshes = new Map<number, THREE.Mesh>();
+
+/** Radius of the shield bubble in world units. */
+const SHIELD_BUBBLE_RADIUS = 45;
+
 // ── Item mesh registry ────────────────────────────────────────────────────────
 
 // Maps item entityId → Three.js Mesh currently in the scene.
@@ -797,6 +805,13 @@ export function resetRenderer(): void {
   modelRefs.clear();
   activeClipNames.clear();
   lastMixerTime = 0;
+  // Remove shield bubbles
+  for (const mesh of shieldBubbleMeshes.values()) {
+    scene?.remove(mesh);
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  }
+  shieldBubbleMeshes.clear();
   // Clear platform mesh cache — new stage will rebuild with its own palette.
   clearPlatformMeshes();
 }
@@ -1084,6 +1099,44 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
       updateMixer(id, fighter.state);
     } else {
       applyPose(group, fighter.state);
+    }
+
+    // ── Shield bubble ────────────────────────────────────────────────────────
+    if (fighter.state === 'shielding') {
+      let bubble = shieldBubbleMeshes.get(id);
+      if (!bubble) {
+        const geo = new THREE.SphereGeometry(SHIELD_BUBBLE_RADIUS, 16, 12);
+        const mat = new THREE.MeshStandardMaterial({
+          transparent:   true,
+          opacity:       0.45,
+          side:          THREE.FrontSide,
+          depthWrite:    false,
+          metalness:     0.1,
+          roughness:     0.2,
+        });
+        bubble = new THREE.Mesh(geo, mat);
+        scene.add(bubble);
+        shieldBubbleMeshes.set(id, bubble);
+      }
+      // Position bubble over character
+      bubble.position.set(wx, wy + 5, zOffset);
+      bubble.visible = true;
+      // Tint: green (full) → yellow → red (depleted)
+      const health = fighter.shieldHealth / 100;
+      const mat    = bubble.material as THREE.MeshStandardMaterial;
+      if (health > 0.5) {
+        mat.color.setHex(0x44dd88);
+      } else if (health > 0.25) {
+        mat.color.setHex(0xffdd00);
+      } else {
+        mat.color.setHex(0xff4422);
+      }
+      // Scale bubble slightly smaller as shield drains
+      const scale = 0.7 + health * 0.3;
+      bubble.scale.setScalar(scale);
+    } else {
+      const bubble = shieldBubbleMeshes.get(id);
+      if (bubble) bubble.visible = false;
     }
 
     playerIndex++;

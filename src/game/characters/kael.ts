@@ -175,4 +175,44 @@ export const KAEL_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 38], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 32, landingLag: 14,
   },
+  // === SPECIALS ===
+  neutralSpecial: {
+    totalFrames: 35,
+    hitboxes: [{
+      activeFrames: [10, 20],
+      offsetX: toFixed(25), offsetY: toFixed(5),
+      width: toFixed(40), height: toFixed(40),
+      damage: 12, knockbackScaling: toFixed(1.2), baseKnockback: toFixed(6),
+      launchAngle: 45, hitlagFrames: 5, id: 'kael_nspecial',
+    }],
+    hurtboxes: [{ activeFrames: [0, 35], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 6,
+  },
+  sideSpecial: {
+    totalFrames: 40,
+    hitboxes: [
+      { activeFrames: [5, 12], offsetX: toFixed(30), offsetY: toFixed(5), width: toFixed(20), height: toFixed(20), damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3), launchAngle: 45, hitlagFrames: 4, id: 'kael_sspecial_hit1' },
+      { activeFrames: [13, 22], offsetX: toFixed(40), offsetY: toFixed(5), width: toFixed(35), height: toFixed(30), damage: 10, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5), launchAngle: 38, hitlagFrames: 5, id: 'kael_sspecial_hit2' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 32, landingLag: 8,
+  },
+  upSpecial: {
+    totalFrames: 50,
+    hitboxes: [
+      { activeFrames: [4, 10], offsetX: toFixed(0), offsetY: toFixed(20), width: toFixed(35), height: toFixed(35), damage: 7, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(4), launchAngle: 80, hitlagFrames: 4, id: 'kael_uspecial_rise' },
+      { activeFrames: [11, 18], offsetX: toFixed(0), offsetY: toFixed(50), width: toFixed(30), height: toFixed(30), damage: 14, knockbackScaling: toFixed(1.3), baseKnockback: toFixed(8), launchAngle: 90, hitlagFrames: 6, id: 'kael_uspecial_apex' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 50], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 42, landingLag: 14,
+  },
+  downSpecial: {
+    totalFrames: 45,
+    hitboxes: [
+      { activeFrames: [15, 22], offsetX: toFixed(35), offsetY: toFixed(-10), width: toFixed(40), height: toFixed(20), damage: 8, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4), launchAngle: 30, hitlagFrames: 4, id: 'kael_dspecial_r' },
+      { activeFrames: [15, 22], offsetX: toFixed(-35), offsetY: toFixed(-10), width: toFixed(40), height: toFixed(20), damage: 8, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4), launchAngle: 150, hitlagFrames: 4, id: 'kael_dspecial_l' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 45], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 38, landingLag: 10,
+  },
 };

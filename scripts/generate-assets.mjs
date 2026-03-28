@@ -1157,7 +1157,7 @@ function exportGLB(object, animationClips, outputPath) {
 const BASE_DIR = new URL('..', import.meta.url).pathname;
 
 for (const char of characters) {
-  const dir = path.join(BASE_DIR, 'public', 'assets', char.id);
+  const dir = path.join(BASE_DIR, 'public', 'assets', 'characters', char.id);
   fs.mkdirSync(dir, { recursive: true });
   const group = buildCharacter(char.id, char.color);
   const clips = buildAnimations(char.id);
@@ -1165,7 +1165,7 @@ for (const char of characters) {
 }
 
 for (const stage of stages) {
-  const dir = path.join(BASE_DIR, 'public', 'assets', stage.id);
+  const dir = path.join(BASE_DIR, 'public', 'assets', 'stages', stage.id);
   fs.mkdirSync(dir, { recursive: true });
   const group = buildStage(stage);
   await exportGLB(group, [], path.join(dir, `${stage.id}.glb`));

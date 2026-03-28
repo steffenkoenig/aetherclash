@@ -172,4 +172,45 @@ export const SYNE_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 34], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 26, landingLag: 12,
   },
+  // === SPECIALS ===
+  neutralSpecial: {
+    totalFrames: 30,
+    hitboxes: [
+      { activeFrames: [5, 9],  offsetX: toFixed(22), offsetY: toFixed(5), width: toFixed(22), height: toFixed(22), damage: 3, knockbackScaling: toFixed(0.5), baseKnockback: toFixed(2), launchAngle: 45, hitlagFrames: 3, id: 'syne_nspecial_1' },
+      { activeFrames: [10, 14], offsetX: toFixed(22), offsetY: toFixed(5), width: toFixed(22), height: toFixed(22), damage: 3, knockbackScaling: toFixed(0.5), baseKnockback: toFixed(2), launchAngle: 45, hitlagFrames: 3, id: 'syne_nspecial_2' },
+      { activeFrames: [15, 20], offsetX: toFixed(22), offsetY: toFixed(5), width: toFixed(26), height: toFixed(26), damage: 7, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(5), launchAngle: 55, hitlagFrames: 4, id: 'syne_nspecial_3' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 30], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 24, landingLag: 5,
+  },
+  sideSpecial: {
+    totalFrames: 28,
+    hitboxes: [{
+      activeFrames: [3, 12],
+      offsetX: toFixed(28), offsetY: toFixed(5),
+      width: toFixed(30), height: toFixed(28),
+      damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4),
+      launchAngle: 40, hitlagFrames: 4, id: 'syne_sspecial',
+    }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: true, invincible: false }],
+    iasa: 22, landingLag: 6,
+  },
+  upSpecial: {
+    totalFrames: 42,
+    hitboxes: [
+      { activeFrames: [3, 8], offsetX: toFixed(0), offsetY: toFixed(10), width: toFixed(32), height: toFixed(28), damage: 5, knockbackScaling: toFixed(0.7), baseKnockback: toFixed(3), launchAngle: 70, hitlagFrames: 3, id: 'syne_uspecial_1' },
+      { activeFrames: [9, 16], offsetX: toFixed(0), offsetY: toFixed(35), width: toFixed(28), height: toFixed(28), damage: 11, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(6), launchAngle: 88, hitlagFrames: 5, id: 'syne_uspecial_2' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 42], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 34, landingLag: 10,
+  },
+  downSpecial: {
+    totalFrames: 40,
+    hitboxes: [
+      { activeFrames: [14, 22], offsetX: toFixed(30), offsetY: toFixed(-8), width: toFixed(36), height: toFixed(22), damage: 9, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(4), launchAngle: 35, hitlagFrames: 4, id: 'syne_dspecial_r' },
+      { activeFrames: [14, 22], offsetX: toFixed(-30), offsetY: toFixed(-8), width: toFixed(36), height: toFixed(22), damage: 9, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(4), launchAngle: 145, hitlagFrames: 4, id: 'syne_dspecial_l' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 32, landingLag: 10,
+  },
 };
