@@ -26,7 +26,7 @@ export const KAEL_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 4, id: 'kael_jab1',
     }],
     hurtboxes: [{ activeFrames: [0, 15], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 12, landingLag: 0,
+    iasa: 12, landingLag: 0, nextJab: 'neutralJab2',
   },
   neutralJab2: {
     totalFrames: 15,
@@ -38,7 +38,7 @@ export const KAEL_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 4, id: 'kael_jab2',
     }],
     hurtboxes: [{ activeFrames: [0, 15], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 12, landingLag: 0,
+    iasa: 12, landingLag: 0, nextJab: 'neutralJab3',
   },
   neutralJab3: {
     totalFrames: 20,
@@ -100,7 +100,7 @@ export const KAEL_MOVES: Record<string, Move> = {
       launchAngle: 40, hitlagFrames: 6, id: 'kael_fsmash',
     }],
     hurtboxes: [{ activeFrames: [0, 55], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 45, landingLag: 0,
+    iasa: 45, landingLag: 0, canCharge: true,
   },
   upSmash: {
     totalFrames: 45,
@@ -109,7 +109,7 @@ export const KAEL_MOVES: Record<string, Move> = {
       { activeFrames: [16, 22], offsetX: toFixed(0), offsetY: toFixed(45), width: toFixed(45), height: toFixed(35), damage: 16, knockbackScaling: toFixed(1.3), baseKnockback: toFixed(8), launchAngle: 90, hitlagFrames: 6, id: 'kael_usmash_2' },
     ],
     hurtboxes: [{ activeFrames: [0, 45], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 38, landingLag: 0,
+    iasa: 38, landingLag: 0, canCharge: true,
   },
   downSmash: {
     totalFrames: 40,
@@ -118,7 +118,56 @@ export const KAEL_MOVES: Record<string, Move> = {
       { activeFrames: [8, 14], offsetX: toFixed(-25), offsetY: toFixed(-15), width: toFixed(35), height: toFixed(25), damage: 12, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(6), launchAngle: 150, hitlagFrames: 5, id: 'kael_dsmash_l' },
     ],
     hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 33, landingLag: 0,
+    iasa: 33, landingLag: 0, canCharge: true,
+  },
+  // === THROWS ===
+  forwardThrow: {
+    totalFrames: 28,
+    hitboxes: [{
+      activeFrames: [8, 10],
+      offsetX: toFixed(20), offsetY: toFixed(0),
+      width: toFixed(20), height: toFixed(20),
+      damage: 8, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(8),
+      launchAngle: 15, hitlagFrames: 4, id: 'kael_fthrow',
+    }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 0, isThrow: true,
+  },
+  backThrow: {
+    totalFrames: 30,
+    hitboxes: [{
+      activeFrames: [10, 12],
+      offsetX: toFixed(-20), offsetY: toFixed(0),
+      width: toFixed(20), height: toFixed(20),
+      damage: 10, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(9),
+      launchAngle: 160, hitlagFrames: 4, id: 'kael_bthrow',
+    }],
+    hurtboxes: [{ activeFrames: [0, 30], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 30, landingLag: 0, isThrow: true,
+  },
+  upThrow: {
+    totalFrames: 26,
+    hitboxes: [{
+      activeFrames: [8, 10],
+      offsetX: toFixed(0), offsetY: toFixed(20),
+      width: toFixed(20), height: toFixed(20),
+      damage: 7, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(10),
+      launchAngle: 90, hitlagFrames: 4, id: 'kael_uthrow',
+    }],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 0, isThrow: true,
+  },
+  downThrow: {
+    totalFrames: 32,
+    hitboxes: [{
+      activeFrames: [10, 12],
+      offsetX: toFixed(0), offsetY: toFixed(-10),
+      width: toFixed(20), height: toFixed(20),
+      damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(6),
+      launchAngle: 60, hitlagFrames: 4, id: 'kael_dthrow',
+    }],
+    hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 32, landingLag: 0, isThrow: true,
   },
   // === AERIALS ===
   neutralAir: {

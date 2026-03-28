@@ -67,6 +67,16 @@ export interface Fighter {
   /** ID of the active move, or null when not attacking. */
   currentMoveId: string | null;
   stats: FighterStats;
+  /**
+   * EntityId of the opponent currently being held in a grab, or null.
+   * Set when the grab connects; cleared when the grab ends or throw is executed.
+   */
+  grabVictimId: number | null;
+  /**
+   * Frames the attack button has been held while a smash attack is charging.
+   * 0 = not charging. Clamped to SMASH_CHARGE_MAX_FRAMES before release.
+   */
+  smashChargeFrames: number;
 }
 
 /** Maximum shield health value; depleted to 0 causes a shield break. */
@@ -112,6 +122,23 @@ export interface Move {
   /** "Interruptible As Soon As" frame — earliest cancellable frame. */
   iasa: number;
   landingLag: number;
+  /**
+   * If true, holding the attack button delays the move's active frames,
+   * allowing the player to charge for up to SMASH_CHARGE_MAX_FRAMES.
+   * Damage and knockback are multiplied by up to SMASH_CHARGE_MULT_MAX.
+   */
+  canCharge?: boolean;
+  /**
+   * If set, this move is a throw — the move's hitbox is applied directly
+   * to the grabbed victim and releases them.
+   */
+  isThrow?: boolean;
+  /**
+   * The next move ID in a jab chain sequence.
+   * e.g. neutralJab1.nextJab = 'neutralJab2'.
+   * If set, pressing attack again at IASA chains to this move.
+   */
+  nextJab?: string;
 }
 
 // ── Ledge collider ────────────────────────────────────────────────────────────

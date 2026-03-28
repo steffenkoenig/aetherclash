@@ -41,6 +41,11 @@ import {
   lCancelWindowMap,
   L_CANCEL_WINDOW,
 } from './engine/physics/stateMachine.js';
+import {
+  applyKnockback,
+  computeHitstunFrames,
+  computeKnockbackForce,
+} from './engine/physics/knockback.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
 import {
@@ -293,6 +298,15 @@ const jumpHeldFrames = new Map<number, number>();
  */
 const prevCStickActive = new Map<number, boolean>();
 
+/**
+ * Per-player pummel cooldown frames remaining.
+ * Decremented each frame; when > 0 the player cannot pummel again.
+ */
+const pummelCooldown = new Map<number, number>();
+
+/**
+ */
+
 // ── Dodge / grab / shield constants ──────────────────────────────────────────
 
 const SPOT_DODGE_INVINCIBLE_FRAMES = 8;
@@ -308,6 +322,27 @@ const ROLL_SPEED_MULTIPLIER        = toFixed(0.7);
 const SHIELD_DRAIN_PER_FRAME = 0.5;
 /** Shield health regenerated per frame when not shielding (slow regen). */
 const SHIELD_REGEN_PER_FRAME = 0.1;
+
+// ── Smash charge constants ────────────────────────────────────────────────────
+
+/** Frames the player must hold attack before a smash is fully charged. */
+/** Damage/knockback multiplier at full charge (1.0 = uncharged, 1.4 = full). */
+
+// ── Grab / pummel constants ───────────────────────────────────────────────────
+
+/** Damage each pummel hit deals. */
+const PUMMEL_DAMAGE = toFixed(2);
+/** Frames between pummel hits. */
+const PUMMEL_COOLDOWN_FRAMES = 20;
+/** Frames the grabbed victim is immobilised after a throw. */
+const THROW_VICTIM_HITSTUN_BASE = 20;
+
+// ── Up-special recovery constants ────────────────────────────────────────────
+
+/** Horizontal velocity applied by upSpecial in the facing direction. */
+const UP_SPECIAL_VX = toFixed(5.0);
+/** Vertical velocity applied by upSpecial. */
+const UP_SPECIAL_VY = toFixed(18.0);
 
 // ── Player 2 key state (arrow keys + numpad; independent of keyboard.ts) ──────
 
@@ -423,12 +458,13 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
     }
   }
 
-  fighter.attackFrame   = 0;
-  fighter.currentMoveId = moveId;
+  fighter.attackFrame    = 0;
+  fighter.currentMoveId  = moveId;
+  fighter.smashChargeFrames = 0;
   transitionFighterState(playerId, 'attack');
 }
 
-function startSpecial(playerId: number, fighter: Fighter, _phys: Physics, input: InputState): void {
+function startSpecial(playerId: number, fighter: Fighter, phys: Physics, input: InputState): void {
   let moveId: string;
 
   if (input.stickY > STICK_THRESHOLD) {
@@ -441,8 +477,22 @@ function startSpecial(playerId: number, fighter: Fighter, _phys: Physics, input:
     moveId = 'neutralSpecial';
   }
 
-  fighter.attackFrame   = 0;
-  fighter.currentMoveId = moveId;
+  // Up-special recovery: apply launch velocity on frame 0 so the fighter rises
+  // even before the hitbox becomes active.  This is the classic SSB64 recovery
+  // feel where pressing Up-B immediately lifts you out of disadvantage.
+  if (moveId === 'upSpecial') {
+    const transform = transformComponents.get(playerId);
+    const facingRight = transform?.facingRight ?? true;
+    phys.vy            = UP_SPECIAL_VY;
+    phys.vx            = facingRight ? UP_SPECIAL_VX : fixedNeg(UP_SPECIAL_VX);
+    phys.grounded      = false;
+    phys.fastFalling   = false;
+    phys.gravityMultiplier = toFixed(1.0);
+  }
+
+  fighter.attackFrame    = 0;
+  fighter.currentMoveId  = moveId;
+  fighter.smashChargeFrames = 0;
   transitionFighterState(playerId, 'attack');
 }
 
@@ -466,10 +516,91 @@ function processPlayerInput(
     fighter.state === 'hitstun'   ||
     fighter.state === 'spotDodge' ||
     fighter.state === 'airDodge'  ||
-    fighter.state === 'grabbing'  ||
     fighter.shieldBreakFrames > 0 ||
     hitlag > 0
   ) {
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // ── Grab state: pummel + throw input ─────────────────────────────────────
+  if (fighter.state === 'grabbing') {
+    const victimId = fighter.grabVictimId;
+    const victim   = victimId !== null ? fighterComponents.get(victimId) : null;
+
+    // If the victim escaped (e.g. KO'd, grab timer expired) — release immediately.
+    const grabTimer = grabFramesMap.get(playerId) ?? 0;
+    if (!victim || grabTimer <= 0) {
+      fighter.grabVictimId = null;
+      transitionFighterState(playerId, 'idle');
+      syncAnimation(fighter, renderable);
+      return;
+    }
+
+    // Pummel: attack press while holding — rapid damage, no knockback.
+    const cooldown = pummelCooldown.get(playerId) ?? 0;
+    if (cooldown > 0) {
+      pummelCooldown.set(playerId, cooldown - 1);
+    }
+    if (input.attackJustPressed && cooldown === 0) {
+      victim.damagePercent = fixedAdd(victim.damagePercent, PUMMEL_DAMAGE);
+      pummelCooldown.set(playerId, PUMMEL_COOLDOWN_FRAMES);
+      playAudio('HIT');
+    }
+
+    // Throw: directional + attack (or just attack for forward throw).
+    let throwMoveId: string | null = null;
+    const facingForThrow = transform.facingRight;
+    if (buffer.consume('attack', matchState.frame)) {
+      if (input.stickY > STICK_THRESHOLD) {
+        throwMoveId = 'upThrow';
+      } else if (input.stickY < -STICK_THRESHOLD) {
+        throwMoveId = 'downThrow';
+      } else if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+        const isForward = (input.stickX > 0) === facingForThrow;
+        throwMoveId = isForward ? 'forwardThrow' : 'backThrow';
+      } else {
+        throwMoveId = 'forwardThrow';
+      }
+    }
+
+    if (throwMoveId !== null && victimId !== null) {
+      const moves   = getMoves(fighter.characterId);
+      const throwMove = moves?.get(throwMoveId);
+      if (throwMove && throwMove.hitboxes.length > 0) {
+        const hb = throwMove.hitboxes[0]!;
+        // Apply knockback directly to the grabbed victim.
+        applyKnockback(victimId, {
+          victimDamage:        victim.damagePercent,
+          victimWeight:        victim.stats.weightClass,
+          moveScaling:         hb.knockbackScaling,
+          moveBaseKnockback:   hb.baseKnockback,
+          launchAngle:         hb.launchAngle,
+          attackerFacingRight: transform.facingRight,
+          diX:                 0,
+        });
+        // Force hitstun from throw.
+        const force = computeKnockbackForce({
+          victimDamage:        victim.damagePercent,
+          victimWeight:        victim.stats.weightClass,
+          moveScaling:         hb.knockbackScaling,
+          moveBaseKnockback:   hb.baseKnockback,
+          launchAngle:         hb.launchAngle,
+          attackerFacingRight: transform.facingRight,
+          diX:                 0,
+        });
+        victim.damagePercent = fixedAdd(victim.damagePercent, toFixed(hb.damage));
+        victim.hitstunFrames = Math.max(THROW_VICTIM_HITSTUN_BASE, computeHitstunFrames(force));
+        transitionFighterState(victimId, 'hitstun');
+        // Release grip.
+        fighter.grabVictimId = null;
+        grabFramesMap.delete(playerId);
+        clearHitRegistry(playerId);
+        transitionFighterState(playerId, 'idle');
+        playAudio('HIT');
+      }
+    }
+
     syncAnimation(fighter, renderable);
     return;
   }
@@ -1125,6 +1256,8 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     shieldBreakFrames: 0,
     attackFrame:      0,
     currentMoveId:    null,
+    grabVictimId:     null,
+    smashChargeFrames: 0,
     stats:            CHARACTER_STATS[p1Char] ?? KAEL_STATS,
   });
   renderableComponents.set(player1Id, {
@@ -1164,6 +1297,8 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     shieldBreakFrames: 0,
     attackFrame:      0,
     currentMoveId:    null,
+    grabVictimId:     null,
+    smashChargeFrames: 0,
     stats:            CHARACTER_STATS[p2Char] ?? GORUN_STATS,
   });
   renderableComponents.set(player2Id, {
