@@ -13,7 +13,7 @@ export const hitlagMap = new Map<EntityId, number>();
 export const shieldBreakMap = new Map<EntityId, number>();
 
 /** Countdown frames before a fighter auto-releases a ledge (0 = no limit). */
-const ledgeHangFramesMap = new Map<EntityId, number>();
+export const ledgeHangFramesMap = new Map<EntityId, number>();
 
 /** Countdown frames for dodge/roll/air-dodge duration. */
 export const dodgeFramesMap = new Map<EntityId, number>();

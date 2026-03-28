@@ -19,6 +19,7 @@ import { transformComponents } from '../../engine/ecs/component.js';
 import { nextRng } from '../../engine/physics/lcg.js';
 import { platforms } from '../../engine/physics/collision.js';
 import type { Platform } from '../../engine/physics/collision.js';
+import { transitionFighterState } from '../../engine/physics/stateMachine.js';
 
 // ── Hazard types ──────────────────────────────────────────────────────────────
 
@@ -230,8 +231,8 @@ function doLightningStrike(platformIdx: number): void {
                    Math.abs((t.y - plat.y) | 0) < toFixed(35);
     if (onPlat) {
       fighter.damagePercent = fixedAdd(fighter.damagePercent, toFixed(LIGHTNING_STRIKE_DAMAGE));
-      // Bury (stun): set hitstunFrames to 120 = 2 s
-      fighter.hitstunFrames = 120;
+      // Bury (stun): transition into hitstun for 120 frames (2 s)
+      transitionFighterState(id, 'hitstun', { hitstunFrames: 120 });
     }
     void midX; // used implicitly via platform x range check
   }

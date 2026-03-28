@@ -670,6 +670,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   clearStateMachineMaps();
   resetEntityCounter();
   resetMatchState();
+  clearHitRegistry();
   platforms.length = 0;
   clearItems();
   clearHazards();

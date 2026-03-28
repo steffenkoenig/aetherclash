@@ -142,18 +142,39 @@ function updateElo(
 const JWT_SECRET = process.env['JWT_SECRET'] ?? '';
 
 function verifyJwt(token: string): { sub: string } | null {
-  // Minimal verification: check the signature using HMAC-SHA256.
-  // In production use a proper JWT library. Here we do a basic split-verify.
+  // Verify HMAC-SHA256 signature then decode the payload.
   if (!JWT_SECRET || !token) return null;
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    const [header, payload] = parts;
-    if (!header || !payload) return null;
-    const data = JSON.parse(
-      Buffer.from(payload, 'base64url').toString('utf8'),
-    ) as { sub: string; exp?: number };
-    if (data.exp && data.exp < Date.now() / 1000) return null;
+    const [headerB64, payloadB64, signatureB64] = parts;
+    if (!headerB64 || !payloadB64 || !signatureB64) return null;
+
+    // Verify HS256 signature: HMAC-SHA256 over "<header>.<payload>".
+    const signingInput = `${headerB64}.${payloadB64}`;
+    const expectedSignatureB64 = crypto
+      .createHmac('sha256', JWT_SECRET)
+      .update(signingInput)
+      .digest('base64url');
+
+    const providedSig = Buffer.from(signatureB64, 'base64url');
+    const expectedSig = Buffer.from(expectedSignatureB64, 'base64url');
+    if (
+      providedSig.length !== expectedSig.length ||
+      !crypto.timingSafeEqual(providedSig, expectedSig)
+    ) {
+      return null;
+    }
+
+    // Decode and validate header and payload.
+    const headerJson = Buffer.from(headerB64, 'base64url').toString('utf8');
+    const header = JSON.parse(headerJson) as { alg?: string; [k: string]: unknown };
+    if (header.alg !== 'HS256') return null;
+
+    const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
+    const data = JSON.parse(payloadJson) as { sub: string; exp?: number };
+    if (!data.sub) return null;
+    if (typeof data.exp === 'number' && data.exp < Date.now() / 1000) return null;
     return { sub: data.sub };
   } catch {
     return null;

@@ -172,8 +172,13 @@ export const hitRegistry = new Set<string>();
 /**
  * Remove all hit-registry entries belonging to a specific attacker.
  * Call when the attacker's move ends so the hitboxes can re-hit on reuse.
+ * If called with no argument, clears the entire registry (e.g. on match reset).
  */
-export function clearHitRegistry(attackerEntityId: EntityId): void {
+export function clearHitRegistry(attackerEntityId?: EntityId): void {
+  if (attackerEntityId === undefined) {
+    hitRegistry.clear();
+    return;
+  }
   const prefix = `${attackerEntityId}_`;
   for (const key of hitRegistry) {
     if (key.startsWith(prefix)) {

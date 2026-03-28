@@ -30,6 +30,7 @@ import {
   grabFramesMap,
   techWindowMap,
   airDodgeUsedSet,
+  ledgeHangFramesMap,
 } from '../physics/stateMachine.js';
 import { hitRegistry } from '../physics/collision.js';
 import { getRngState, setRngState } from '../physics/lcg.js';
@@ -94,11 +95,12 @@ const FIGHTER_STATE_TO_IDX = new Map<FighterState, number>(
 //     [+57] grab             Uint16LE
 //     [+59] tech             Uint16LE
 //     [+61] respawnTimer     Uint16LE
+//     [+63] ledgeHang        Uint16LE
 //   Sets:
-//     [+63] airDodgeUsed     Uint8  (0|1)
-//   Total: 64 bytes
+//     [+65] airDodgeUsed     Uint8  (0|1)
+//   Total: 66 bytes
 
-const PER_ENTITY_BYTES = 64;
+const PER_ENTITY_BYTES = 66;
 
 /** Total snapshot buffer size per slot. */
 const SNAPSHOT_DATA_BYTES = 8 + MAX_FIGHTERS * PER_ENTITY_BYTES;
@@ -218,6 +220,7 @@ export class RollbackManager {
       view.setUint16(off, grabFramesMap.get(id)  ?? 0, true); off += 2;
       view.setUint16(off, techWindowMap.get(id)  ?? 0, true); off += 2;
       view.setUint16(off, respawnTimers.get(id)  ?? 0, true); off += 2;
+      view.setUint16(off, ledgeHangFramesMap.get(id) ?? 0, true); off += 2;
 
       // Sets
       view.setUint8(off, airDodgeUsedSet.has(id) ? 1 : 0); off += 1;
@@ -287,6 +290,7 @@ export class RollbackManager {
       const gr = view.getUint16(off, true); off += 2;
       const tw = view.getUint16(off, true); off += 2;
       const rt = view.getUint16(off, true); off += 2;
+      const lh = view.getUint16(off, true); off += 2;
 
       if (hl > 0) hitlagMap.set(id, hl);       else hitlagMap.delete(id);
       if (sb > 0) shieldBreakMap.set(id, sb);  else shieldBreakMap.delete(id);
@@ -294,6 +298,7 @@ export class RollbackManager {
       if (gr > 0) grabFramesMap.set(id, gr);   else grabFramesMap.delete(id);
       if (tw > 0) techWindowMap.set(id, tw);   else techWindowMap.delete(id);
       if (rt > 0) respawnTimers.set(id, rt);   else respawnTimers.delete(id);
+      if (lh > 0) ledgeHangFramesMap.set(id, lh); else ledgeHangFramesMap.delete(id);
 
       // Sets
       const adu = view.getUint8(off); off += 1;

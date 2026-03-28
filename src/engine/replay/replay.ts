@@ -156,10 +156,23 @@ export class ReplayPlayer {
 
     const seed        = view.getUint32(1, true);
     const numFighters = view.getUint8(5);
-    const bytesPerFrame = numFighters * 2;
+    if (numFighters < 1 || numFighters > MAX_FIGHTERS) {
+      throw new RangeError(
+        `[replay] Invalid numFighters ${numFighters} (expected 1–${MAX_FIGHTERS})`,
+      );
+    }
 
     const frameDataBytes = data.length - HEADER_BYTES;
-    const frameCount = Math.floor(frameDataBytes / bytesPerFrame);
+    if (frameDataBytes <= 0) {
+      throw new Error('[replay] Buffer has no frame data');
+    }
+
+    const bytesPerFrame = numFighters * 2;
+    if (frameDataBytes % bytesPerFrame !== 0) {
+      throw new Error('[replay] Corrupted replay: frame data size mismatch');
+    }
+
+    const frameCount = frameDataBytes / bytesPerFrame;
     const frames: PackedInputState[][] = [];
 
     let off = HEADER_BYTES;

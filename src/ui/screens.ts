@@ -131,6 +131,8 @@ function showCharacterSelect(): void {
   const box = makePanel('SELECT CHARACTER', '700px');
 
   const grid = document.createElement('div');
+  grid.setAttribute('role', 'radiogroup');
+  grid.setAttribute('aria-label', 'Select character');
   Object.assign(grid.style, {
     display: 'grid',
     gridTemplateColumns: 'repeat(5, 1fr)',
@@ -153,16 +155,31 @@ function showCharacterSelect(): void {
       <div style="font-weight:bold;font-size:15px">${char.label}</div>
       <div style="font-size:11px;color:#999;margin-top:4px">${char.description}</div>`;
 
+    card.setAttribute('role', 'radio');
+    card.setAttribute('aria-label', char.label);
+    card.setAttribute('aria-checked', 'false');
+    card.tabIndex = 0;
+
+    const selectCard = () => {
+      selectedCharacter = char.id;
+      grid.querySelectorAll<HTMLDivElement>('[data-char]').forEach(el => {
+        el.style.borderColor = '#444';
+        el.setAttribute('aria-checked', 'false');
+      });
+      card.style.borderColor = '#4499FF';
+      card.setAttribute('aria-checked', 'true');
+    };
+
     card.onmouseenter = () => { card.style.borderColor = '#4499FF'; };
     card.onmouseleave = () => {
       card.style.borderColor = selectedCharacter === char.id ? '#4499FF' : '#444';
     };
-    card.onclick = () => {
-      selectedCharacter = char.id;
-      grid.querySelectorAll<HTMLDivElement>('[data-char]').forEach(el => {
-        el.style.borderColor = '#444';
-      });
-      card.style.borderColor = '#4499FF';
+    card.onclick = selectCard;
+    card.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectCard();
+      }
     };
     card.dataset['char'] = char.id;
 

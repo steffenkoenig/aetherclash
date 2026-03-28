@@ -528,6 +528,9 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
 
       // ── Per-item visual state ────────────────────────────────────────────
       const mat = mesh.material as THREE.MeshStandardMaterial;
+      // Reset material overrides from previous frame before applying new ones.
+      mat.color.setHex(0xFFFFFF);
+      mat.emissive.setHex(0x000000);
       let spinSpeed     = 1.8;
       let emissiveScale = 1.0;
       let meshScale     = 1.0;
