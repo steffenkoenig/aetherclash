@@ -40,11 +40,14 @@ export const CHARACTERS = [
 ] as const;
 
 export const STAGES = [
-  { id: 'aetherPlateau', label: 'Aether Plateau',  description: 'Classic flat stage.' },
-  { id: 'forge',         label: 'Forge',            description: 'Industrial hazards.' },
-  { id: 'cloudCitadel',  label: 'Cloud Citadel',    description: 'Sky-high platforms.' },
-  { id: 'ancientRuin',   label: 'Ancient Ruin',     description: 'Crumbling history.' },
-  { id: 'digitalGrid',   label: 'Digital Grid',     description: 'Shifting terrain.' },
+  { id: 'aetherPlateau',  label: 'Aether Plateau',             description: 'Classic competitive layout.' },
+  { id: 'forge',          label: 'Sector Omega: Cargo Bay',    description: 'Asymmetric deck with a deadly pit and drone hazard.' },
+  { id: 'cloudCitadel',   label: 'Pastel Paper Peaks',         description: 'Bouncy cloud platforms and gusting winds.' },
+  { id: 'ancientRuin',    label: 'Overgrown Clockwork Spire',  description: 'Stone bridge and chain-hung planks.' },
+  { id: 'digitalGrid',    label: 'The Neon Polygon Grid',      description: 'Shifting data-core terrain.' },
+  { id: 'crystalCavern',  label: 'Crystal Caverns',            description: 'Underground cave with stalactite hazards.' },
+  { id: 'voidRift',       label: 'Void Rift',                  description: 'Sparse platforms over an infinite void.' },
+  { id: 'solarPinnacle',  label: 'Solar Pinnacle',             description: 'Mountaintop arena with solar-flare hazards.' },
 ] as const;
 
 export type CharacterId = (typeof CHARACTERS)[number]['id'];

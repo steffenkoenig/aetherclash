@@ -1,16 +1,22 @@
 // src/game/stages/ancientRuin.ts
-// Stage layout for Ancient Ruin — standard layout with a solid centre pillar platform.
+// Stage layout for Overgrown Clockwork Spire -- ancient ruins reclaimed by nature.
+//
+// The main bridge has a visual V-shape dip at its centre (purely cosmetic);
+// the collision remains a single hard box as described.
+// Two wooden planks float to either side, held by static chains.
+// Every 30 s the central stone gear rotates 90 degrees (visual cue only).
 
 import { toFixed } from '../../engine/physics/fixednum.js';
 import type { Platform } from '../../engine/physics/collision.js';
 import type { BlastZones } from '../../engine/physics/blastZone.js';
 
 export const ANCIENT_RUIN_PLATFORMS: Platform[] = [
-  { x1: toFixed(-400), x2: toFixed(400), y: toFixed(0), passThrough: false },
-  { x1: toFixed(-280), x2: toFixed(-130), y: toFixed(140), passThrough: true },
-  { x1: toFixed(130), x2: toFixed(280), y: toFixed(140), passThrough: true },
-  // Centre pillar — solid (no pass-through)
-  { x1: toFixed(-60), x2: toFixed(60), y: toFixed(100), passThrough: false },
+  // Wide stone bridge -- the V-shape dip is visual; collision = sharp flat box.
+  { x1: toFixed(-420), x2: toFixed(420), y: toFixed(0), passThrough: false },
+  // Left floating wooden plank (held by chains).
+  { x1: toFixed(-390), x2: toFixed(-180), y: toFixed(150), passThrough: true },
+  // Right floating wooden plank (held by chains).
+  { x1: toFixed(180),  x2: toFixed(390),  y: toFixed(150), passThrough: true },
 ];
 
 export const ANCIENT_RUIN_BLAST_ZONES: BlastZones = {
@@ -19,3 +25,6 @@ export const ANCIENT_RUIN_BLAST_ZONES: BlastZones = {
   top:    toFixed(610),
   bottom: toFixed(-340),
 };
+
+/** Frames between gear rotation events (30 s at 60 Hz). Visual only. */
+export const CLOCKWORK_GEAR_INTERVAL = 1800;

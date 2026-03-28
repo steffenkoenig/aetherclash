@@ -20,6 +20,8 @@ export interface Platform {
   x2: Fixed;
   y: Fixed;
   passThrough: boolean;
+  /** When true, characters bounce slightly on landing (1.1× effective jump height). */
+  bouncy?: boolean;
 }
 
 // Half-height and half-width of a fighter in world units (Q16.16)
@@ -91,8 +93,9 @@ export function platformCollisionSystem(): void {
       if (checkPlatformLanding(id, platform)) {
         const transform = transformComponents.get(id)!;
         transform.y      = platform.y + FIGHTER_HALF_HEIGHT;
-        phys.vy          = 0;
-        phys.grounded    = true;
+        // Bouncy platforms give a small upward velocity on landing (≈1.1× jump height).
+        phys.vy          = platform.bouncy ? toFixed(1.5) : 0;
+        phys.grounded    = !platform.bouncy;
         phys.fastFalling = false;
 
         // Clear air-dodge used flag on landing.
@@ -102,7 +105,11 @@ export function platformCollisionSystem(): void {
         if (fighter) {
           fighter.jumpCount = 0;
 
-          if (fighter.state === 'hitstun' && fighter.hitstunFrames > 0) {
+          if (platform.bouncy) {
+            // Bouncy platforms keep the fighter airborne; stay in jump state so
+            // gravity and aerial movement rules continue to apply correctly.
+            transitionFighterState(id, 'jump');
+          } else if (fighter.state === 'hitstun' && fighter.hitstunFrames > 0) {
             // Floor tech: if shield was pressed within the tech window, normal landing.
             // Otherwise, add hard-knockdown frames (stay in grounded hitstun).
             const techWin = techWindowMap.get(id) ?? 0;

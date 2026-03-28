@@ -1,7 +1,7 @@
 // src/main.ts
 // Entry point — shows start menu (character + stage select), then runs the match.
 
-import { toFixed, toFloat, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
+import { toFixed, toFloat, fixedAdd, fixedMul, fixedNeg } from './engine/physics/fixednum.js';
 import { createEntity, resetEntityCounter }      from './engine/ecs/entity.js';
 import {
   transformComponents,
@@ -50,7 +50,7 @@ import {
   setOnGamepadDisconnected,
 } from './engine/input/gamepad.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
-import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
+import { initRenderer, render, resetRenderer, resetItemMeshes, setStage } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
 import {
@@ -87,6 +87,9 @@ import {
   DIGITAL_GRID_PLATFORMS_PHASE1,
   DIGITAL_GRID_BLAST_ZONES,
 } from './game/stages/digitalGrid.js';
+import { CRYSTAL_CAVERN_PLATFORMS, CRYSTAL_CAVERN_BLAST_ZONES } from './game/stages/crystalCavern.js';
+import { VOID_RIFT_PLATFORMS, VOID_RIFT_BLAST_ZONES }           from './game/stages/voidRift.js';
+import { SOLAR_PINNACLE_PLATFORMS, SOLAR_PINNACLE_BLAST_ZONES } from './game/stages/solarPinnacle.js';
 import { matchState, tickFrame, resetMatchState } from './game/state.js';
 import {
   clearItems,
@@ -104,6 +107,10 @@ import {
   initForgeGeysers,
   initCloudLightning,
   initDigitalGrid,
+  initCargoDrone,
+  initWindGust,
+  initCrystalStalactite,
+  initSolarFlare,
   type HazardType,
 } from './game/hazards/hazards.js';
 import {
@@ -146,6 +153,9 @@ const STAGE_PLATFORMS: Record<string, Platform[]> = {
   cloudCitadel:  CLOUD_CITADEL_PLATFORMS,
   ancientRuin:   ANCIENT_RUIN_PLATFORMS,
   digitalGrid:   DIGITAL_GRID_PLATFORMS_PHASE1,
+  crystalCavern: CRYSTAL_CAVERN_PLATFORMS,
+  voidRift:      VOID_RIFT_PLATFORMS,
+  solarPinnacle: SOLAR_PINNACLE_PLATFORMS,
 };
 
 const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
@@ -154,6 +164,9 @@ const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
   cloudCitadel:  CLOUD_CITADEL_BLAST_ZONES,
   ancientRuin:   ANCIENT_RUIN_BLAST_ZONES,
   digitalGrid:   DIGITAL_GRID_BLAST_ZONES,
+  crystalCavern: CRYSTAL_CAVERN_BLAST_ZONES,
+  voidRift:      VOID_RIFT_BLAST_ZONES,
+  solarPinnacle: SOLAR_PINNACLE_BLAST_ZONES,
 };
 
 /** Item spawn points (floating above platforms) per stage (Q16.16 coordinates). */
@@ -167,34 +180,58 @@ const STAGE_SPAWN_POINTS: Record<string, Array<{ x: Fixed; y: Fixed }>> = {
     { x: toFixed(0),    y: toFixed(260)         }, // top centre platform (y=230+30)
   ],
   forge: [
-    { x: toFixed(-250), y: FIGHTER_HALF_HEIGHT }, // main stage left
-    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main stage centre
-    { x: toFixed(250),  y: FIGHTER_HALF_HEIGHT }, // main stage right
+    { x: toFixed(-250), y: fixedAdd(toFixed(-30), FIGHTER_HALF_HEIGHT) }, // left deck
+    { x: toFixed(250),  y: fixedAdd(toFixed(30),  FIGHTER_HALF_HEIGHT) }, // right deck
+    { x: toFixed(-270), y: toFixed(130) }, // left catwalk (y=100+30)
+    { x: toFixed(270),  y: toFixed(160) }, // right catwalk (y=130+30)
   ],
   cloudCitadel: [
-    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT }, // main stage left
-    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main stage centre
-    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT }, // main stage right
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT }, // main cloud left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main cloud centre
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT }, // main cloud right
+    { x: toFixed(0),    y: toFixed(250)         }, // upper cloud (y=220+30)
   ],
   ancientRuin: [
-    { x: toFixed(-150), y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT },
     { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },
-    { x: toFixed(150),  y: FIGHTER_HALF_HEIGHT },
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT },
   ],
   digitalGrid: [
     { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT },
     { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },
     { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT },
   ],
+  crystalCavern: [
+    { x: toFixed(-180), y: FIGHTER_HALF_HEIGHT }, // main floor left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // main floor centre
+    { x: toFixed(180),  y: FIGHTER_HALF_HEIGHT }, // main floor right
+    { x: toFixed(-215), y: toFixed(170) },          // left shelf (y=140+30)
+    { x: toFixed(215),  y: toFixed(170) },          // right shelf
+  ],
+  voidRift: [
+    { x: toFixed(-90),  y: FIGHTER_HALF_HEIGHT }, // central platform left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // central platform centre
+    { x: toFixed(90),   y: FIGHTER_HALF_HEIGHT }, // central platform right
+  ],
+  solarPinnacle: [
+    { x: toFixed(-170), y: FIGHTER_HALF_HEIGHT }, // summit left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT }, // summit centre
+    { x: toFixed(170),  y: FIGHTER_HALF_HEIGHT }, // summit right
+    { x: toFixed(-370), y: fixedAdd(toFixed(-60), FIGHTER_HALF_HEIGHT) }, // lower-left ledge
+    { x: toFixed(370),  y: fixedAdd(toFixed(-60), FIGHTER_HALF_HEIGHT) }, // lower-right ledge
+  ],
 };
 
 /** Hazard type per stage, or null for none. */
 const STAGE_HAZARD: Record<string, HazardType | null> = {
   aetherPlateau: null,
-  forge:         'forgeGeysers',
-  cloudCitadel:  'cloudLightning',
+  forge:         'cargoDrone',
+  cloudCitadel:  'windGust',
   ancientRuin:   null,
   digitalGrid:   'digitalGrid',
+  crystalCavern: 'crystalStalactite',
+  voidRift:      null,
+  solarPinnacle: 'solarFlare',
 };
 
 // ── Air-drift scale and input threshold ──────────────────────────────────────
@@ -844,6 +881,14 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     initCloudLightning();
   } else if (hazardType === 'digitalGrid') {
     initDigitalGrid(DIGITAL_GRID_PLATFORMS_PHASE1, DIGITAL_GRID_PLATFORMS_PHASE2);
+  } else if (hazardType === 'cargoDrone') {
+    initCargoDrone();
+  } else if (hazardType === 'windGust') {
+    initWindGust();
+  } else if (hazardType === 'crystalStalactite') {
+    initCrystalStalactite();
+  } else if (hazardType === 'solarFlare') {
+    initSolarFlare();
   }
 
   // ── Move data ──────────────────────────────────────────────────────────
@@ -947,6 +992,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   initHud([player1Id, player2Id]);
   resetItemMeshes();
   resetRenderer();
+  setStage(stageId);
 
   // Accent colours for hit sparks (must match CHARACTER_COLORS in gl.ts)
   const CHARACTER_ACCENT: Record<string, string> = {
