@@ -8,6 +8,7 @@ import {
   physicsComponents,
   fighterComponents,
   renderableComponents,
+  SHIELD_MAX_HEALTH,
   type Fighter,
   type Physics,
   type Renderable,
@@ -436,7 +437,7 @@ function processPlayerInput(
       return;
     }
   } else {
-    fighter.shieldHealth = Math.min(100, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
+    fighter.shieldHealth = Math.min(SHIELD_MAX_HEALTH, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
   }
 
   if (

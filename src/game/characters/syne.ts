@@ -192,7 +192,12 @@ export const SYNE_MOVES: Record<string, Move> = {
       damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4),
       launchAngle: 40, hitlagFrames: 4, id: 'syne_sspecial',
     }],
-    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: true, invincible: false }],
+    // Intangible only during the active dash frames (3–12) — phase dash window.
+    hurtboxes: [
+      { activeFrames: [0, 2],   offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false },
+      { activeFrames: [3, 12],  offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: true,  invincible: false },
+      { activeFrames: [13, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false },
+    ],
     iasa: 22, landingLag: 6,
   },
   upSpecial: {

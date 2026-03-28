@@ -15,6 +15,7 @@ import {
   transformComponents,
   renderableComponents,
   fighterComponents,
+  SHIELD_MAX_HEALTH,
   type FighterState,
 } from '../engine/ecs/component.js';
 import type { Platform } from '../engine/physics/collision.js';
@@ -1122,7 +1123,7 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
       bubble.position.set(wx, wy + 5, zOffset);
       bubble.visible = true;
       // Tint: green (full) → yellow → red (depleted)
-      const health = fighter.shieldHealth / 100;
+      const health = fighter.shieldHealth / SHIELD_MAX_HEALTH;
       const mat    = bubble.material as THREE.MeshStandardMaterial;
       if (health > 0.5) {
         mat.color.setHex(0x44dd88);
