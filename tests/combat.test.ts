@@ -910,3 +910,66 @@ describe('tech window', () => {
     expect(physicsComponents.get(id)!.grounded).toBe(true);
   });
 });
+
+// ── Fighter body collision ────────────────────────────────────────────────────
+
+import { fighterBodyCollisionSystem } from '../src/engine/physics/collision.js';
+
+describe('fighterBodyCollisionSystem', () => {
+  it('separates two overlapping fighters on the same platform', () => {
+    // Place two fighters at exactly the same X position (fully overlapping).
+    const a = makeGroundedFighter('kael', KAEL_STATS, 0, 30);
+    const b = makeGroundedFighter('kael', KAEL_STATS, 0, 30);
+
+    fighterBodyCollisionSystem([a, b]);
+
+    const tA = transformComponents.get(a)!;
+    const tB = transformComponents.get(b)!;
+    // After separation, A and B must be at least FIGHTER_HALF_WIDTH * 2 apart
+    // (or equal to 30 world units).
+    const dx = Math.abs(toFloat(tA.x) - toFloat(tB.x));
+    expect(dx).toBeCloseTo(30, 3);
+  });
+
+  it('does not move fighters that are already separated', () => {
+    // Place fighters 100 units apart — well outside each other's width.
+    const a = makeGroundedFighter('kael', KAEL_STATS, -50, 30);
+    const b = makeGroundedFighter('kael', KAEL_STATS,  50, 30);
+
+    fighterBodyCollisionSystem([a, b]);
+
+    const tA = transformComponents.get(a)!;
+    const tB = transformComponents.get(b)!;
+    expect(toFloat(tA.x)).toBeCloseTo(-50, 3);
+    expect(toFloat(tB.x)).toBeCloseTo( 50, 3);
+  });
+
+  it('does not separate KO fighters', () => {
+    // One fighter KO'd — they should pass through the other.
+    const a = makeGroundedFighter('kael', KAEL_STATS, 0, 30);
+    const b = makeGroundedFighter('kael', KAEL_STATS, 0, 30);
+    fighterComponents.get(b)!.state = 'KO';
+
+    fighterBodyCollisionSystem([a, b]);
+
+    const tA = transformComponents.get(a)!;
+    const tB = transformComponents.get(b)!;
+    // Positions must not have changed.
+    expect(toFloat(tA.x)).toBeCloseTo(0, 3);
+    expect(toFloat(tB.x)).toBeCloseTo(0, 3);
+  });
+
+  it('does not separate fighters on very different Y heights', () => {
+    // A is on the ground (y=30), B is in the air (y=30+90) — one jumped over.
+    const a = makeGroundedFighter('kael', KAEL_STATS, 0, 30);
+    const b = makeGroundedFighter('kael', KAEL_STATS, 0, 120);
+
+    fighterBodyCollisionSystem([a, b]);
+
+    const tA = transformComponents.get(a)!;
+    const tB = transformComponents.get(b)!;
+    expect(toFloat(tA.x)).toBeCloseTo(0, 3);
+    expect(toFloat(tB.x)).toBeCloseTo(0, 3);
+  });
+});
+

@@ -58,7 +58,7 @@ export interface Fighter {
   invincibleFrames: number;
   /** Frames both attacker and victim are frozen after a hit. */
   hitlagFrames: number;
-  /** Shield health 0–100; depletes while shielding. */
+  /** Shield health 0–SHIELD_MAX_HEALTH; depletes while shielding. */
   shieldHealth: number;
   /** Frames of shield-break stun remaining. */
   shieldBreakFrames: number;
@@ -68,6 +68,9 @@ export interface Fighter {
   currentMoveId: string | null;
   stats: FighterStats;
 }
+
+/** Maximum shield health value; depleted to 0 causes a shield break. */
+export const SHIELD_MAX_HEALTH = 100;
 
 // ── Move data types ───────────────────────────────────────────────────────────
 
@@ -131,8 +134,8 @@ export interface LedgeCollider {
  * fixed side-on orthographic camera.
  *
  * Asset layout (per character):
- *   public/assets/<id>/<id>.glb          — rigged low-poly mesh + animation clips
- *   public/assets/<id>/<id>_atlas.png    — 2048×2048 flat-shaded texture atlas
+ *   public/assets/characters/<id>/<id>.glb          — rigged low-poly mesh + animation clips
+ *   public/assets/characters/<id>/<id>_atlas.png    — 2048×2048 flat-shaded texture atlas
  */
 export interface Renderable {
   /** Path to the glTF/GLB rigged mesh asset (relative to /public). */

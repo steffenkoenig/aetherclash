@@ -171,4 +171,47 @@ export const VELA_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 36], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 28, landingLag: 12,
   },
+  // === SPECIALS ===
+  neutralSpecial: {
+    totalFrames: 38,
+    hitboxes: [{
+      activeFrames: [8, 20],
+      offsetX: toFixed(35), offsetY: toFixed(0),
+      width: toFixed(50), height: toFixed(20),
+      damage: 9, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4),
+      launchAngle: 45, hitlagFrames: 4, id: 'vela_nspecial',
+    }],
+    hurtboxes: [{ activeFrames: [0, 38], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 30, landingLag: 6,
+  },
+  sideSpecial: {
+    totalFrames: 32,
+    hitboxes: [{
+      activeFrames: [4, 16],
+      offsetX: toFixed(30), offsetY: toFixed(5),
+      width: toFixed(40), height: toFixed(35),
+      damage: 11, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5),
+      launchAngle: 42, hitlagFrames: 5, id: 'vela_sspecial',
+    }],
+    hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 8,
+  },
+  upSpecial: {
+    totalFrames: 44,
+    hitboxes: [
+      { activeFrames: [3, 8], offsetX: toFixed(0), offsetY: toFixed(15), width: toFixed(35), height: toFixed(30), damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3), launchAngle: 75, hitlagFrames: 4, id: 'vela_uspecial_hit1' },
+      { activeFrames: [9, 16], offsetX: toFixed(0), offsetY: toFixed(40), width: toFixed(30), height: toFixed(28), damage: 13, knockbackScaling: toFixed(1.2), baseKnockback: toFixed(7), launchAngle: 85, hitlagFrames: 5, id: 'vela_uspecial_hit2' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 44], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 36, landingLag: 12,
+  },
+  downSpecial: {
+    totalFrames: 42,
+    hitboxes: [
+      { activeFrames: [10, 18], offsetX: toFixed(38), offsetY: toFixed(-12), width: toFixed(42), height: toFixed(22), damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(5), launchAngle: 32, hitlagFrames: 4, id: 'vela_dspecial_r' },
+      { activeFrames: [10, 18], offsetX: toFixed(-38), offsetY: toFixed(-12), width: toFixed(42), height: toFixed(22), damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(5), launchAngle: 148, hitlagFrames: 4, id: 'vela_dspecial_l' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 42], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 34, landingLag: 10,
+  },
 };

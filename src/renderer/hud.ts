@@ -18,8 +18,6 @@ import { activeItems }                           from '../game/items/items.js';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PLAYER_COLORS = ['#4499FF', '#FF4444', '#44FF66', '#FFEE22'] as const;
-/** Rounds damage to one decimal place before display. */
-const DAMAGE_ROUND_FACTOR = 10;
 
 /** Human-readable names for every item type. */
 const ITEM_NAMES: Record<string, string> = {
@@ -147,85 +145,96 @@ export function initHud(playerEntityIds: number[]): void {
 
   trackedIds = [...playerEntityIds];
 
+  // Root bar: full-width bottom strip, space-between so P1 sits at the left
+  // corner and P2 at the right corner — matching the Super Smash Bros. N64
+  // layout.
   hudRoot = document.createElement('div');
   hudRoot.id = 'hud-root';
   Object.assign(hudRoot.style, {
-    position:      'fixed',
-    bottom:        '20px',
-    left:          '50%',
-    transform:     'translateX(-50%)',
-    display:       'flex',
-    gap:           '40px',
-    zIndex:        '50',
-    pointerEvents: 'none',
-    fontFamily:    'monospace',
+    position:        'fixed',
+    bottom:          '0',
+    left:            '0',
+    right:           '0',
+    display:         'flex',
+    justifyContent:  'space-between',
+    alignItems:      'flex-end',
+    padding:         '0 16px 16px',
+    zIndex:          '50',
+    pointerEvents:   'none',
   });
 
   for (let i = 0; i < playerEntityIds.length; i++) {
-    const id     = playerEntityIds[i]!;
+    const id      = playerEntityIds[i]!;
     const fighter = fighterComponents.get(id);
-    const color  = PLAYER_COLORS[i % PLAYER_COLORS.length]!;
+    const color   = PLAYER_COLORS[i % PLAYER_COLORS.length]!;
 
-    // ── Panel ──────────────────────────────────────────────────────────────
+    // ── Panel (SSB64-style card) ────────────────────────────────────────────
     const panel = document.createElement('div');
     Object.assign(panel.style, {
       display:        'flex',
       flexDirection:  'column',
       alignItems:     'center',
-      background:     'rgba(0,0,0,0.65)',
-      borderRadius:   '8px',
-      padding:        '10px 20px',
-      minWidth:       '130px',
-      border:         `2px solid ${color}`,
+      background:     'rgba(10,10,30,0.82)',
+      borderRadius:   '10px',
+      padding:        '10px 18px 12px',
+      minWidth:       '150px',
+      border:         `3px solid ${color}`,
+      boxShadow:      `0 0 14px ${color}88`,
     });
 
-    // Name label
+    // Player + character name
     const nameLabel = document.createElement('div');
-    nameLabel.textContent = `P${i + 1} ${fighter?.characterId.toUpperCase() ?? ''}`;
+    nameLabel.textContent = `P${i + 1}  ${fighter?.characterId.toUpperCase() ?? ''}`;
     Object.assign(nameLabel.style, {
       color,
-      fontSize:     '14px',
-      marginBottom: '4px',
-      letterSpacing: '0.05em',
+      fontSize:      '13px',
+      fontFamily:    '"Arial Black", "Impact", sans-serif',
+      fontWeight:    '900',
+      letterSpacing: '0.08em',
+      marginBottom:  '4px',
+      textShadow:    '1px 1px 3px #000',
     });
     panel.appendChild(nameLabel);
 
-    // Damage percentage (large, colour-coded)
+    // Damage percentage — large, bold, SSB64-style
     const dmgLabel = document.createElement('div');
-    dmgLabel.textContent = '0.0%';
+    dmgLabel.textContent = '0%';
     Object.assign(dmgLabel.style, {
-      fontSize:   '48px',
-      fontWeight: 'bold',
+      fontSize:   '62px',
+      fontFamily: '"Arial Black", "Impact", sans-serif',
+      fontWeight: '900',
       color:      '#FFFFFF',
       lineHeight: '1',
+      textShadow: '2px 2px 0 #000, -1px -1px 0 #000, 2px -1px 0 #000, -1px 2px 0 #000',
     });
     panel.appendChild(dmgLabel);
     damageLabels.push(dmgLabel);
 
-    // Stock icons
+    // Stock icons — slightly larger circles for SSB64 feel
     const stockCont = document.createElement('div');
     Object.assign(stockCont.style, {
       display:   'flex',
-      gap:       '6px',
-      marginTop: '8px',
+      gap:       '7px',
+      marginTop: '9px',
     });
     const initialStocks = fighter?.stocks ?? 3;
     for (let s = 0; s < 3; s++) {
       const dot = document.createElement('div');
       dot.className = 'stock-icon';
       Object.assign(dot.style, {
-        width:        '16px',
-        height:       '16px',
+        width:        '20px',
+        height:       '20px',
         borderRadius: '50%',
-        background:   s < initialStocks ? color : '#333',
-        border:       '1px solid #555',
+        background:   s < initialStocks ? color : '#1a1a2e',
+        border:       `2px solid ${s < initialStocks ? color : '#444'}`,
+        boxShadow:    s < initialStocks ? `0 0 6px ${color}` : 'none',
       });
       stockCont.appendChild(dot);
     }
     panel.appendChild(stockCont);
     stockContainers.push(stockCont);
 
-    // Held item indicator (hidden when not holding anything)
+    // Held item indicator
     const itemLabel = document.createElement('div');
     itemLabel.textContent = '';
     Object.assign(itemLabel.style, {
@@ -287,8 +296,8 @@ export function updateHud(): void {
     // ── Damage label ────────────────────────────────────────────────────────
     const dmgLabel = damageLabels[i];
     if (dmgLabel && fighter) {
-      const pct = Math.round(toFloat(fighter.damagePercent) * DAMAGE_ROUND_FACTOR) / DAMAGE_ROUND_FACTOR;
-      dmgLabel.textContent = `${pct.toFixed(1)}%`;
+      const pct = Math.round(toFloat(fighter.damagePercent));
+      dmgLabel.textContent = `${pct}%`;
       dmgLabel.style.color = getDamageColor(pct);
     }
 
@@ -298,7 +307,10 @@ export function updateHud(): void {
       const color   = PLAYER_COLORS[i % PLAYER_COLORS.length]!;
       const dots    = stockCont.querySelectorAll<HTMLDivElement>('.stock-icon');
       dots.forEach((dot, j) => {
-        dot.style.background = j < fighter.stocks ? color : '#333';
+        const alive = j < fighter.stocks;
+        dot.style.background = alive ? color : '#1a1a2e';
+        dot.style.border     = `2px solid ${alive ? color : '#444'}`;
+        dot.style.boxShadow  = alive ? `0 0 6px ${color}` : 'none';
       });
     }
 

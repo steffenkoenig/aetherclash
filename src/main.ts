@@ -8,6 +8,7 @@ import {
   physicsComponents,
   fighterComponents,
   renderableComponents,
+  SHIELD_MAX_HEALTH,
   type Fighter,
   type Physics,
   type Renderable,
@@ -17,6 +18,7 @@ import { applyGravitySystem }          from './engine/physics/gravity.js';
 import {
   platforms,
   platformCollisionSystem,
+  fighterBodyCollisionSystem,
   setEntityPassThroughInput,
   setEntityShieldInput,
   FIGHTER_HALF_HEIGHT,
@@ -362,6 +364,24 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
   transitionFighterState(playerId, 'attack');
 }
 
+function startSpecial(playerId: number, fighter: Fighter, _phys: Physics, input: InputState): void {
+  let moveId: string;
+
+  if (input.stickY > STICK_THRESHOLD) {
+    moveId = 'upSpecial';
+  } else if (input.stickY < -STICK_THRESHOLD) {
+    moveId = 'downSpecial';
+  } else if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+    moveId = 'sideSpecial';
+  } else {
+    moveId = 'neutralSpecial';
+  }
+
+  fighter.attackFrame   = 0;
+  fighter.currentMoveId = moveId;
+  transitionFighterState(playerId, 'attack');
+}
+
 // ── Per-player input processing ───────────────────────────────────────────────
 
 function processPlayerInput(
@@ -418,7 +438,7 @@ function processPlayerInput(
       return;
     }
   } else {
-    fighter.shieldHealth = Math.min(100, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
+    fighter.shieldHealth = Math.min(SHIELD_MAX_HEALTH, fighter.shieldHealth + SHIELD_REGEN_PER_FRAME);
   }
 
   if (
@@ -509,6 +529,8 @@ function processPlayerInput(
       if (!useHeldItem(playerId, transform.facingRight)) {
         startAttack(playerId, fighter, phys, input);
       }
+    } else if (buffer.consume('special', matchState.frame)) {
+      startSpecial(playerId, fighter, phys, input);
     }
   }
 
@@ -927,8 +949,8 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     stats:            CHARACTER_STATS[p1Char] ?? KAEL_STATS,
   });
   renderableComponents.set(player1Id, {
-    meshUrl:        `/assets/${p1Char}/${p1Char}.glb`,
-    atlasUrl:       `/assets/${p1Char}/${p1Char}_atlas.png`,
+    meshUrl:        `/assets/characters/${p1Char}/${p1Char}.glb`,
+    atlasUrl:       `/assets/characters/${p1Char}/${p1Char}_atlas.png`,
     animationClip:  'idle',
     animationFrame: 0,
     animationSpeed: 1.0,
@@ -966,8 +988,8 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     stats:            CHARACTER_STATS[p2Char] ?? GORUN_STATS,
   });
   renderableComponents.set(player2Id, {
-    meshUrl:        `/assets/${p2Char}/${p2Char}.glb`,
-    atlasUrl:       `/assets/${p2Char}/${p2Char}_atlas.png`,
+    meshUrl:        `/assets/characters/${p2Char}/${p2Char}.glb`,
+    atlasUrl:       `/assets/characters/${p2Char}/${p2Char}_atlas.png`,
     animationClip:  'idle',
     animationFrame: 0,
     animationSpeed: 1.0,
@@ -1038,6 +1060,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     integratePositions();
     applyGravitySystem();
     platformCollisionSystem();
+    fighterBodyCollisionSystem([player1Id, player2Id]);
     checkHitboxSystem([player1Id, player2Id], MOVE_DATA, inputMap);
     blastZoneSystem();
     trySpawnItem(matchState.frame);

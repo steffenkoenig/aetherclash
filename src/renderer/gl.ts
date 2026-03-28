@@ -15,6 +15,7 @@ import {
   transformComponents,
   renderableComponents,
   fighterComponents,
+  SHIELD_MAX_HEALTH,
   type FighterState,
 } from '../engine/ecs/component.js';
 import type { Platform } from '../engine/physics/collision.js';
@@ -56,6 +57,14 @@ const characterFaceAngles = new Map<number, number>();
 // How quickly the character rotates toward its target facing angle per frame.
 // At 60 Hz, ~12 frames to reach 90 % of the target — snappy but visibly smooth.
 const TURN_LERP = 0.18;
+
+// ── Shield bubble registry ────────────────────────────────────────────────────
+
+// Maps entity id → semi-transparent sphere shown while shielding.
+const shieldBubbleMeshes = new Map<number, THREE.Mesh>();
+
+/** Radius of the shield bubble in world units. */
+const SHIELD_BUBBLE_RADIUS = 45;
 
 // ── Item mesh registry ────────────────────────────────────────────────────────
 
@@ -797,6 +806,13 @@ export function resetRenderer(): void {
   modelRefs.clear();
   activeClipNames.clear();
   lastMixerTime = 0;
+  // Remove shield bubbles
+  for (const mesh of shieldBubbleMeshes.values()) {
+    scene?.remove(mesh);
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+  }
+  shieldBubbleMeshes.clear();
   // Clear platform mesh cache — new stage will rebuild with its own palette.
   clearPlatformMeshes();
 }
@@ -818,26 +834,47 @@ type Parts = {
   legR:  THREE.Mesh;
 };
 
-function applyPose(group: THREE.Group, state: FighterState): void {
+function applyPose(group: THREE.Group, state: FighterState, moveId?: string | null): void {
   const parts = group.userData['parts'] as Parts | undefined;
   if (!parts) return;
 
   const { armL, armR, legL, legR } = parts;
-  // Date.now() is renderer-only (visual animation, never touches physics state).
-  // The determinism rule applies only to the simulation path.
-  const t = Date.now() * 0.001;
+  // renderTime is wall-clock seconds — renderer-only, never fed into physics.
+  // Using Date.now() here is intentional and determinism-safe; it only drives
+  // visual animation, not the simulation state.
+  const renderTime = Date.now() * 0.001;
 
   // Reset per-frame transient transforms before applying state pose.
   // rotation.y (facing direction) is set by the caller — do not touch it here.
   group.rotation.z = 0;
   group.scale.set(1, 1, 1);
 
-  // Reset arm forward position (used by attack)
+  // Reset arm Z offsets before any pose branch so all states start clean.
   armR.position.z = 0;
+  armL.position.z = 0;
+
+  // ── Special-move emissive glow ──────────────────────────────────────────
+  // When the fighter is executing a special move, pulse the character meshes
+  // with an emissive colour so specials are visually distinct from normals.
+  const isSpecial = state === 'attack' && moveId != null &&
+    (moveId.endsWith('Special') || moveId.includes('special'));
+  group.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const mat = obj.material;
+    if (mat instanceof THREE.MeshToonMaterial) {
+      if (isSpecial) {
+        // Yellow-white pulse: bright when active, fades with a sine wave.
+        const pulse = (Math.sin(renderTime * 12) + 1) * 0.5; // 0→1 fast pulse
+        mat.emissive = new THREE.Color(0.6 + pulse * 0.4, 0.8 + pulse * 0.2, 0.2);
+      } else {
+        mat.emissive = new THREE.Color(0, 0, 0);
+      }
+    }
+  });
 
   switch (state) {
     case 'idle': {
-      const bob = Math.sin(Date.now() * 0.003) * 1.5;
+      const bob = Math.sin(renderTime * 3) * 1.5;
       group.position.y += bob;
       legL.rotation.x = 0;
       legR.rotation.x = 0;
@@ -846,7 +883,7 @@ function applyPose(group: THREE.Group, state: FighterState): void {
       break;
     }
     case 'run': {
-      const s = Math.sin(t * 6);
+      const s = Math.sin(renderTime * 6);
       legL.rotation.x =  s * 0.5;
       legR.rotation.x = -s * 0.5;
       armL.rotation.x = -s * 0.3;
@@ -862,12 +899,23 @@ function applyPose(group: THREE.Group, state: FighterState): void {
       break;
 
     case 'attack':
-      armR.rotation.x = -Math.PI / 2;
-      armR.position.z = 10;
+      if (isSpecial) {
+        // Special pose: both arms raised and spread wide (charging stance).
+        armL.rotation.x = -Math.PI * 0.65;
+        armR.rotation.x = -Math.PI * 0.65;
+        armL.position.z = 8;
+        armR.position.z = 8;
+        // Slight forward lean.
+        group.rotation.z = 0.12;
+      } else {
+        // Normal attack: raise right arm forward.
+        armR.rotation.x = -Math.PI / 2;
+        armR.position.z = 10;
+      }
       break;
 
     case 'hitstun':
-      group.rotation.z = Math.sin(Date.now() * 0.05) * 0.2;
+      group.rotation.z = Math.sin(renderTime * 50) * 0.2;
       break;
 
     case 'KO':
@@ -1083,7 +1131,45 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     if (glbSwapped.has(id)) {
       updateMixer(id, fighter.state);
     } else {
-      applyPose(group, fighter.state);
+      applyPose(group, fighter.state, fighter.currentMoveId);
+    }
+
+    // ── Shield bubble ────────────────────────────────────────────────────────
+    if (fighter.state === 'shielding') {
+      let bubble = shieldBubbleMeshes.get(id);
+      if (!bubble) {
+        const geo = new THREE.SphereGeometry(SHIELD_BUBBLE_RADIUS, 16, 12);
+        const mat = new THREE.MeshStandardMaterial({
+          transparent:   true,
+          opacity:       0.45,
+          side:          THREE.FrontSide,
+          depthWrite:    false,
+          metalness:     0.1,
+          roughness:     0.2,
+        });
+        bubble = new THREE.Mesh(geo, mat);
+        scene.add(bubble);
+        shieldBubbleMeshes.set(id, bubble);
+      }
+      // Position bubble over character
+      bubble.position.set(wx, wy + 5, zOffset);
+      bubble.visible = true;
+      // Tint: green (full) → yellow → red (depleted)
+      const health = fighter.shieldHealth / SHIELD_MAX_HEALTH;
+      const mat    = bubble.material as THREE.MeshStandardMaterial;
+      if (health > 0.5) {
+        mat.color.setHex(0x44dd88);
+      } else if (health > 0.25) {
+        mat.color.setHex(0xffdd00);
+      } else {
+        mat.color.setHex(0xff4422);
+      }
+      // Scale bubble slightly smaller as shield drains
+      const scale = 0.7 + health * 0.3;
+      bubble.scale.setScalar(scale);
+    } else {
+      const bubble = shieldBubbleMeshes.get(id);
+      if (bubble) bubble.visible = false;
     }
 
     playerIndex++;

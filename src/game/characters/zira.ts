@@ -185,4 +185,45 @@ export const ZIRA_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 44], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 36, landingLag: 14,
   },
+  // === SPECIALS ===
+  neutralSpecial: {
+    totalFrames: 22,
+    hitboxes: [{
+      activeFrames: [4, 12],
+      offsetX: toFixed(20), offsetY: toFixed(5),
+      width: toFixed(28), height: toFixed(28),
+      damage: 8, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(4),
+      launchAngle: 45, hitlagFrames: 3, id: 'zira_nspecial',
+    }],
+    hurtboxes: [{ activeFrames: [0, 22], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 18, landingLag: 4,
+  },
+  sideSpecial: {
+    totalFrames: 26,
+    hitboxes: [
+      { activeFrames: [3, 8],  offsetX: toFixed(18), offsetY: toFixed(5), width: toFixed(20), height: toFixed(20), damage: 3, knockbackScaling: toFixed(0.5), baseKnockback: toFixed(1), launchAngle: 45, hitlagFrames: 2, id: 'zira_sspecial_1' },
+      { activeFrames: [9, 14], offsetX: toFixed(25), offsetY: toFixed(5), width: toFixed(20), height: toFixed(20), damage: 3, knockbackScaling: toFixed(0.5), baseKnockback: toFixed(1), launchAngle: 45, hitlagFrames: 2, id: 'zira_sspecial_2' },
+      { activeFrames: [15, 20], offsetX: toFixed(30), offsetY: toFixed(5), width: toFixed(22), height: toFixed(22), damage: 8, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4), launchAngle: 38, hitlagFrames: 4, id: 'zira_sspecial_3' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 20, landingLag: 6,
+  },
+  upSpecial: {
+    totalFrames: 36,
+    hitboxes: [
+      { activeFrames: [2, 7],  offsetX: toFixed(0), offsetY: toFixed(12), width: toFixed(28), height: toFixed(25), damage: 4, knockbackScaling: toFixed(0.6), baseKnockback: toFixed(2), launchAngle: 70, hitlagFrames: 3, id: 'zira_uspecial_1' },
+      { activeFrames: [8, 14], offsetX: toFixed(0), offsetY: toFixed(32), width: toFixed(24), height: toFixed(24), damage: 10, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5), launchAngle: 90, hitlagFrames: 4, id: 'zira_uspecial_2' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 36], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 8,
+  },
+  downSpecial: {
+    totalFrames: 32,
+    hitboxes: [
+      { activeFrames: [8, 14], offsetX: toFixed(28), offsetY: toFixed(-10), width: toFixed(32), height: toFixed(20), damage: 7, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3), launchAngle: 30, hitlagFrames: 3, id: 'zira_dspecial_r' },
+      { activeFrames: [8, 14], offsetX: toFixed(-28), offsetY: toFixed(-10), width: toFixed(32), height: toFixed(20), damage: 7, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3), launchAngle: 150, hitlagFrames: 3, id: 'zira_dspecial_l' },
+    ],
+    hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 6,
+  },
 };
