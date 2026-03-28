@@ -146,6 +146,79 @@ function updateMixer(entityId: number, state: import('../engine/ecs/component.js
 // Maps a platform reference string to its mesh so we don't recreate every frame.
 const platformMeshes = new Map<string, THREE.Group>();
 
+/** Clear all cached platform meshes and remove them from the scene. */
+export function clearPlatformMeshes(): void {
+  for (const group of platformMeshes.values()) {
+    scene?.remove(group);
+    group.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        (obj as THREE.Mesh).geometry.dispose();
+        const mat = (obj as THREE.Mesh).material;
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+        else (mat as THREE.Material).dispose();
+      }
+    });
+  }
+  platformMeshes.clear();
+}
+
+// ── Stage background (loaded from GLB) ───────────────────────────────────────
+
+/** The current stage id used for platform styling. */
+let currentStageId = 'aetherPlateau';
+
+/** The Three.js Group added to the scene from the stage GLB, or null. */
+let stageBackgroundGroup: THREE.Group | null = null;
+
+/** Per-stage sky / fog colours for scene.background. */
+const STAGE_SKY_COLOR: Record<string, number> = {
+  aetherPlateau:  0xffd580,
+  forge:          0x050b14,
+  cloudCitadel:   0xffeeff,
+  ancientRuin:    0x3a4030,
+  digitalGrid:    0x020408,
+  crystalCavern:  0x0a0a1a,
+  voidRift:       0x000008,
+  solarPinnacle:  0xff8c00,
+};
+
+/**
+ * Load the stage GLB into the scene as a background layer and update platform
+ * mesh colours.  Call once per match before entities are spawned.
+ */
+export function setStage(stageId: string): void {
+  // Remove previous stage background
+  if (stageBackgroundGroup) {
+    scene?.remove(stageBackgroundGroup);
+    stageBackgroundGroup.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        (obj as THREE.Mesh).geometry.dispose();
+        const mat = (obj as THREE.Mesh).material;
+        if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+        else (mat as THREE.Material).dispose();
+      }
+    });
+    stageBackgroundGroup = null;
+  }
+
+  // Clear platform mesh cache so new stage gets fresh visuals
+  clearPlatformMeshes();
+
+  currentStageId = stageId;
+
+  // Update scene background colour
+  const skyHex = STAGE_SKY_COLOR[stageId] ?? 0x0d0d1e;
+  if (scene) scene.background = new THREE.Color(skyHex);
+
+  // Load stage GLB asynchronously and add to scene when ready
+  loadGLTF(`/assets/${stageId}/${stageId}.glb`).then((model) => {
+    if (!model.failed && model.root && currentStageId === stageId) {
+      stageBackgroundGroup = model.root;
+      scene?.add(stageBackgroundGroup);
+    }
+  });
+}
+
 // ── Character colour palette ──────────────────────────────────────────────────
 
 const CHARACTER_COLORS: Record<string, number> = {
@@ -212,6 +285,51 @@ export function createCharacterMesh(characterId: string): THREE.Group {
   return group;
 }
 
+// ── Per-stage platform palette ────────────────────────────────────────────────
+
+interface PlatPalette {
+  main:    number; // solid platform colour
+  pass:    number; // pass-through platform colour
+  edge:    number; // top edge highlight
+  mat:     'toon' | 'standard';
+  emissive?: number;
+  emissiveIntensity?: number;
+  metalness?: number;
+  roughness?: number;
+}
+
+const STAGE_PLAT_PALETTE: Record<string, PlatPalette> = {
+  aetherPlateau: { main: 0xb8986a, pass: 0xd8b87e, edge: 0xd4c090, mat: 'toon' },
+  forge:         { main: 0x2e3e50, pass: 0x3e5060, edge: 0x607080,
+                   mat: 'standard', metalness: 0.55, roughness: 0.45 },
+  cloudCitadel:  { main: 0xf8f8ff, pass: 0xe0e8ff, edge: 0xffffff, mat: 'toon' },
+  ancientRuin:   { main: 0x6a6050, pass: 0x8a7a5a, edge: 0x9a8a6a, mat: 'toon' },
+  digitalGrid:   { main: 0x080620, pass: 0x100840, edge: 0x00ffee,
+                   mat: 'standard', emissive: 0x00ccbb, emissiveIntensity: 0.4,
+                   metalness: 0.1, roughness: 0.8 },
+  crystalCavern: { main: 0x1a1a2e, pass: 0x2a2a4e, edge: 0x44eecc,
+                   mat: 'standard', emissive: 0x226644, emissiveIntensity: 0.25,
+                   metalness: 0.0, roughness: 0.7 },
+  voidRift:      { main: 0x180a28, pass: 0x2a1a3a, edge: 0x8833ff,
+                   mat: 'standard', emissive: 0x440088, emissiveIntensity: 0.4,
+                   metalness: 0.0, roughness: 0.9 },
+  solarPinnacle: { main: 0xd4a84a, pass: 0xc09030, edge: 0xffe080,
+                   mat: 'standard', metalness: 0.0, roughness: 0.85 },
+};
+
+function makePlatMaterial(hex: number, palette: PlatPalette): THREE.Material {
+  if (palette.mat === 'toon') {
+    return new THREE.MeshToonMaterial({ color: hex });
+  }
+  return new THREE.MeshStandardMaterial({
+    color:             hex,
+    emissive:          palette.emissive ?? 0x000000,
+    emissiveIntensity: palette.emissiveIntensity ?? 0,
+    metalness:         palette.metalness ?? 0,
+    roughness:         palette.roughness ?? 0.8,
+  });
+}
+
 // ── Platform mesh builder ─────────────────────────────────────────────────────
 
 const PLAT_THICKNESS = 20;
@@ -225,11 +343,21 @@ export function buildPlatformMesh(plat: Platform): THREE.Group {
   const cx  = (x1 + x2) / 2;
   const cy  = py - 10; // top surface at platform.y
 
-  const bodyColor = plat.passThrough ? 0x88CC66 : 0x9B8B7A;
-  const edgeColor = plat.passThrough ? 0xaaddaa : 0xbbaaaa;
+  const palette = STAGE_PLAT_PALETTE[currentStageId] ?? STAGE_PLAT_PALETTE['aetherPlateau']!;
 
-  const bodyMat = new THREE.MeshToonMaterial({ color: bodyColor });
-  const edgeMat = new THREE.MeshToonMaterial({ color: edgeColor });
+  const bodyHex = plat.passThrough ? palette.pass : palette.main;
+  const edgeHex = palette.edge;
+
+  const bodyMat = makePlatMaterial(bodyHex, palette);
+  const edgeMat = palette.mat === 'toon'
+    ? new THREE.MeshToonMaterial({ color: edgeHex })
+    : new THREE.MeshStandardMaterial({
+        color:             edgeHex,
+        emissive:          palette.emissive ?? edgeHex,
+        emissiveIntensity: (palette.emissiveIntensity ?? 0) + 0.3,
+        metalness:         palette.metalness ?? 0,
+        roughness:         (palette.roughness ?? 0.8) * 0.5,
+      });
 
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(width, PLAT_THICKNESS, PLAT_DEPTH),
@@ -350,6 +478,7 @@ function onResize(): void {
 /**
  * Clear all per-match character meshes and mixer state so a new match can be
  * started with fresh entities.  Call this before creating new entities.
+ * Also clears platform meshes so the new stage can apply its own visual style.
  */
 export function resetRenderer(): void {
   for (const group of characterMeshes.values()) {
@@ -362,7 +491,8 @@ export function resetRenderer(): void {
   modelRefs.clear();
   activeClipNames.clear();
   lastMixerTime = 0;
-  // Keep platform meshes (they'll be re-used or recreated).
+  // Clear platform mesh cache — new stage will rebuild with its own palette.
+  clearPlatformMeshes();
 }
 
 // ── Camera (no-op shim kept for API compatibility) ────────────────────────────

@@ -43,7 +43,7 @@ import {
   mergeTouchInput,
 } from './engine/input/touch.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
-import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
+import { initRenderer, render, resetRenderer, resetItemMeshes, setStage } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
@@ -834,6 +834,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   initHud([player1Id, player2Id]);
   resetItemMeshes();
   resetRenderer();
+  setStage(stageId);
 
   // ── Game loop ──────────────────────────────────────────────────────────
   stopLoop();
