@@ -153,24 +153,24 @@ export function playSfx(url: string, volume = 1, playbackRate = 1): void {
 // If a file is missing the playSfx() call silently fails.
 
 export const SFX = {
-  HIT:           '/assets/audio/hit.ogg',
-  STRONG_HIT:    '/assets/audio/hit_strong.ogg',
-  SHIELD_HIT:    '/assets/audio/shield_hit.ogg',
-  SHIELD_BREAK:  '/assets/audio/shield_break.ogg',
-  JUMP:          '/assets/audio/jump.ogg',
-  DOUBLE_JUMP:   '/assets/audio/double_jump.ogg',
-  LAND:          '/assets/audio/land.ogg',
-  KO:            '/assets/audio/ko.ogg',
-  ITEM_SPAWN:    '/assets/audio/item_spawn.ogg',
-  ITEM_PICKUP:   '/assets/audio/item_pickup.ogg',
-  EXPLOSION:     '/assets/audio/explosion.ogg',
-  GEYSER:        '/assets/audio/geyser.ogg',
-  LIGHTNING:     '/assets/audio/lightning.ogg',
-  PHASE_SHIFT:   '/assets/audio/phase_shift.ogg',
-  GUARDIAN:      '/assets/audio/guardian_summon.ogg',
-  HEAL:          '/assets/audio/heal.ogg',
-  MENU_SELECT:   '/assets/audio/menu_select.ogg',
-  MENU_CONFIRM:  '/assets/audio/menu_confirm.ogg',
+  HIT:           '/assets/audio/hit.wav',
+  STRONG_HIT:    '/assets/audio/hit_strong.wav',
+  SHIELD_HIT:    '/assets/audio/shield_hit.wav',
+  SHIELD_BREAK:  '/assets/audio/shield_break.wav',
+  JUMP:          '/assets/audio/jump.wav',
+  DOUBLE_JUMP:   '/assets/audio/double_jump.wav',
+  LAND:          '/assets/audio/land.wav',
+  KO:            '/assets/audio/ko.wav',
+  ITEM_SPAWN:    '/assets/audio/item_spawn.wav',
+  ITEM_PICKUP:   '/assets/audio/item_pickup.wav',
+  EXPLOSION:     '/assets/audio/explosion.wav',
+  GEYSER:        '/assets/audio/geyser.wav',
+  LIGHTNING:     '/assets/audio/lightning.wav',
+  PHASE_SHIFT:   '/assets/audio/phase_shift.wav',
+  GUARDIAN:      '/assets/audio/guardian_summon.wav',
+  HEAL:          '/assets/audio/heal.wav',
+  MENU_SELECT:   '/assets/audio/menu_select.wav',
+  MENU_CONFIRM:  '/assets/audio/menu_confirm.wav',
 } as const;
 
 export type SfxKey = keyof typeof SFX;
@@ -228,11 +228,11 @@ export function fadeMusicOut(durationSeconds = 1): void {
 // ── Stage music map ───────────────────────────────────────────────────────────
 
 export const STAGE_MUSIC: Record<string, string> = {
-  aetherPlateau: '/assets/audio/music_aether_plateau.ogg',
-  forge:         '/assets/audio/music_forge.ogg',
-  cloudCitadel:  '/assets/audio/music_cloud_citadel.ogg',
-  ancientRuin:   '/assets/audio/music_ancient_ruin.ogg',
-  digitalGrid:   '/assets/audio/music_digital_grid.ogg',
+  aetherPlateau: '/assets/audio/music_aether_plateau.wav',
+  forge:         '/assets/audio/music_forge.wav',
+  cloudCitadel:  '/assets/audio/music_cloud_citadel.wav',
+  ancientRuin:   '/assets/audio/music_ancient_ruin.wav',
+  digitalGrid:   '/assets/audio/music_digital_grid.wav',
 };
 
 /** Convenience: play the correct music track for the given stage ID. */
