@@ -37,6 +37,32 @@ Melee Augments temporarily replace a character's standard physical attacks with 
   - The wielder loses their standard attack options entirely — all four directions produce only the Mallet smash.
 - **Tactical Note:** The Mallet is extremely powerful in the hands of a Heavy Vanguard character (Gorun), creating a potentially match-winning tool.
 
+#### Ember Core
+- **Appearance:** A compact orange canister with a nozzle that pulses with heat-haze shimmer. A tiny face on the canister grins when in use.
+- **Duration:** 300 frames (~5 seconds) of continuous fire output.
+- **Effect (held):** Emits a short-range cone of flame (~35 units radius) every frame, dealing **3% damage per frame** to any opponent caught in the aura. Fuel depletes each frame the item is held; the item disappears when fuel runs out.
+- **Throw:** Deals **12% fire damage** on direct contact.
+- **Tactical Note:** Ember Core rewards aggressive play — dash into an opponent and hold the flame. At close range it burns through shields faster than any other item.
+
+#### Runeshard
+- **Appearance:** A pale-white crystalline rod with a cracked, faceted tip that glows with shifting colour. Clearly mass-produced, not the original artefact.
+- **Charges:** 16 star shots.
+- **Effect (held):** Every **30 frames**, the Runeshard auto-fires a star shot at the nearest opponent within 200 units, dealing **8% damage** per shot.
+- **Melee:** Striking with the Runeshard deals **12% damage** (bludgeoning), regardless of remaining charges.
+- **Depletion:** The Runeshard disappears when all 16 charges are expended.
+- **Tactical Note:** Zone effectively — hold the Runeshard and keep opponents at mid-range to maximize shot output.
+
+#### Speed Boots
+- **Appearance:** Aerodynamic ankle boots with small rocket exhaust vents that emit blue flame trails.
+- **Duration:** 480 frames (8 seconds).
+- **Effect:** While held, applies a continuous horizontal velocity boost in the direction the wielder faces (+0.3 units/frame). Combines multiplicatively with run speed for punishing chase options.
+- **Tactical Note:** Use Speed Boots when you need to close distance on a camper or escape a dangerous edgeguard situation.
+
+#### Mirror Shard
+- **Appearance:** A jagged diamond fragment that briefly flashes a perfect reflection of the holder's face.
+- **Effect:** One-time use — on pickup, grants the holder **90 frames (~1.5 s) of invincibility**. The shard disappears immediately after use.
+- **Tactical Note:** Pick up the Mirror Shard at exactly the right moment to negate an incoming combo or stock-taking hit. Timing is everything.
+
 ---
 
 ### 2. Throwable Projectiles

@@ -13,7 +13,7 @@ export const hitlagMap = new Map<EntityId, number>();
 export const shieldBreakMap = new Map<EntityId, number>();
 
 /** Countdown frames before a fighter auto-releases a ledge (0 = no limit). */
-const ledgeHangFramesMap = new Map<EntityId, number>();
+export const ledgeHangFramesMap = new Map<EntityId, number>();
 
 /** Countdown frames for dodge/roll/air-dodge duration. */
 export const dodgeFramesMap = new Map<EntityId, number>();
@@ -33,6 +33,22 @@ export const techWindowMap = new Map<EntityId, number>();
  * Cleared when the fighter lands (grounded again).
  */
 export const airDodgeUsedSet = new Set<EntityId>();
+
+// ── Reset (for headless simulation / tests) ───────────────────────────────────
+
+/**
+ * Clear all per-entity timer maps and sets maintained by the state machine.
+ * Call before starting a new headless simulation to ensure a clean state.
+ */
+export function clearStateMachineMaps(): void {
+  hitlagMap.clear();
+  shieldBreakMap.clear();
+  ledgeHangFramesMap.clear();
+  dodgeFramesMap.clear();
+  grabFramesMap.clear();
+  techWindowMap.clear();
+  airDodgeUsedSet.clear();
+}
 
 // ── Transition table ──────────────────────────────────────────────────────────
 

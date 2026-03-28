@@ -5,12 +5,12 @@ import { toFixed } from '../../engine/physics/fixednum.js';
 import type { FighterStats, Move } from '../../engine/ecs/component.js';
 
 export const KAEL_STATS: FighterStats = {
-  maxFallSpeed:     toFixed(-0.85),
-  maxFastFallSpeed: toFixed(-1.60),
-  jumpForce:        toFixed(1.2),
-  doubleJumpForce:  toFixed(1.0),
-  walkSpeed:        toFixed(0.6),
-  runSpeed:         toFixed(1.2),
+  maxFallSpeed:     toFixed(-12.0),
+  maxFastFallSpeed: toFixed(-20.0),
+  jumpForce:        toFixed(16.0),
+  doubleJumpForce:  toFixed(14.0),
+  walkSpeed:        toFixed(5.0),
+  runSpeed:         toFixed(8.0),
   weightClass:      toFixed(1.0),
 };
 

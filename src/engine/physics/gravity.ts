@@ -8,8 +8,9 @@ import {
 } from '../ecs/component.js';
 import { isEntityFrozenByHitlag } from './stateMachine.js';
 
-// Gravity constant: −0.09 units/frame² (Q16.16)
-export const GRAVITY = toFixed(-0.09);
+// Gravity constant: −0.9 units/frame² (Q16.16)
+// Scaled to match the stage world size (stage width ~850 units).
+export const GRAVITY = toFixed(-0.9);
 
 export function applyGravitySystem(): void {
   for (const [id, phys] of physicsComponents) {

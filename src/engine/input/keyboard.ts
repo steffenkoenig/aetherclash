@@ -58,10 +58,10 @@ function onKeyDown(e: KeyboardEvent): void {
   }
   keysDown.add(e.code);
 
-  if (e.code === 'KeyA' || e.code === 'ArrowLeft')  mostRecentHorizontal = 'left';
-  if (e.code === 'KeyD' || e.code === 'ArrowRight') mostRecentHorizontal = 'right';
-  if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') mostRecentVertical = 'up';
-  if (e.code === 'KeyS' || e.code === 'ArrowDown')  mostRecentVertical = 'down';
+  if (e.code === 'KeyA') mostRecentHorizontal = 'left';
+  if (e.code === 'KeyD') mostRecentHorizontal = 'right';
+  if (e.code === 'KeyW' || e.code === 'Space') mostRecentVertical = 'up';
+  if (e.code === 'KeyS') mostRecentVertical = 'down';
 }
 
 function onKeyUp(e: KeyboardEvent): void {
@@ -72,10 +72,10 @@ function onKeyUp(e: KeyboardEvent): void {
 // ── Sampling ──────────────────────────────────────────────────────────────────
 
 export function sampleKeyboard(): InputState {
-  const left  = keysDown.has('KeyA') || keysDown.has('ArrowLeft');
-  const right = keysDown.has('KeyD') || keysDown.has('ArrowRight');
-  const up    = keysDown.has('KeyW') || keysDown.has('ArrowUp') || keysDown.has('Space');
-  const down  = keysDown.has('KeyS') || keysDown.has('ArrowDown');
+  const left  = keysDown.has('KeyA');
+  const right = keysDown.has('KeyD');
+  const up    = keysDown.has('KeyW') || keysDown.has('Space');
+  const down  = keysDown.has('KeyS');
 
   // SOCD: Last Input Wins
   let stickX = 0;
@@ -96,10 +96,10 @@ export function sampleKeyboard(): InputState {
     stickY = -1.0;
   }
 
-  const jumpKeys    = ['KeyW', 'ArrowUp', 'Space'];
-  const attackKeys  = ['KeyJ'];
-  const specialKeys = ['KeyK'];
-  const grabKeys    = ['KeyI'];
+  const jumpKeys    = ['KeyW', 'Space'];
+  const attackKeys  = ['KeyE'];
+  const specialKeys = ['KeyQ'];
+  const grabKeys    = ['KeyR'];
 
   const jumpHeld    = jumpKeys.some(k => keysDown.has(k));
   const attackHeld  = attackKeys.some(k => keysDown.has(k));
@@ -116,7 +116,7 @@ export function sampleKeyboard(): InputState {
     jump:    jumpHeld,
     attack:  attackHeld,
     special: specialHeld,
-    shield:  keysDown.has('KeyL'),
+    shield:  keysDown.has('KeyF'),
     grab:    grabHeld,
     jumpJustPressed,
     attackJustPressed,
@@ -132,6 +132,80 @@ export function sampleKeyboard(): InputState {
   keysPressed.clear();
 
   return state;
+}
+
+// ── Network encoding ──────────────────────────────────────────────────────────
+
+/**
+ * Compact 16-bit wire representation of an InputState.
+ *
+ * Bit layout (from networking.md § Input Encoding):
+ *   0     Jump
+ *   1     Attack
+ *   2     Special
+ *   3     Shield
+ *   4     Grab
+ *   5–6   Stick X  (0 = left, 1 = neutral, 2 = right)
+ *   7–8   Stick Y  (0 = down, 1 = neutral, 2 = up)
+ *   9     C-Stick X pushed (nonzero → set)
+ *   10    C-Stick Y pushed (nonzero → set)
+ *   11–15 Reserved
+ */
+export type PackedInputState = number; // uint16
+
+/** Encode a rich InputState into a compact 16-bit PackedInputState for network transmission. */
+export function encodeInput(state: InputState): PackedInputState {
+  let packed = 0;
+
+  if (state.jump)    packed |= 1 << 0;
+  if (state.attack)  packed |= 1 << 1;
+  if (state.special) packed |= 1 << 2;
+  if (state.shield)  packed |= 1 << 3;
+  if (state.grab)    packed |= 1 << 4;
+
+  // Stick X: 0 = left (< −0.5), 1 = neutral, 2 = right (> 0.5)
+  const stickXCode = state.stickX < -0.5 ? 0 : state.stickX > 0.5 ? 2 : 1;
+  packed |= (stickXCode & 0x3) << 5;
+
+  // Stick Y: 0 = down (< −0.5), 1 = neutral, 2 = up (> 0.5)
+  const stickYCode = state.stickY < -0.5 ? 0 : state.stickY > 0.5 ? 2 : 1;
+  packed |= (stickYCode & 0x3) << 7;
+
+  if (state.cStickX !== 0) packed |= 1 << 9;
+  if (state.cStickY !== 0) packed |= 1 << 10;
+
+  return packed & 0xFFFF;
+}
+
+/**
+ * Decode a 16-bit PackedInputState back into a full InputState.
+ * Edge-detection fields (jumpJustPressed etc.) are always false — they cannot
+ * be round-tripped over the network and must be derived locally.
+ */
+export function decodeInput(packed: PackedInputState): InputState {
+  const jump    = (packed & (1 << 0)) !== 0;
+  const attack  = (packed & (1 << 1)) !== 0;
+  const special = (packed & (1 << 2)) !== 0;
+  const shield  = (packed & (1 << 3)) !== 0;
+  const grab    = (packed & (1 << 4)) !== 0;
+
+  const stickXCode = (packed >> 5) & 0x3;
+  const stickX = stickXCode === 0 ? -1.0 : stickXCode === 2 ? 1.0 : 0;
+
+  const stickYCode = (packed >> 7) & 0x3;
+  const stickY = stickYCode === 0 ? -1.0 : stickYCode === 2 ? 1.0 : 0;
+
+  const cStickX = (packed & (1 << 9))  !== 0 ? 1.0 : 0;
+  const cStickY = (packed & (1 << 10)) !== 0 ? 1.0 : 0;
+
+  return {
+    jump, attack, special, shield, grab,
+    jumpJustPressed:    false,
+    attackJustPressed:  false,
+    specialJustPressed: false,
+    grabJustPressed:    false,
+    stickX, stickY, cStickX, cStickY,
+  };
 }
 
 // Expose for testing / headless simulation
@@ -150,4 +224,9 @@ export function clearKeyState(): void {
   keysPressed.clear();
   mostRecentHorizontal = null;
   mostRecentVertical   = null;
+}
+
+/** Read-only snapshot of currently held key codes (for the HUD key display). */
+export function getKeysDown(): ReadonlySet<string> {
+  return keysDown;
 }

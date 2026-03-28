@@ -11,6 +11,11 @@ import {
 } from '../ecs/component.js';
 import { transitionFighterState } from './stateMachine.js';
 
+/** X coordinate used to hide a fighter that has been eliminated (far off-screen). */
+const ELIMINATED_X: Fixed = toFixed(-99999);
+/** Y coordinate used to hide a fighter that has been eliminated. */
+const ELIMINATED_Y: Fixed = toFixed(-99999);
+
 // ── Blast zone config ─────────────────────────────────────────────────────────
 
 export interface BlastZones {
@@ -55,7 +60,7 @@ export const respawnTimers = new Map<EntityId, number>();
  * Check whether `entityId` has crossed a blast zone boundary.
  * If so:
  *   - Decrement stocks.
- *   - If stocks reach 0: keep the fighter in KO (match-end handled externally).
+ *   - If stocks reach 0: freeze physics and lock into KO (match-end handled externally).
  *   - Otherwise: teleport to the respawn point, reset physics, grant invincibility,
  *     reset damage, and return the fighter to idle.
  */
@@ -64,6 +69,9 @@ export function checkBlastZones(entityId: EntityId): void {
   const phys      = physicsComponents.get(entityId);
   const fighter   = fighterComponents.get(entityId);
   if (!transform || !phys || !fighter) return;
+
+  // Already eliminated — do not process further (prevents infinite decrement/fall).
+  if (fighter.stocks <= 0) return;
 
   const { x, y } = transform;
   const { left, right, top, bottom } = activeBlastZones;
@@ -75,8 +83,16 @@ export function checkBlastZones(entityId: EntityId): void {
   fighter.stocks--;
 
   if (fighter.stocks <= 0) {
-    // No stocks remain — lock into KO; match termination is handled externally.
+    // No stocks remain — lock into KO and freeze physics so the fighter stops falling.
     transitionFighterState(entityId, 'KO');
+    phys.vx       = toFixed(0);
+    phys.vy       = toFixed(0);
+    phys.grounded = true; // stop gravity from accumulating
+    // Move the entity off-screen so it doesn't interfere with the play field.
+    transform.x    = ELIMINATED_X;
+    transform.y    = ELIMINATED_Y;
+    transform.prevX = ELIMINATED_X;
+    transform.prevY = ELIMINATED_Y;
     return;
   }
 

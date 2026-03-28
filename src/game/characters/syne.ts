@@ -5,12 +5,12 @@ import { toFixed } from '../../engine/physics/fixednum.js';
 import type { FighterStats, Move } from '../../engine/ecs/component.js';
 
 export const SYNE_STATS: FighterStats = {
-  maxFallSpeed:     toFixed(-0.70),
-  maxFastFallSpeed: toFixed(-1.40),
-  jumpForce:        toFixed(1.25),
-  doubleJumpForce:  toFixed(1.05),
-  walkSpeed:        toFixed(0.7),
-  runSpeed:         toFixed(1.0),
+  maxFallSpeed:     toFixed(-9.0),
+  maxFastFallSpeed: toFixed(-13.0),
+  jumpForce:        toFixed(17.0),
+  doubleJumpForce:  toFixed(15.0),
+  walkSpeed:        toFixed(5.5),
+  runSpeed:         toFixed(8.5),
   weightClass:      toFixed(0.8),
 };
 

@@ -5,12 +5,12 @@ import { toFixed } from '../../engine/physics/fixednum.js';
 import type { FighterStats, Move } from '../../engine/ecs/component.js';
 
 export const GORUN_STATS: FighterStats = {
-  maxFallSpeed:     toFixed(-1.10),
-  maxFastFallSpeed: toFixed(-2.00),
-  jumpForce:        toFixed(0.9),
-  doubleJumpForce:  toFixed(0.7),
-  walkSpeed:        toFixed(0.4),
-  runSpeed:         toFixed(0.7),
+  maxFallSpeed:     toFixed(-16.0),
+  maxFastFallSpeed: toFixed(-24.0),
+  jumpForce:        toFixed(14.0),
+  doubleJumpForce:  toFixed(12.0),
+  walkSpeed:        toFixed(3.5),
+  runSpeed:         toFixed(6.0),
   weightClass:      toFixed(1.7),
 };
 
