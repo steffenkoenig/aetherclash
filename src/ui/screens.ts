@@ -64,6 +64,20 @@ let callbacks: ScreensCallbacks | null = null;
 let selectedCharacter: CharacterId | null = null;
 let selectedStage:     StageId     | null = null;
 
+/** Which screen is currently showing, so Escape knows where to go back to. */
+let currentScreen: 'lobby' | 'characterSelect' | 'stageSelect' = 'lobby';
+
+// ── Escape key back-navigation ────────────────────────────────────────────────
+
+function onScreensKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return;
+  if (currentScreen === 'characterSelect') {
+    showLobby();
+  } else if (currentScreen === 'stageSelect') {
+    showCharacterSelect();
+  }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -86,11 +100,13 @@ export function initScreens(cb: ScreensCallbacks): void {
     color: '#fff',
   });
   document.body.appendChild(root);
+  window.addEventListener('keydown', onScreensKeydown);
   showLobby();
 }
 
 /** Remove all screen DOM elements. */
 export function disposeScreens(): void {
+  window.removeEventListener('keydown', onScreensKeydown);
   root?.parentNode?.removeChild(root);
   root = null;
   callbacks = null;
@@ -106,6 +122,7 @@ function clear(): void {
 }
 
 function showLobby(): void {
+  currentScreen = 'lobby';
   clear();
   if (!root) return;
 
@@ -125,6 +142,7 @@ function showLobby(): void {
 }
 
 function showCharacterSelect(): void {
+  currentScreen = 'characterSelect';
   clear();
   if (!root) return;
 
@@ -210,6 +228,7 @@ function showCharacterSelect(): void {
 }
 
 function showStageSelect(): void {
+  currentScreen = 'stageSelect';
   clear();
   if (!root) return;
 

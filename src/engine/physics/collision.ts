@@ -11,6 +11,7 @@ import {
   ledgeColliderComponents,
   type Move,
 } from '../ecs/component.js';
+import type { InputState } from '../input/keyboard.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
 import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag } from './stateMachine.js';
 
@@ -225,10 +226,13 @@ const LEDGE_RELEASE_COOLDOWN = 60; // 1 s at 60 Hz
  *
  * @param fighters   - All fighter entity IDs participating in the match.
  * @param moveData   - Map<characterId, Map<moveName, Move>> — static move tables.
+ * @param inputMap   - Optional map of entity ID → current InputState, used to
+ *                     read the victim's stickX for Directional Influence (DI).
  */
 export function checkHitboxSystem(
   fighters: EntityId[],
   moveData: Map<string, Map<string, Move>>,
+  inputMap?: ReadonlyMap<EntityId, InputState>,
 ): void {
   for (const attackerId of fighters) {
     const attackerFighter    = fighterComponents.get(attackerId);
@@ -299,6 +303,11 @@ export function checkHitboxSystem(
         // ── Hit confirmed ─────────────────────────────────────────────────
         hitRegistry.add(registryKey);
 
+        // Read victim's DI stick input (clamped to ±1) for Directional
+        // Influence. Only the first frame of hitstun uses DI (applied once
+        // by applyKnockback). If no inputMap provided, DI is 0 (neutral).
+        const diX = inputMap?.get(victimId)?.stickX ?? 0;
+
         applyKnockback(victimId, {
           victimDamage:       fixedAdd(victimFighter.damagePercent, toFixed(hitbox.damage)),
           victimWeight:       victimFighter.stats.weightClass,
@@ -306,7 +315,7 @@ export function checkHitboxSystem(
           moveBaseKnockback:  hitbox.baseKnockback,
           launchAngle:        hitbox.launchAngle,
           attackerFacingRight: facingRight,
-          diX: 0, // DI is applied by the caller if input state is available
+          diX,
         });
 
         // Accumulate damage on victim.
