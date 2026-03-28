@@ -26,7 +26,7 @@ export const VELA_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 4, id: 'vela_jab1',
     }],
     hurtboxes: [{ activeFrames: [0, 16], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 13, landingLag: 0,
+    iasa: 13, landingLag: 0, nextJab: 'neutralJab2',
   },
   neutralJab2: {
     totalFrames: 18,
@@ -38,7 +38,7 @@ export const VELA_MOVES: Record<string, Move> = {
       launchAngle: 50, hitlagFrames: 4, id: 'vela_jab2',
     }],
     hurtboxes: [{ activeFrames: [0, 18], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 14, landingLag: 0,
+    iasa: 14, landingLag: 0, nextJab: 'neutralJab3',
   },
   // === TILTS ===
   forwardTilt: {
@@ -87,7 +87,7 @@ export const VELA_MOVES: Record<string, Move> = {
       { activeFrames: [21, 28], offsetX: toFixed(55), offsetY: toFixed(5), width: toFixed(40), height: toFixed(28), damage: 20, knockbackScaling: toFixed(1.6), baseKnockback: toFixed(10), launchAngle: 38, hitlagFrames: 7, id: 'vela_fsmash_2' },
     ],
     hurtboxes: [{ activeFrames: [0, 52], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 42, landingLag: 0,
+    iasa: 42, landingLag: 0, canCharge: true,
   },
   upSmash: {
     totalFrames: 44,
@@ -99,7 +99,7 @@ export const VELA_MOVES: Record<string, Move> = {
       launchAngle: 88, hitlagFrames: 6, id: 'vela_usmash',
     }],
     hurtboxes: [{ activeFrames: [0, 44], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 36, landingLag: 0,
+    iasa: 36, landingLag: 0, canCharge: true,
   },
   downSmash: {
     totalFrames: 42,
@@ -108,7 +108,32 @@ export const VELA_MOVES: Record<string, Move> = {
       { activeFrames: [8, 14], offsetX: toFixed(-28), offsetY: toFixed(-15), width: toFixed(38), height: toFixed(25), damage: 14, knockbackScaling: toFixed(1.2), baseKnockback: toFixed(7), launchAngle: 150, hitlagFrames: 5, id: 'vela_dsmash_l' },
     ],
     hurtboxes: [{ activeFrames: [0, 42], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 34, landingLag: 0,
+    iasa: 34, landingLag: 0, canCharge: true,
+  },
+  // === THROWS ===
+  forwardThrow: {
+    totalFrames: 24,
+    hitboxes: [{ activeFrames: [6, 8], offsetX: toFixed(20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 6, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(7), launchAngle: 20, hitlagFrames: 4, id: 'vela_fthrow' }],
+    hurtboxes: [{ activeFrames: [0, 24], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 24, landingLag: 0, isThrow: true,
+  },
+  backThrow: {
+    totalFrames: 26,
+    hitboxes: [{ activeFrames: [8, 10], offsetX: toFixed(-20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 8, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(8), launchAngle: 155, hitlagFrames: 4, id: 'vela_bthrow' }],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 0, isThrow: true,
+  },
+  upThrow: {
+    totalFrames: 22,
+    hitboxes: [{ activeFrames: [6, 8], offsetX: toFixed(0), offsetY: toFixed(20), width: toFixed(20), height: toFixed(20), damage: 5, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(9), launchAngle: 90, hitlagFrames: 4, id: 'vela_uthrow' }],
+    hurtboxes: [{ activeFrames: [0, 22], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 22, landingLag: 0, isThrow: true,
+  },
+  downThrow: {
+    totalFrames: 28,
+    hitboxes: [{ activeFrames: [8, 10], offsetX: toFixed(0), offsetY: toFixed(-10), width: toFixed(20), height: toFixed(20), damage: 5, knockbackScaling: toFixed(0.7), baseKnockback: toFixed(5), launchAngle: 65, hitlagFrames: 4, id: 'vela_dthrow' }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 0, isThrow: true,
   },
   // === AERIALS ===
   neutralAir: {

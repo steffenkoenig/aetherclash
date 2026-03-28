@@ -26,7 +26,7 @@ export const ZIRA_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 3, id: 'zira_jab1',
     }],
     hurtboxes: [{ activeFrames: [0, 10], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 8, landingLag: 0,
+    iasa: 8, landingLag: 0, nextJab: 'neutralJab2',
   },
   neutralJab2: {
     totalFrames: 10,
@@ -38,7 +38,7 @@ export const ZIRA_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 3, id: 'zira_jab2',
     }],
     hurtboxes: [{ activeFrames: [0, 10], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 8, landingLag: 0,
+    iasa: 8, landingLag: 0, nextJab: 'neutralJab3',
   },
   // Rapid jab — multi-hit loop, each instance is 5 frames
   rapidJab: {
@@ -101,7 +101,7 @@ export const ZIRA_MOVES: Record<string, Move> = {
       launchAngle: 40, hitlagFrames: 6, id: 'zira_fsmash',
     }],
     hurtboxes: [{ activeFrames: [0, 46], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 36, landingLag: 0,
+    iasa: 36, landingLag: 0, canCharge: true,
   },
   upSmash: {
     totalFrames: 40,
@@ -110,7 +110,7 @@ export const ZIRA_MOVES: Record<string, Move> = {
       { activeFrames: [14, 20], offsetX: toFixed(0), offsetY: toFixed(42), width: toFixed(40), height: toFixed(32), damage: 13, knockbackScaling: toFixed(1.2), baseKnockback: toFixed(8), launchAngle: 90, hitlagFrames: 5, id: 'zira_usmash_2' },
     ],
     hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 32, landingLag: 0,
+    iasa: 32, landingLag: 0, canCharge: true,
   },
   downSmash: {
     totalFrames: 36,
@@ -119,7 +119,32 @@ export const ZIRA_MOVES: Record<string, Move> = {
       { activeFrames: [6, 12], offsetX: toFixed(-22), offsetY: toFixed(-14), width: toFixed(30), height: toFixed(20), damage: 10, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5), launchAngle: 150, hitlagFrames: 4, id: 'zira_dsmash_l' },
     ],
     hurtboxes: [{ activeFrames: [0, 36], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 28, landingLag: 0,
+    iasa: 28, landingLag: 0, canCharge: true,
+  },
+  // === THROWS ===
+  forwardThrow: {
+    totalFrames: 22,
+    hitboxes: [{ activeFrames: [6, 8], offsetX: toFixed(20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 5, knockbackScaling: toFixed(0.85), baseKnockback: toFixed(7), launchAngle: 20, hitlagFrames: 4, id: 'zira_fthrow' }],
+    hurtboxes: [{ activeFrames: [0, 22], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 22, landingLag: 0, isThrow: true,
+  },
+  backThrow: {
+    totalFrames: 24,
+    hitboxes: [{ activeFrames: [8, 10], offsetX: toFixed(-20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 7, knockbackScaling: toFixed(0.95), baseKnockback: toFixed(8), launchAngle: 150, hitlagFrames: 4, id: 'zira_bthrow' }],
+    hurtboxes: [{ activeFrames: [0, 24], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 24, landingLag: 0, isThrow: true,
+  },
+  upThrow: {
+    totalFrames: 20,
+    hitboxes: [{ activeFrames: [6, 8], offsetX: toFixed(0), offsetY: toFixed(20), width: toFixed(20), height: toFixed(20), damage: 4, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(11), launchAngle: 90, hitlagFrames: 4, id: 'zira_uthrow' }],
+    hurtboxes: [{ activeFrames: [0, 20], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 20, landingLag: 0, isThrow: true,
+  },
+  downThrow: {
+    totalFrames: 26,
+    hitboxes: [{ activeFrames: [8, 10], offsetX: toFixed(0), offsetY: toFixed(-10), width: toFixed(20), height: toFixed(20), damage: 4, knockbackScaling: toFixed(0.7), baseKnockback: toFixed(5), launchAngle: 60, hitlagFrames: 4, id: 'zira_dthrow' }],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 0, isThrow: true,
   },
   // === AERIALS ===
   neutralAir: {

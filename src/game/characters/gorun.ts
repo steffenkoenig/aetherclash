@@ -80,7 +80,7 @@ export const GORUN_MOVES: Record<string, Move> = {
       launchAngle: 40, hitlagFrames: 8, id: 'gorun_fsmash',
     }],
     hurtboxes: [{ activeFrames: [0, 70], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 58, landingLag: 0,
+    iasa: 58, landingLag: 0, canCharge: true,
   },
   upSmash: {
     totalFrames: 52,
@@ -89,7 +89,7 @@ export const GORUN_MOVES: Record<string, Move> = {
       { activeFrames: [19, 27], offsetX: toFixed(0), offsetY: toFixed(55), width: toFixed(60), height: toFixed(45), damage: 22, knockbackScaling: toFixed(1.6), baseKnockback: toFixed(12), launchAngle: 90, hitlagFrames: 8, id: 'gorun_usmash_2' },
     ],
     hurtboxes: [{ activeFrames: [0, 52], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 44, landingLag: 0,
+    iasa: 44, landingLag: 0, canCharge: true,
   },
   downSmash: {
     totalFrames: 48,
@@ -98,7 +98,32 @@ export const GORUN_MOVES: Record<string, Move> = {
       { activeFrames: [10, 18], offsetX: toFixed(-30), offsetY: toFixed(-15), width: toFixed(55), height: toFixed(30), damage: 20, knockbackScaling: toFixed(1.4), baseKnockback: toFixed(8), launchAngle: 150, hitlagFrames: 7, id: 'gorun_dsmash_l' },
     ],
     hurtboxes: [{ activeFrames: [0, 48], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 40, landingLag: 0,
+    iasa: 40, landingLag: 0, canCharge: true,
+  },
+  // === THROWS ===
+  forwardThrow: {
+    totalFrames: 32,
+    hitboxes: [{ activeFrames: [10, 12], offsetX: toFixed(25), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 12, knockbackScaling: toFixed(1.2), baseKnockback: toFixed(10), launchAngle: 18, hitlagFrames: 5, id: 'gorun_fthrow' }],
+    hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 32, landingLag: 0, isThrow: true,
+  },
+  backThrow: {
+    totalFrames: 35,
+    hitboxes: [{ activeFrames: [12, 14], offsetX: toFixed(-25), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 14, knockbackScaling: toFixed(1.3), baseKnockback: toFixed(12), launchAngle: 160, hitlagFrames: 5, id: 'gorun_bthrow' }],
+    hurtboxes: [{ activeFrames: [0, 35], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 35, landingLag: 0, isThrow: true,
+  },
+  upThrow: {
+    totalFrames: 30,
+    hitboxes: [{ activeFrames: [10, 12], offsetX: toFixed(0), offsetY: toFixed(20), width: toFixed(20), height: toFixed(20), damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(12), launchAngle: 90, hitlagFrames: 5, id: 'gorun_uthrow' }],
+    hurtboxes: [{ activeFrames: [0, 30], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 30, landingLag: 0, isThrow: true,
+  },
+  downThrow: {
+    totalFrames: 38,
+    hitboxes: [{ activeFrames: [12, 14], offsetX: toFixed(0), offsetY: toFixed(-10), width: toFixed(20), height: toFixed(20), damage: 8, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(7), launchAngle: 75, hitlagFrames: 4, id: 'gorun_dthrow' }],
+    hurtboxes: [{ activeFrames: [0, 38], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 38, landingLag: 0, isThrow: true,
   },
   // === AERIALS ===
   neutralAir: {
