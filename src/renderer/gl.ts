@@ -21,7 +21,7 @@ import type { Platform } from '../engine/physics/collision.js';
 import { fixedSub } from '../engine/physics/fixednum.js';
 import { camera } from './camera.js';
 import { loadGLTF } from './models.js';
-import { activeItems, type ItemCategory } from '../game/items/items.js';
+import { activeItems, ASSIST_ORB_MAX_HP, type ItemCategory } from '../game/items/items.js';
 
 // ── Internal resolution ───────────────────────────────────────────────────────
 
@@ -526,8 +526,46 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
         mesh.position.set(wx, wy + 18 + bob, 0);
       }
 
-      // Slow spin around Y-axis
-      mesh.rotation.y = timeSec * 1.8 + item.entityId * 0.9;
+      // ── Per-item visual state ────────────────────────────────────────────
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      let spinSpeed     = 1.8;
+      let emissiveScale = 1.0;
+      let meshScale     = 1.0;
+
+      if (item.itemType === 'boomerang' && item.heldBy === null) {
+        // Spin fast while in flight
+        spinSpeed = 8.0;
+      } else if (item.itemType === 'explosiveSphere' && item.proxTrap) {
+        if (item.proxArmFrames === 0 && item.deployFrames > 0) {
+          // Armed mine: pulse red
+          const pulse = (Math.sin(timeSec * 8) + 1) / 2;
+          mat.color.setHex(0xFF2200);
+          mat.emissive.setHex(0xFF2200);
+          emissiveScale = 0.5 + pulse * 1.5;
+          meshScale = 1.0 + pulse * 0.15;
+        }
+      } else if (item.itemType === 'assistOrb') {
+        // Scale with remaining HP (full size at 20 HP, 50% at 0)
+        const hpFrac = Math.max(0, item.orbHp / ASSIST_ORB_MAX_HP);
+        meshScale = 0.5 + hpFrac * 0.5;
+        // Pulse faster as HP is lower
+        const pulseRate = 2.0 + (1 - hpFrac) * 6;
+        emissiveScale = 0.5 + ((Math.sin(timeSec * pulseRate) + 1) / 2) * 0.8;
+      } else if (item.itemType === 'nexusCapsule' && item.creatureActive) {
+        // Green glow while creature is active
+        mat.color.setHex(0x44FF88);
+        mat.emissive.setHex(0x44FF88);
+        emissiveScale = 0.9 + Math.sin(timeSec * 4) * 0.3;
+      } else if (item.itemType === 'blastImp' && item.walkActive) {
+        // Orange glow when walking toward explosion
+        mat.color.setHex(0xFF8800);
+        mat.emissive.setHex(0xFF8800);
+        spinSpeed = 4.0;
+      }
+
+      mat.emissiveIntensity = 0.55 * emissiveScale;
+      mesh.scale.setScalar(meshScale);
+      mesh.rotation.y = timeSec * spinSpeed + item.entityId * 0.9;
     }
   }
 

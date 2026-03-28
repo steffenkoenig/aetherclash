@@ -100,6 +100,12 @@ export const ITEM_DEPLOYED_FRAMES = 300;
 export const THUNDER_BOLT_PULSE_FRAMES = 60;
 /** thunderBolt: number of shock pulses. */
 export const THUNDER_BOLT_PULSES = 3;
+/** explosiveSphere: frames the armed mine waits before auto-detonation (4 s @ 60 Hz). */
+export const EXPLOSIVE_SPHERE_FUSE_FRAMES = 240;
+/** assistOrb: maximum hit-points (breaks and summons guardian at 0). */
+export const ASSIST_ORB_MAX_HP = 20;
+/** assistOrb: Q16.16 world-unit radius within which fighter attacks damage the orb. */
+export const ASSIST_ORB_HIT_RANGE = 50 * 65536;
 
 // ── Item entity ───────────────────────────────────────────────────────────────
 
@@ -132,7 +138,8 @@ export interface ItemEntity {
   fuelFrames:    number;
   /** runeshard: remaining magic shot charges (starts at RUNESHARD_CHARGES). */
   charges:       number;
-  /** runeshard: frames until next auto-shot. */
+  /** runeshard: frames until next auto-shot; also used as a general per-pass
+   *  hit cooldown for boomerang (30 frames between hits on each directional pass). */
   shotCooldown:  number;
   /** blastImp: frames until it stands up (when > 0, counting down). */
   walkFrames:    number;
@@ -267,7 +274,7 @@ function buildItem(category: ItemCategory, x: Fixed, y: Fixed): ItemEntity {
     }
     case 'assistOrb':
       itemType = 'assistOrb';
-      orbHp = 20;
+      orbHp = ASSIST_ORB_MAX_HP;
       orbColour = ORB_COLOURS[nextRng() % ORB_COLOURS.length] ?? 'gold';
       break;
     case 'healingCharm':
@@ -407,7 +414,7 @@ export function tickItems(currentFrame: number): void {
       item.throwArmFrames--;
     }
 
-    // Boomerang movement
+    // Boomerang movement + hit detection
     if (item.itemType === 'boomerang') {
       item.x = fixedAdd(item.x, item.vx);
       item.y = fixedAdd(item.y, item.vy);
@@ -415,11 +422,18 @@ export function tickItems(currentFrame: number): void {
         item.boomerangReturnFrame--;
         if (item.boomerangReturnFrame === 0) {
           item.vx = -item.vx;
+          item.shotCooldown = 0; // reset hit cooldown on direction reversal
         }
+      }
+      // Hit fighters along the flight path (10% outward, 12% returning)
+      if (item.shotCooldown > 0) {
+        item.shotCooldown--;
+      } else {
+        checkBoomerangHit(item);
       }
     }
 
-    // Explosive sphere proximity trap: slide to its landing spot, then countdown
+    // Explosive sphere proximity trap: slide to its landing spot, then arm a fuse
     if (item.itemType === 'explosiveSphere' && item.proxTrap) {
       if (item.proxArmFrames > 0) {
         // Slide while arming
@@ -427,8 +441,54 @@ export function tickItems(currentFrame: number): void {
         item.y = fixedAdd(item.y, item.vy);
         if ((item.y | 0) < 0) { item.y = 0; item.vy = 0; }
         item.proxArmFrames--;
-      } else {
-        explodeItem(item);
+        if (item.proxArmFrames === 0) {
+          // Become stationary; start the 4-second fuse (240 frames)
+          item.vx = toFixed(0);
+          item.vy = toFixed(0);
+          item.deployFrames = EXPLOSIVE_SPHERE_FUSE_FRAMES;
+        }
+      } else if (item.deployFrames > 0) {
+        // Armed and waiting — check for fighter proximity OR fuse expiry
+        item.deployFrames--;
+        const PROX_RANGE = 2 * 30 * 65536; // 2 × fighter half-width in Q16.16
+        let triggered = item.deployFrames <= 0;
+        if (!triggered) {
+          for (const [fid] of fighterComponents) {
+            const ft = transformComponents.get(fid);
+            if (!ft) continue;
+            if (Math.abs((ft.x - item.x) | 0) <= PROX_RANGE &&
+                Math.abs((ft.y - item.y) | 0) <= PROX_RANGE) {
+              triggered = true;
+              break;
+            }
+          }
+        }
+        if (triggered) {
+          explodeItem(item);
+          removeItem(i);
+          continue;
+        }
+      }
+    }
+
+    // assistOrb: on-stage — take damage from fighters in attack state nearby
+    if (item.itemType === 'assistOrb') {
+      const ORB_HIT_RANGE = ASSIST_ORB_HIT_RANGE;
+      let orbBroken = false;
+      for (const [fid, fighter] of fighterComponents) {
+        if (fighter.state !== 'attack') continue;
+        const t = transformComponents.get(fid);
+        if (!t) continue;
+        if (Math.abs((t.x - item.x) | 0) <= ORB_HIT_RANGE &&
+            Math.abs((t.y - item.y) | 0) <= ORB_HIT_RANGE) {
+          item.orbHp -= 5;
+          if (item.orbHp <= 0) {
+            orbBroken = true;
+            break;
+          }
+        }
+      }
+      if (orbBroken) {
         removeItem(i);
         continue;
       }
@@ -580,6 +640,7 @@ export function tickItems(currentFrame: number): void {
       case 'speedBoots':
       case 'mirrorShard':
       case 'aetherCrystal':
+      case 'assistOrb':
         item.vy = fixedAdd(item.vy, GRAVITY);
         item.y  = fixedAdd(item.y,  item.vy);
         if ((item.y | 0) < 0) { item.y = 0; item.vy = 0; }
@@ -611,6 +672,39 @@ function applyFireAura(item: ItemEntity): void {
     if (Math.abs((t.x - item.x) | 0) <= FIRE_RANGE &&
         Math.abs((t.y - item.y) | 0) <= FIRE_RANGE) {
       fighter.damagePercent = fixedAdd(fighter.damagePercent, toFixed(3));
+    }
+  }
+}
+
+// ── boomerang: hit fighters along flight path ─────────────────────────────────────
+
+/**
+ * Damage the first fighter within range of the boomerang.
+ * 10% on the outward pass (`boomerangReturnFrame > 0`), 12% on the return.
+ * Uses `item.shotCooldown` as a 30-frame per-pass cooldown to avoid
+ * hitting the same fighter every single frame.
+ */
+function checkBoomerangHit(item: ItemEntity): void {
+  const HIT_RANGE = 25 * 65536; // Q16.16
+  const isReturning = item.boomerangReturnFrame === 0;
+  const damage = isReturning ? toFixed(12) : toFixed(10);
+
+  for (const [fid, fighter] of fighterComponents) {
+    if (fighter.state === 'KO') continue;
+    const t = transformComponents.get(fid);
+    if (!t) continue;
+    if (Math.abs((t.x - item.x) | 0) <= HIT_RANGE &&
+        Math.abs((t.y - item.y) | 0) <= HIT_RANGE) {
+      fighter.damagePercent = fixedAdd(fighter.damagePercent, damage);
+      const phys = physicsComponents.get(fid);
+      if (phys) {
+        const dir = item.vx > 0 ? 1 : -1;
+        phys.vx = fixedAdd(phys.vx, toFixed(1.5 * dir));
+        phys.vy = fixedAdd(phys.vy, toFixed(1.5));
+        phys.grounded = false;
+      }
+      item.shotCooldown = 30; // 0.5 s cooldown before next hit
+      return;
     }
   }
 }

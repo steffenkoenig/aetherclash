@@ -1002,3 +1002,117 @@ describe('getHeldItem and useHeldItem', () => {
     expect(toFloat(victimFighter.damagePercent)).toBeGreaterThanOrEqual(20);
   });
 });
+
+// ── Regression tests for previously-missing item actions ─────────────────────
+
+describe('item action regression', () => {
+  beforeEach(resetAll);
+
+  it('boomerang in flight damages fighters it passes through', () => {
+    const fighter = makeGroundedFighter(20, 30);
+
+    // Boomerang flying rightward, overlapping the fighter's position
+    activeItems.push({
+      entityId: 990, itemType: 'boomerang', category: 'throwableProjectile',
+      heldBy: null, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(20), y: toFixed(30),
+      vx: toFixed(5), vy: toFixed(0),
+      boomerangReturnFrame: 20, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    const before = fighterComponents.get(fighter)!.damagePercent;
+    tickItems(1);
+    const after = fighterComponents.get(fighter)!.damagePercent;
+    expect(after).toBeGreaterThan(before); // 10% outward damage applied
+  });
+
+  it('boomerang does not deal damage again within cooldown window', () => {
+    const fighter = makeGroundedFighter(20, 30);
+
+    activeItems.push({
+      entityId: 991, itemType: 'boomerang', category: 'throwableProjectile',
+      heldBy: null, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(20), y: toFixed(30),
+      vx: toFixed(5), vy: toFixed(0),
+      boomerangReturnFrame: 20, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    tickItems(1); // first hit
+    const afterFirst = fighterComponents.get(fighter)!.damagePercent;
+    tickItems(2); // within cooldown — should NOT deal damage again
+    const afterSecond = fighterComponents.get(fighter)!.damagePercent;
+    expect(afterSecond).toBe(afterFirst);
+  });
+
+  it('assistOrb loses HP when a fighter in attack state is nearby', () => {
+    const fighter = makeGroundedFighter(0, 30);
+    fighterComponents.get(fighter)!.state = 'attack';
+
+    activeItems.push({
+      entityId: 992, itemType: 'assistOrb', category: 'assistOrb',
+      heldBy: null, durationFrames: 0, orbHp: 20, orbColour: 'gold',
+      x: toFixed(0), y: toFixed(30),
+      vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    tickItems(1);
+    // orbHp should have decreased
+    expect(activeItems[0]!.orbHp).toBeLessThan(20);
+  });
+
+  it('assistOrb is removed when HP reaches 0', () => {
+    const fighter = makeGroundedFighter(0, 30);
+    fighterComponents.get(fighter)!.state = 'attack';
+
+    activeItems.push({
+      entityId: 993, itemType: 'assistOrb', category: 'assistOrb',
+      heldBy: null, durationFrames: 0, orbHp: 5, orbColour: 'gold',
+      x: toFixed(0), y: toFixed(30),
+      vx: toFixed(0), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: false, proxArmFrames: 0,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    tickItems(1);
+    // Orb with 5 HP takes 5 damage per hit → should be removed
+    expect(activeItems.find(it => it.entityId === 993)).toBeUndefined();
+  });
+
+  it('explosiveSphere arms into fuse after slide phase', () => {
+    makeGroundedFighter(1000, 30); // far away so proximity doesn't trigger
+
+    activeItems.push({
+      entityId: 994, itemType: 'explosiveSphere', category: 'throwableProjectile',
+      heldBy: null, durationFrames: 0, orbHp: 0, orbColour: null,
+      x: toFixed(0), y: toFixed(30),
+      vx: toFixed(3), vy: toFixed(0),
+      boomerangReturnFrame: 0, proxTrap: true, proxArmFrames: 1,
+      fuelFrames: 0, charges: 0, shotCooldown: 0,
+      walkFrames: 0, walkActive: false, deployed: false, deployFrames: 0,
+      reflectReady: false, flightFrames: 0, creatureActive: false,
+      creatureFrames: 0, boltArmed: false, boltFrames: 0, throwArmFrames: 0,
+    });
+
+    tickItems(1); // proxArmFrames → 0, deployFrames set to 240
+    const sphere = activeItems.find(it => it.entityId === 994);
+    // After slide phase the sphere should still exist with a fuse
+    expect(sphere).toBeDefined();
+    expect(sphere!.deployFrames).toBe(240);
+  });
+});
