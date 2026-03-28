@@ -361,14 +361,39 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
   let moveId: string;
 
   if (phys.grounded) {
-    if (Math.abs(input.stickX) > STICK_THRESHOLD) moveId = 'forwardSmash';
-    else if (input.stickY > STICK_THRESHOLD)      moveId = 'upSmash';
-    else {
-      // Try neutralJab1 first (kael), then neutralJab (others)
+    if (input.stickY < -STICK_THRESHOLD) {
+      // Down: downSmash if available, else downTilt
+      moveId = moves?.has('downSmash') ? 'downSmash' : 'downTilt';
+    } else if (input.stickY > STICK_THRESHOLD) {
+      // Up: upSmash if available, else upTilt
+      moveId = moves?.has('upSmash') ? 'upSmash' : 'upTilt';
+    } else if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+      if (fighter.state === 'run') {
+        // Dash attack — forward tilt used as dash attack (SSB64 style)
+        moveId = moves?.has('forwardTilt') ? 'forwardTilt' : 'neutralJab';
+      } else {
+        // Standing forward: forwardSmash
+        moveId = moves?.has('forwardSmash') ? 'forwardSmash' : 'forwardTilt';
+      }
+    } else {
+      // Neutral attack: jab combo
       moveId = moves?.has('neutralJab1') ? 'neutralJab1' : 'neutralJab';
     }
   } else {
-    moveId = 'neutralAir';
+    // Aerial attacks — directional
+    const facingRight = transformComponents.get(playerId)?.facingRight ?? true;
+    if (input.stickY > STICK_THRESHOLD) {
+      moveId = moves?.has('upAir') ? 'upAir' : 'neutralAir';
+    } else if (input.stickY < -STICK_THRESHOLD) {
+      moveId = moves?.has('downAir') ? 'downAir' : 'neutralAir';
+    } else if (Math.abs(input.stickX) > STICK_THRESHOLD) {
+      const isForward = (input.stickX > 0) === facingRight;
+      moveId = isForward
+        ? (moves?.has('forwardAir') ? 'forwardAir' : 'neutralAir')
+        : (moves?.has('backAir')    ? 'backAir'    : 'neutralAir');
+    } else {
+      moveId = moves?.has('neutralAir') ? 'neutralAir' : 'neutralJab';
+    }
   }
 
   fighter.attackFrame   = 0;
@@ -576,14 +601,41 @@ function processPlayerInput(
       }
     }
   } else {
-    if (input.stickX > 0) {
-      phys.vx = fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE);
+    // SSB64-style aerial drift: accelerate toward target velocity rather than
+    // snapping instantly. This preserves knockback momentum in the air and
+    // gives the floaty feel of the original game.
+    const maxAirSpeed = fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE);
+    const AIR_ACCEL   = toFixed(0.7); // units/frame² of horizontal acceleration in air
+    if (input.stickX > STICK_THRESHOLD) {
       transform.facingRight = true;
-    } else if (input.stickX < 0) {
-      phys.vx = fixedNeg(fixedMul(fighter.stats.runSpeed, AIR_DRIFT_SCALE));
+      // Accelerate toward +maxAirSpeed
+      const target = maxAirSpeed;
+      if (phys.vx < target) {
+        phys.vx = Math.min((phys.vx + AIR_ACCEL) | 0, target);
+      } else {
+        // Already at or above target (e.g. from knockback) — slow toward it
+        phys.vx = Math.max((phys.vx - AIR_ACCEL) | 0, target);
+      }
+    } else if (input.stickX < -STICK_THRESHOLD) {
       transform.facingRight = false;
+      const target = fixedNeg(maxAirSpeed);
+      if (phys.vx > target) {
+        phys.vx = Math.max((phys.vx - AIR_ACCEL) | 0, target);
+      } else {
+        phys.vx = Math.min((phys.vx + AIR_ACCEL) | 0, target);
+      }
     } else {
-      phys.vx = toFixed(0);
+      // No stick input: apply light air friction — gradually reduce speed
+      // but don't instantly snap to zero. This preserves knockback momentum
+      // when the player isn't actively DI-ing.
+      const AIR_FRICTION = toFixed(0.08);
+      if (phys.vx > AIR_FRICTION) {
+        phys.vx = (phys.vx - AIR_FRICTION) | 0;
+      } else if (phys.vx < fixedNeg(AIR_FRICTION)) {
+        phys.vx = (phys.vx + AIR_FRICTION) | 0;
+      } else {
+        phys.vx = toFixed(0);
+      }
     }
   }
 

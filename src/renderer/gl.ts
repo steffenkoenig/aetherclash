@@ -198,6 +198,7 @@ const STAGE_SKY_COLOR: Record<string, number> = {
   crystalCavern:  0x0a0a1a,
   voidRift:       0x000008,
   solarPinnacle:  0xff8c00,
+  windyHeights:   0x5ec8f0,
 };
 
 interface StageLighting {
@@ -214,6 +215,7 @@ const STAGE_LIGHTING: Record<string, StageLighting> = {
   crystalCavern: { ambient: 0x0a1020, aIntensity: 0.30, dir: 0x44ffcc, dIntensity: 1.0,  fog: new THREE.FogExp2(0x050412, 0.0006) },
   voidRift:      { ambient: 0x100028, aIntensity: 0.25, dir: 0x9933ff, dIntensity: 1.0,  fog: new THREE.FogExp2(0x080012, 0.0005) },
   solarPinnacle: { ambient: 0x402808, aIntensity: 0.55, dir: 0xffcc22, dIntensity: 1.4,  fog: new THREE.Fog(0xff8000, 600, 2000) },
+  windyHeights:  { ambient: 0xfff8e0, aIntensity: 0.80, dir: 0xfff0a0, dIntensity: 1.15, fog: new THREE.Fog(0xa8e4f8, 900, 2800) },
 };
 
 /**
@@ -839,7 +841,12 @@ type Parts = {
   legR:  THREE.Mesh;
 };
 
-function applyPose(group: THREE.Group, state: FighterState, moveId?: string | null): void {
+function applyPose(
+  group: THREE.Group,
+  state: FighterState,
+  moveId?: string | null,
+  facingRight?: boolean,
+): void {
   const parts = group.userData['parts'] as Parts | undefined;
   if (!parts) return;
 
@@ -854,9 +861,11 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
   group.rotation.z = 0;
   group.scale.set(1, 1, 1);
 
-  // Reset arm Z offsets before any pose branch so all states start clean.
+  // Reset arm/leg positions before any pose branch so all states start clean.
   armR.position.z = 0;
   armL.position.z = 0;
+  armR.position.y = armR.userData['baseY'] as number ?? armR.position.y;
+  armL.position.y = armL.userData['baseY'] as number ?? armL.position.y;
 
   // ── Special-move emissive glow ──────────────────────────────────────────
   // When the fighter is executing a special move, pulse the character meshes
@@ -893,14 +902,18 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
       legR.rotation.x = -s * 0.5;
       armL.rotation.x = -s * 0.3;
       armR.rotation.x =  s * 0.3;
+      // Slight forward lean when running
+      group.rotation.z = facingRight ? -0.12 : 0.12;
       break;
     }
     case 'jump':
     case 'doubleJump':
-      legL.rotation.x = -0.3;
-      legR.rotation.x = -0.3;
-      armL.rotation.x = -0.3;
-      armR.rotation.x = -0.3;
+      legL.rotation.x = -0.35;
+      legR.rotation.x = -0.35;
+      armL.rotation.x = -0.4;
+      armR.rotation.x = -0.4;
+      armL.position.z = 6;
+      armR.position.z = 6;
       break;
 
     case 'attack':
@@ -908,19 +921,79 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
         // Special pose: both arms raised and spread wide (charging stance).
         armL.rotation.x = -Math.PI * 0.65;
         armR.rotation.x = -Math.PI * 0.65;
-        armL.position.z = 8;
-        armR.position.z = 8;
-        // Slight forward lean.
-        group.rotation.z = 0.12;
+        armL.position.z = 12;
+        armR.position.z = 12;
+        group.rotation.z = facingRight ? -0.15 : 0.15;
       } else {
-        // Normal attack: raise right arm forward.
-        armR.rotation.x = -Math.PI / 2;
-        armR.position.z = 10;
+        // Move-specific attack poses that visually match hitbox positions.
+        // Local +Z on this rig = world facing direction, so armR.position.z
+        // directly extends the arm toward the opponent.
+        const mid = moveId ?? '';
+
+        if (mid.startsWith('up') || mid === 'upAir' || mid === 'upSpecial') {
+          // Up attacks: both arms raised overhead
+          armL.rotation.x = -Math.PI * 0.85;
+          armR.rotation.x = -Math.PI * 0.85;
+          armL.position.z = 8;
+          armR.position.z = 8;
+          // Slight backward lean to sell the upward swing
+          group.rotation.z = facingRight ? 0.1 : -0.1;
+
+        } else if (mid.startsWith('down') || mid === 'downAir') {
+          // Down attacks: arms sweep low
+          armL.rotation.x = 0.55;
+          armR.rotation.x = 0.55;
+          armL.position.z = 14;
+          armR.position.z = 14;
+          group.scale.y = 0.88; // slight crouch
+          group.rotation.z = facingRight ? -0.1 : 0.1;
+
+        } else if (mid === 'backAir') {
+          // Back air: leading arm swings backward
+          armL.rotation.x = Math.PI / 2;
+          armL.position.z = -28; // backward relative to facing
+          armR.rotation.x = 0.2;
+          group.rotation.z = facingRight ? 0.15 : -0.15;
+
+        } else if (mid.includes('Jab') || mid === 'neutralJab') {
+          // Jab: quick short punch forward
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 22; // ~15 unit hitbox offsetX → z≈22
+
+        } else if (mid.includes('Smash') && !mid.startsWith('up') && !mid.startsWith('down')) {
+          // Forward smash: big lunge — arm extends far, body leans in
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 46; // ~40-50 unit hitbox offsetX
+          armL.rotation.x = 0.3;
+          group.rotation.z = facingRight ? -0.22 : 0.22;
+          group.scale.z = 1.15; // stretch forward
+
+        } else if (mid === 'neutralAir') {
+          // Neutral air: spinning kick, both arms out
+          const spin = Math.sin(renderTime * 14);
+          armL.rotation.x = -Math.PI / 2 + spin * 0.4;
+          armR.rotation.x = -Math.PI / 2 - spin * 0.4;
+          armL.position.z = 12;
+          armR.position.z = 12;
+
+        } else {
+          // Default forward attack (tilt / forward air / other):
+          // Extend arm proportional to typical tilt hitbox (~20-30 units)
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 34; // covers forwardTilt (z≈25-35) and forwardAir
+          armL.rotation.x = 0.15;
+          group.rotation.z = facingRight ? -0.14 : 0.14;
+        }
       }
       break;
 
     case 'hitstun':
-      group.rotation.z = Math.sin(renderTime * 50) * 0.2;
+      // Tumble animation: body tilts backward + arms flung
+      group.rotation.z = (facingRight ? 0.3 : -0.3) + Math.sin(renderTime * 50) * 0.15;
+      armL.rotation.x = 0.6;
+      armR.rotation.x = 0.6;
+      legL.rotation.x = 0.4;
+      legR.rotation.x = -0.3;
       break;
 
     case 'KO':
@@ -929,7 +1002,33 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
       break;
 
     case 'shielding':
-      group.scale.set(0.95, 0.95, 1.2);
+      group.scale.set(0.92, 0.92, 1.18);
+      // Arms in protective stance
+      armL.rotation.x = -0.6;
+      armR.rotation.x = -0.6;
+      armL.position.z = 10;
+      armR.position.z = 10;
+      break;
+
+    case 'spotDodge':
+      group.scale.set(1, 0.75, 1.3);
+      group.rotation.z = facingRight ? -0.05 : 0.05;
+      break;
+
+    case 'rolling':
+      // Rolling dodge: lean strongly in movement direction
+      group.rotation.z = facingRight ? -0.45 : 0.45;
+      legL.rotation.x = 0.5;
+      legR.rotation.x = -0.5;
+      break;
+
+    case 'airDodge':
+      // Air dodge: tuck into a ball
+      group.scale.set(0.85, 0.85, 0.85);
+      armL.rotation.x = -0.5;
+      armR.rotation.x = -0.5;
+      legL.rotation.x = 0.5;
+      legR.rotation.x = 0.5;
       break;
 
     default:
@@ -1145,7 +1244,7 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     if (glbSwapped.has(id)) {
       updateMixer(id, fighter.state);
     } else {
-      applyPose(group, fighter.state, fighter.currentMoveId);
+      applyPose(group, fighter.state, fighter.currentMoveId, transform.facingRight);
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────
