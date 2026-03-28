@@ -341,6 +341,10 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
 
 function onResize(): void {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Re-apply the fixed internal size so the backbuffer matches the updated
+  // pixel ratio (setPixelRatio alone does not resize the drawing buffer).
+  renderer.setSize(INTERNAL_WIDTH, INTERNAL_HEIGHT, false);
+  // Camera aspect is fixed (INTERNAL_WIDTH:INTERNAL_HEIGHT) — no update needed.
 }
 
 /**
@@ -528,9 +532,12 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
 
       // ── Per-item visual state ────────────────────────────────────────────
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      // Reset material overrides from previous frame before applying new ones.
-      mat.color.setHex(0xFFFFFF);
-      mat.emissive.setHex(0x000000);
+      // Reset material overrides to the category base color before applying
+      // per-item state overrides.  This prevents stale overrides (e.g. armed
+      // mine red) from persisting after the item changes state.
+      const categoryBaseHex = ITEM_MESH_COLOR[item.category];
+      mat.color.setHex(categoryBaseHex);
+      mat.emissive.setHex(categoryBaseHex);
       let spinSpeed     = 1.8;
       let emissiveScale = 1.0;
       let meshScale     = 1.0;

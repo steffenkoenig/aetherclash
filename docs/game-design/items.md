@@ -37,12 +37,12 @@ Melee Augments temporarily replace a character's standard physical attacks with 
   - The wielder loses their standard attack options entirely — all four directions produce only the Mallet smash.
 - **Tactical Note:** The Mallet is extremely powerful in the hands of a Heavy Vanguard character (Gorun), creating a potentially match-winning tool.
 
-#### Firy
+#### Ember Core
 - **Appearance:** A compact orange canister with a nozzle that pulses with heat-haze shimmer. A tiny face on the canister grins when in use.
 - **Duration:** 300 frames (~5 seconds) of continuous fire output.
 - **Effect (held):** Emits a short-range cone of flame (~35 units radius) every frame, dealing **3% damage per frame** to any opponent caught in the aura. Fuel depletes each frame the item is held; the item disappears when fuel runs out.
 - **Throw:** Deals **12% fire damage** on direct contact.
-- **Tactical Note:** Firy rewards aggressive play — dash into an opponent and hold the flame. At close range it burns through shields faster than any other item.
+- **Tactical Note:** Ember Core rewards aggressive play — dash into an opponent and hold the flame. At close range it burns through shields faster than any other item.
 
 #### Runeshard
 - **Appearance:** A pale-white crystalline rod with a cracked, faceted tip that glows with shifting colour. Clearly mass-produced, not the original artefact.

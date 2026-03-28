@@ -78,7 +78,7 @@ export class SpectatorBroadcaster {
     // Encode the snapshot data as base64
     // (We access the internal bytes by re-serialising via computeChecksum logic
     //  but for transmission we just encode the full snapshot.)
-    const stateB64 = this.serializeCurrentState();
+    const stateB64 = this.serializeCurrentState(frame);
 
     this.onSnapshot({
       frame,
@@ -89,14 +89,17 @@ export class SpectatorBroadcaster {
     this.inputBuffer = [];
   }
 
-  private serializeCurrentState(): string {
-    // Use the rollback manager's checksum as a lightweight state fingerprint.
-    // For full spectating a real implementation would serialise the snapshot bytes
-    // directly; here we encode the checksum as a placeholder.
-    const checksum = this.rollback.computeChecksum();
-    const buf = new Uint8Array(4);
-    new DataView(buf.buffer).setUint32(0, checksum, true);
-    return btoa(String.fromCharCode(...buf));
+  private serializeCurrentState(frame: number): string {
+    // Encode the full snapshot bytes saved for this frame.  The receiver can
+    // call restoreSnapshot() after injecting these bytes into its own buffer.
+    const bytes = this.rollback.getSnapshotBytes(frame);
+    if (!bytes) {
+      // Fallback: encode the 4-byte checksum if snapshot bytes are unavailable.
+      const buf = new Uint8Array(4);
+      new DataView(buf.buffer).setUint32(0, this.rollback.computeChecksum(), true);
+      return btoa(String.fromCharCode(...buf));
+    }
+    return btoa(String.fromCharCode(...bytes));
   }
 }
 

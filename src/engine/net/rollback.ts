@@ -124,7 +124,11 @@ export class RollbackManager {
   private readonly moveIdIndex: Map<string, number>;
 
   // Pre-allocated snapshot pool — no heap allocation in hot path.
-  private readonly snapshots: Array<{ frame: number; data: Uint8Array }>;
+  private readonly snapshots: Array<{ frame: number; data: Uint8Array; view: DataView }>;
+
+  // Pre-allocated scratch buffer + DataView for computeChecksum() — reused every call.
+  private readonly checksumBuf: Uint8Array;
+  private readonly checksumView: DataView;
 
   // Per-frame opponent input predictions, indexed by frame % ROLLBACK_BUFFER_SIZE.
   private readonly predictedInputs: PackedInputState[];
@@ -148,13 +152,27 @@ export class RollbackManager {
     this.moveIds = [...allMoveIds].sort();
     this.moveIdIndex = new Map(this.moveIds.map((id, i) => [id, i + 1]));
 
-    this.snapshots = Array.from({ length: ROLLBACK_BUFFER_SIZE }, () => ({
-      frame: -1,
-      data: new Uint8Array(SNAPSHOT_DATA_BYTES),
-    }));
+    this.snapshots = Array.from({ length: ROLLBACK_BUFFER_SIZE }, () => {
+      const data = new Uint8Array(SNAPSHOT_DATA_BYTES);
+      return { frame: -1, data, view: new DataView(data.buffer) };
+    });
+
+    this.checksumBuf  = new Uint8Array(SNAPSHOT_DATA_BYTES);
+    this.checksumView = new DataView(this.checksumBuf.buffer);
 
     this.predictedInputs  = new Array<PackedInputState>(ROLLBACK_BUFFER_SIZE).fill(0);
     this.localInputHistory = new Array<PackedInputState>(ROLLBACK_BUFFER_SIZE).fill(0);
+  }
+
+  /**
+   * Return a read-only view of the raw snapshot bytes for `frame`.
+   * Returns `null` if no snapshot has been saved for that frame.
+   * Used by SpectatorBroadcaster to transmit full state to observers.
+   */
+  getSnapshotBytes(frame: number): Uint8Array | null {
+    const slot = frame % ROLLBACK_BUFFER_SIZE;
+    const snap = this.snapshots[slot]!;
+    return snap.frame === frame ? snap.data : null;
   }
 
   // ── Snapshot save / restore ───────────────────────────────────────────────
@@ -165,7 +183,7 @@ export class RollbackManager {
     const snap = this.snapshots[slot]!;
     snap.frame = frame;
 
-    const view = new DataView(snap.data.buffer);
+    const view = snap.view; // reuse pre-allocated DataView — no heap allocation
     let off = 0;
 
     // Global header
@@ -233,7 +251,7 @@ export class RollbackManager {
     const snap = this.snapshots[slot]!;
     if (snap.frame !== frame) return; // snapshot expired or never saved
 
-    const view = new DataView(snap.data.buffer);
+    const view = snap.view; // reuse pre-allocated DataView
     let off = 0;
 
     // Global header
@@ -316,9 +334,8 @@ export class RollbackManager {
    * Both peers must call this for the same frame to get a comparable checksum.
    */
   computeChecksum(): number {
-    // Serialise into a temporary buffer and CRC32 it.
-    const tmp = new Uint8Array(SNAPSHOT_DATA_BYTES);
-    const view = new DataView(tmp.buffer);
+    // Serialise into the pre-allocated scratch buffer (no heap allocation).
+    const view = this.checksumView;
     let off = 0;
 
     view.setUint32(off, matchState.frame >>> 0, true); off += 4;
@@ -363,10 +380,11 @@ export class RollbackManager {
       view.setUint16(off, grabFramesMap.get(id)  ?? 0, true); off += 2;
       view.setUint16(off, techWindowMap.get(id)  ?? 0, true); off += 2;
       view.setUint16(off, respawnTimers.get(id)  ?? 0, true); off += 2;
+      view.setUint16(off, ledgeHangFramesMap.get(id) ?? 0, true); off += 2;
       view.setUint8(off,  airDodgeUsedSet.has(id) ? 1 : 0); off += 1;
     }
 
-    return crc32(tmp.subarray(0, off));
+    return crc32(this.checksumBuf.subarray(0, off));
   }
 
   // ── Input recording ───────────────────────────────────────────────────────

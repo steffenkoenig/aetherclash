@@ -24,6 +24,7 @@ import {
   clearHitRegistry,
 } from './engine/physics/collision.js';
 import { blastZoneSystem, setBlastZones } from './engine/physics/blastZone.js';
+import { seedRng } from './engine/physics/lcg.js';
 import {
   transitionFighterState,
   tickFighterTimers,
@@ -671,6 +672,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   resetEntityCounter();
   resetMatchState();
   clearHitRegistry();
+  seedRng(0); // reset deterministic RNG so every match starts from the same sequence
   platforms.length = 0;
   clearItems();
   clearHazards();
