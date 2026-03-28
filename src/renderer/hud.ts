@@ -37,6 +37,7 @@ const ITEM_NAMES: Record<string, string> = {
   thunderBolt:     'Thunder Bolt',
   assistOrb:       'Assist Orb',
   aetherCrystal:   'Aether Crystal',
+  starOrb:         '★ Star Orb',
 };
 
 // ── Module state ──────────────────────────────────────────────────────────────

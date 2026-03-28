@@ -92,6 +92,7 @@ import {
 import { CRYSTAL_CAVERN_PLATFORMS, CRYSTAL_CAVERN_BLAST_ZONES } from './game/stages/crystalCavern.js';
 import { VOID_RIFT_PLATFORMS, VOID_RIFT_BLAST_ZONES }           from './game/stages/voidRift.js';
 import { SOLAR_PINNACLE_PLATFORMS, SOLAR_PINNACLE_BLAST_ZONES } from './game/stages/solarPinnacle.js';
+import { WINDY_HEIGHTS_PLATFORMS, WINDY_HEIGHTS_BLAST_ZONES }   from './game/stages/windyHeights.js';
 import { matchState, tickFrame, resetMatchState } from './game/state.js';
 import {
   clearItems,
@@ -158,6 +159,7 @@ const STAGE_PLATFORMS: Record<string, Platform[]> = {
   crystalCavern: CRYSTAL_CAVERN_PLATFORMS,
   voidRift:      VOID_RIFT_PLATFORMS,
   solarPinnacle: SOLAR_PINNACLE_PLATFORMS,
+  windyHeights:  WINDY_HEIGHTS_PLATFORMS,
 };
 
 const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
@@ -169,6 +171,7 @@ const STAGE_BLAST_ZONES: Record<string, BlastZones> = {
   crystalCavern: CRYSTAL_CAVERN_BLAST_ZONES,
   voidRift:      VOID_RIFT_BLAST_ZONES,
   solarPinnacle: SOLAR_PINNACLE_BLAST_ZONES,
+  windyHeights:  WINDY_HEIGHTS_BLAST_ZONES,
 };
 
 /** Item spawn points (floating above platforms) per stage (Q16.16 coordinates). */
@@ -222,6 +225,14 @@ const STAGE_SPAWN_POINTS: Record<string, Array<{ x: Fixed; y: Fixed }>> = {
     { x: toFixed(-370), y: fixedAdd(toFixed(-60), FIGHTER_HALF_HEIGHT) }, // lower-left ledge
     { x: toFixed(370),  y: fixedAdd(toFixed(-60), FIGHTER_HALF_HEIGHT) }, // lower-right ledge
   ],
+  windyHeights: [
+    { x: toFixed(-200), y: FIGHTER_HALF_HEIGHT },          // main platform left
+    { x: toFixed(0),    y: FIGHTER_HALF_HEIGHT },          // main platform centre
+    { x: toFixed(200),  y: FIGHTER_HALF_HEIGHT },          // main platform right
+    { x: toFixed(-187), y: toFixed(185) },                 // left cloud ledge (y=155+30)
+    { x: toFixed(187),  y: toFixed(185) },                 // right cloud ledge (y=155+30)
+    { x: toFixed(0),    y: toFixed(298) },                 // top centre cloud (y=268+30)
+  ],
 };
 
 /** Hazard type per stage, or null for none. */
@@ -234,6 +245,7 @@ const STAGE_HAZARD: Record<string, HazardType | null> = {
   crystalCavern: 'crystalStalactite',
   voidRift:      null,
   solarPinnacle: 'solarFlare',
+  windyHeights:  'windGust',
 };
 
 // ── Air-drift scale and input threshold ──────────────────────────────────────

@@ -40,6 +40,11 @@ let threeCamera: THREE.PerspectiveCamera;
 const PERSP_Z      = 700;
 const PERSP_TILT_Y = 100;  // camera sits this many units above the focus point
 
+// Pre-allocated quaternion and axis for the per-frame camera roll (tilt).
+// Avoids heap allocation in the render hot path.
+const _camRollAxis = new THREE.Vector3(0, 0, 1);
+const _camRollQ    = new THREE.Quaternion();
+
 let ambientLight: THREE.AmbientLight;
 let dirLight: THREE.DirectionalLight;
 
@@ -940,8 +945,17 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
 
 export function render(stagePlatforms: Platform[], _alpha: number): void {
   // ── Camera update ─────────────────────────────────────────────────────────
-  threeCamera.position.set(camera.x, camera.y + PERSP_TILT_Y, PERSP_Z);
+  // Position: centre on fight, pulled back proportionally to spread.
+  const camZ = PERSP_Z + camera.zOff;
+  threeCamera.position.set(camera.x, camera.y + PERSP_TILT_Y, camZ);
   threeCamera.lookAt(camera.x, camera.y, 0);
+  // Apply subtle roll (tilt) on top of the lookAt orientation.
+  if (Math.abs(camera.tilt) > 0.0001) {
+    _camRollQ.setFromAxisAngle(_camRollAxis, camera.tilt);
+    threeCamera.quaternion.multiply(_camRollQ);
+  }
+  // Dynamic FOV breathing and orthographic zoom scale.
+  threeCamera.fov  = camera.fov;
   threeCamera.zoom = camera.zoom;
   threeCamera.updateProjectionMatrix();
 
