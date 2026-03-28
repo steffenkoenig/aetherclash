@@ -42,10 +42,33 @@ import {
   sampleTouchInput,
   mergeTouchInput,
 } from './engine/input/touch.js';
+import {
+  initGamepad,
+  pollGamepads,
+  sampleGamepad,
+  mergeGamepadInput,
+  setOnGamepadDisconnected,
+} from './engine/input/gamepad.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
 import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
+import {
+  initAudio,
+  resumeAudio,
+  playStageMusic,
+  play as playAudio,
+  fadeMusicOut,
+} from './audio/audio.js';
+import {
+  triggerScreenShake,
+  spawnHitSpark,
+  spawnLaunchTrail,
+  endLaunchTrail,
+  triggerKOFlash,
+  updateParticles,
+  disposeParticles,
+} from './renderer/particles.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
 import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
 import { VELA_STATS, VELA_MOVES }          from './game/characters/vela.js';
@@ -71,6 +94,7 @@ import {
   tickItems,
   setItemSpawnPoints,
   setItemSpawnSetting,
+  setCuratedItemMode,
   useHeldItem,
 } from './game/items/items.js';
 import {
@@ -177,6 +201,19 @@ const STAGE_HAZARD: Record<string, HazardType | null> = {
 
 const AIR_DRIFT_SCALE = toFixed(0.8);
 const STICK_THRESHOLD = 0.5;
+
+// ── Short hop ─────────────────────────────────────────────────────────────────
+
+/** Jump force scale for a short hop (tap, not hold). Docs: ~40% of full height. */
+const SHORT_HOP_SCALE = toFixed(0.4);
+
+/**
+ * Per-player jump-hold frame counter.
+ * Keyed by entity ID. Incremented while jump is held, reset when jump is released.
+ * A value of 1 on the frame the buffer consumes the jump input means it was
+ * a single-frame tap → short hop.
+ */
+const jumpHeldFrames = new Map<number, number>();
 
 // ── Dodge / grab / shield constants ──────────────────────────────────────────
 
@@ -322,6 +359,13 @@ function processPlayerInput(
   }
 
   setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
+
+  // ── Jump hold tracking (for short-hop detection) ──────────────────────────
+  if (input.jump) {
+    jumpHeldFrames.set(playerId, (jumpHeldFrames.get(playerId) ?? 0) + 1);
+  } else {
+    jumpHeldFrames.set(playerId, 0);
+  }
 
   if (input.jumpJustPressed)    buffer.press('jump',    matchState.frame);
   if (input.attackJustPressed)  buffer.press('attack',  matchState.frame);
@@ -478,8 +522,15 @@ function processPlayerInput(
   }
 
   if (buffer.consume('jump', matchState.frame)) {
+    // Short-hop detection: if the jump button has been held for only 1 frame
+    // at the moment of execution, apply 40% of full jump height.
+    const heldFor = jumpHeldFrames.get(playerId) ?? 0;
+    const isShortHop = heldFor <= 1;
+
     if (phys.grounded) {
-      phys.vy                = fighter.stats.jumpForce;
+      phys.vy                = isShortHop
+        ? fixedMul(fighter.stats.jumpForce, SHORT_HOP_SCALE)
+        : fighter.stats.jumpForce;
       phys.grounded          = false;
       phys.fastFalling       = false;
       phys.gravityMultiplier = toFixed(1.0);
@@ -549,6 +600,97 @@ let player1Id = -1;
 let player2Id = -1;
 let p1CharId  = 'kael';
 let p2CharId  = 'gorun';
+
+// ── Pause menu ────────────────────────────────────────────────────────────────
+
+let pauseOverlay: HTMLDivElement | null = null;
+let matchPauseCallback: (() => void) | null = null;
+let matchResumeCallback: (() => void) | null = null;
+
+function showPauseMenu(): void {
+  if (pauseOverlay) return; // already showing
+
+  pauseOverlay = document.createElement('div');
+  Object.assign(pauseOverlay.style, {
+    position:       'fixed',
+    inset:          '0',
+    zIndex:         '250',
+    display:        'flex',
+    flexDirection:  'column',
+    alignItems:     'center',
+    justifyContent: 'center',
+    background:     'rgba(0,0,0,0.75)',
+    fontFamily:     'monospace',
+    color:          '#fff',
+  });
+
+  const title = document.createElement('h2');
+  title.textContent = 'PAUSED';
+  Object.assign(title.style, {
+    fontSize:      '40px',
+    fontWeight:    'bold',
+    letterSpacing: '0.1em',
+    marginBottom:  '32px',
+  });
+  pauseOverlay.appendChild(title);
+
+  const btnStyle = {
+    padding:      '14px 40px',
+    fontSize:     '18px',
+    fontFamily:   'monospace',
+    border:       'none',
+    borderRadius: '6px',
+    cursor:       'pointer',
+    marginBottom: '12px',
+  };
+
+  const resumeBtn = document.createElement('button');
+  resumeBtn.textContent = '▶ Resume';
+  Object.assign(resumeBtn.style, { ...btnStyle, background: '#4499FF', color: '#fff' });
+  resumeBtn.onclick = () => hidePauseMenu();
+  pauseOverlay.appendChild(resumeBtn);
+
+  const quitBtn = document.createElement('button');
+  quitBtn.textContent = '← Quit to Menu';
+  Object.assign(quitBtn.style, { ...btnStyle, background: '#555', color: '#fff' });
+  quitBtn.onclick = () => {
+    hidePauseMenu();
+    matchPauseCallback?.();
+    location.reload();
+  };
+  pauseOverlay.appendChild(quitBtn);
+
+  document.body.appendChild(pauseOverlay);
+  resumeBtn.focus();
+}
+
+function hidePauseMenu(): void {
+  if (!pauseOverlay) return;
+  pauseOverlay.parentNode?.removeChild(pauseOverlay);
+  pauseOverlay = null;
+  matchResumeCallback?.();
+}
+
+/** Keydown handler active during a match (Escape = toggle pause). */
+function onMatchKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') {
+    if (pauseOverlay) {
+      hidePauseMenu();
+    } else {
+      showPauseMenu();
+    }
+  }
+}
+
+function disposePauseMenu(): void {
+  window.removeEventListener('keydown', onMatchKeydown);
+  if (pauseOverlay) {
+    pauseOverlay.parentNode?.removeChild(pauseOverlay);
+    pauseOverlay = null;
+  }
+  matchPauseCallback  = null;
+  matchResumeCallback = null;
+}
 
 // ── Match result overlay ──────────────────────────────────────────────────────
 
@@ -666,6 +808,13 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   p2CharId  = p2Char;
   p2StageId = stageId;
 
+  // ── Audio ──────────────────────────────────────────────────────────────
+  // initAudio() is a no-op after the first call, but requires a prior user
+  // gesture — startMatch() is always triggered by a button click.
+  initAudio();
+  resumeAudio();
+  playStageMusic(stageId);
+
   // ── Reset simulation state ─────────────────────────────────────────────
   clearAllComponents();
   clearStateMachineMaps();
@@ -684,6 +833,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   // ── Items — spawn points and default setting ───────────────────────────
   setItemSpawnPoints(STAGE_SPAWN_POINTS[stageId] ?? STAGE_SPAWN_POINTS['aetherPlateau']!);
   setItemSpawnSetting('medium');
+  setCuratedItemMode(false); // normal mode; flip to true for competitive play
 
   // ── Stage hazards ──────────────────────────────────────────────────────
   const hazardType = STAGE_HAZARD[stageId] ?? null;
@@ -783,63 +933,193 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   const buffer1 = new InputBuffer();
   const buffer2 = new InputBuffer();
 
+  // ── Per-player previous-frame state (for particle effect detection) ────
+  const prevState: Record<number, string> = {
+    [player1Id]: 'idle',
+    [player2Id]: 'idle',
+  };
+
   // ── HUD ────────────────────────────────────────────────────────────────
   disposeHud();
+  disposeParticles();
+  disposePauseMenu();
   registerP2KeysGetter(getP2KeysDown);
   initHud([player1Id, player2Id]);
   resetItemMeshes();
   resetRenderer();
 
+  // Accent colours for hit sparks (must match CHARACTER_COLORS in gl.ts)
+  const CHARACTER_ACCENT: Record<string, string> = {
+    kael:  '#4488ee',
+    gorun: '#ee6600',
+    vela:  '#44dd66',
+    syne:  '#cc44ff',
+    zira:  '#ffd700',
+  };
+
+  /** Scale from damage percentage to launch-trail force threshold (renderer only). */
+  const DAMAGE_TO_FORCE_SCALE = 0.3;
+
   // ── Game loop ──────────────────────────────────────────────────────────
   stopLoop();
-  startLoop(
-    () => {
-      tickFighterTimers(player1Id);
-      tickFighterTimers(player2Id);
+  let lastRenderMs = performance.now();
 
-      const input1 = mergeTouchInput(sampleKeyboard(),       sampleTouchInput(0));
-      const input2 = mergeTouchInput(samplePlayer2Input(),   sampleTouchInput(1));
+  // Store callbacks so the pause menu can resume with them
+  function physicsStep(): void {
+    tickFighterTimers(player1Id);
+    tickFighterTimers(player2Id);
 
-      processPlayerInput(player1Id, input1, buffer1);
-      processPlayerInput(player2Id, input2, buffer2);
+    // Poll gamepad API and merge with keyboard / touch input
+    pollGamepads();
+    const input1 = mergeGamepadInput(
+      mergeTouchInput(sampleKeyboard(),     sampleTouchInput(0)),
+      sampleGamepad(0),
+    );
+    const input2 = mergeGamepadInput(
+      mergeTouchInput(samplePlayer2Input(), sampleTouchInput(1)),
+      sampleGamepad(1),
+    );
 
-      integratePositions();
-      applyGravitySystem();
-      platformCollisionSystem();
-      checkHitboxSystem([player1Id, player2Id], MOVE_DATA);
-      blastZoneSystem();
-      trySpawnItem(matchState.frame);
-      tickItems(matchState.frame);
-      tickHazards();
+    processPlayerInput(player1Id, input1, buffer1);
+    processPlayerInput(player2Id, input2, buffer2);
 
-      // ── Match-end detection ──────────────────────────────────────────────
-      const mf1 = fighterComponents.get(player1Id);
-      const mf2 = fighterComponents.get(player2Id);
-      if ((mf1 && mf1.stocks <= 0) || (mf2 && mf2.stocks <= 0)) {
-        const winnerLabel = (mf2 && mf2.stocks <= 0)
-          ? p1CharId.charAt(0).toUpperCase() + p1CharId.slice(1)
-          : p2CharId.charAt(0).toUpperCase() + p2CharId.slice(1);
-        stopLoop();
-        showMatchResult(winnerLabel);
-        return;
+    // Build an InputState map so checkHitboxSystem can apply DI
+    const inputMap = new Map([
+      [player1Id, input1],
+      [player2Id, input2],
+    ]);
+
+    integratePositions();
+    applyGravitySystem();
+    platformCollisionSystem();
+    checkHitboxSystem([player1Id, player2Id], MOVE_DATA, inputMap);
+    blastZoneSystem();
+    trySpawnItem(matchState.frame);
+    tickItems(matchState.frame);
+    tickHazards();
+
+    // ── Particle effect triggers (state-transition detection) ──────────────
+    for (const entityId of [player1Id, player2Id]) {
+      const fighter   = fighterComponents.get(entityId);
+      const transform = transformComponents.get(entityId);
+      if (!fighter || !transform) continue;
+
+      const prev = prevState[entityId] ?? 'idle';
+      const curr = fighter.state;
+
+      if (curr !== prev) {
+        const wx = toFloat(transform.x);
+        const wy = toFloat(transform.y);
+        const color = CHARACTER_ACCENT[fighter.characterId] ?? '#ffffff';
+
+        // Fighter just entered hitstun → hit confirmed → spawn sparks + shake + SFX
+        if (curr === 'hitstun') {
+          spawnHitSpark(wx, wy, color);
+          const dmgFloat = toFloat(fighter.damagePercent);
+          if (dmgFloat >= 80) {
+            triggerScreenShake(12, 300); // smash-level
+            playAudio('STRONG_HIT');
+          } else {
+            triggerScreenShake(6, 200);  // standard hit
+            playAudio('HIT');
+          }
+        }
+
+        // Fighter just entered KO → KO flash + strong shake + SFX
+        if (curr === 'KO') {
+          triggerKOFlash();
+          triggerScreenShake(20, 500);
+          playAudio('KO');
+        }
+
+        // Jump / double-jump SFX
+        if (curr === 'jump') {
+          playAudio('JUMP');
+        } else if (curr === 'doubleJump') {
+          playAudio('DOUBLE_JUMP');
+        }
+
+        // Shield break SFX
+        if (prev !== 'shielding' && fighter.shieldBreakFrames > 0) {
+          playAudio('SHIELD_BREAK');
+        }
+
+        // Landing (any aerial → grounded state transition while in air)
+        const wasAerial = prev === 'jump' || prev === 'doubleJump' || prev === 'airDodge' || prev === 'hitstun';
+        const isGrounded = physicsComponents.get(entityId)?.grounded ?? false;
+        if (wasAerial && isGrounded) {
+          playAudio('LAND');
+        }
+
+        // Fighter left hitstun → end launch trail
+        if (prev === 'hitstun' && curr !== 'hitstun') {
+          endLaunchTrail(entityId);
+        }
+
+        prevState[entityId] = curr;
       }
 
-      updateCamera([player1Id, player2Id]);
+      // While in hitstun, keep updating the launch trail
+      if (fighter.state === 'hitstun') {
+        const wx = toFloat(transform.x);
+        const wy = toFloat(transform.y);
+        const dmgFloat = toFloat(fighter.damagePercent);
+        spawnLaunchTrail(entityId, wx, wy, dmgFloat * DAMAGE_TO_FORCE_SCALE);
+      }
+    }
 
-      tickFrame();
-    },
-    (alpha) => {
-      render(platforms, alpha);
-      updateHud();
-      updateDebugOverlay();
-    },
-  );
+    // ── Match-end detection ────────────────────────────────────────────────
+    const mf1 = fighterComponents.get(player1Id);
+    const mf2 = fighterComponents.get(player2Id);
+    if ((mf1 && mf1.stocks <= 0) || (mf2 && mf2.stocks <= 0)) {
+      const winnerLabel = (mf2 && mf2.stocks <= 0)
+        ? p1CharId.charAt(0).toUpperCase() + p1CharId.slice(1)
+        : p2CharId.charAt(0).toUpperCase() + p2CharId.slice(1);
+      fadeMusicOut(1.5);
+      stopLoop();
+      disposePauseMenu();
+      showMatchResult(winnerLabel);
+      return;
+    }
+
+    updateCamera([player1Id, player2Id]);
+
+    tickFrame();
+  }
+
+  function renderStep(alpha: number): void {
+    render(platforms, alpha);
+    updateHud();
+    updateDebugOverlay();
+
+    // Advance and render all particle / VFX systems
+    const nowMs   = performance.now();
+    const deltaMs = Math.min(nowMs - lastRenderMs, 50);
+    lastRenderMs  = nowMs;
+    updateParticles(deltaMs);
+  }
+
+  // Wire pause callbacks: stopLoop on pause, startLoop(same cbs) on resume.
+  matchPauseCallback  = () => stopLoop();
+  matchResumeCallback = () => startLoop(physicsStep, renderStep);
+
+  // Register Escape key pause handler for this match.
+  window.addEventListener('keydown', onMatchKeydown);
+
+  // ── Gamepad reconnect prompt ───────────────────────────────────────────
+  setOnGamepadDisconnected(() => {
+    // Pause the match and show the reconnect prompt
+    if (!pauseOverlay) showPauseMenu();
+  });
+
+  startLoop(physicsStep, renderStep);
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 registerServiceWorker();
 initKeyboard();
+initGamepad();
 initTouchControls();
 initRenderer();
 

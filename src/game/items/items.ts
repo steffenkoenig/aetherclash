@@ -190,6 +190,15 @@ let spawnPoints: Array<{ x: Fixed; y: Fixed }> = [];
 
 let nextEntityId = 10000; // high range to avoid ECS collisions
 
+/**
+ * Item types allowed in curated (competitive) mode, per items.md §7.
+ * Only the boomerang is retained; all high-variance items are disabled.
+ */
+const CURATED_ALLOWED: ReadonlySet<ItemType> = new Set<ItemType>(['boomerang']);
+
+/** Whether curated (competitive) item mode is active. */
+let curatedModeEnabled = false;
+
 // ── Public configuration API ──────────────────────────────────────────────────
 
 export function setItemSpawnSetting(setting: SpawnSetting): void {
@@ -198,6 +207,19 @@ export function setItemSpawnSetting(setting: SpawnSetting): void {
 
 export function setItemSpawnPoints(points: Array<{ x: Fixed; y: Fixed }>): void {
   spawnPoints = points;
+}
+
+/**
+ * Enable or disable curated (competitive) item mode.
+ *
+ * When enabled (per items.md §7):
+ *   - All Melee Augments, Assist Orbs, Healing Charms are disabled.
+ *   - Of throwable projectiles, only the Boomerang is allowed.
+ * Both peers must call this with the same value before `trySpawnItem` is
+ * called so the RNG remains synchronised.
+ */
+export function setCuratedItemMode(enabled: boolean): void {
+  curatedModeEnabled = enabled;
 }
 
 export function clearItems(): void {
@@ -224,16 +246,28 @@ export function trySpawnItem(currentFrame: number): void {
   const ptIdx = nextRng() % spawnPoints.length;
   const pt = spawnPoints[ptIdx]!;
 
+  // In curated mode only throwableProjectile (boomerang only) is allowed.
+  const allCategories: ItemCategory[] =
+    ['meleeAugment', 'throwableProjectile', 'assistOrb', 'healingCharm'];
+  const allowedCategories = curatedModeEnabled
+    ? (['throwableProjectile'] as ItemCategory[])
+    : allCategories;
+
   // Pick a random category (weighted: skip categories already on stage)
-  const availableCategories: ItemCategory[] = (
-    ['meleeAugment', 'throwableProjectile', 'assistOrb', 'healingCharm'] as ItemCategory[]
-  ).filter(c => !activeCategorySet.has(c));
+  const availableCategories = allowedCategories.filter(c => !activeCategorySet.has(c));
   if (availableCategories.length === 0) return;
 
   const catIdx  = nextRng() % availableCategories.length;
   const category = availableCategories[catIdx]!;
 
   const item = buildItem(category, pt.x, pt.y);
+
+  // In curated mode, reject items that are not on the allowed list.
+  if (curatedModeEnabled && !CURATED_ALLOWED.has(item.itemType)) {
+    // Consume the RNG roll but don't spawn.
+    return;
+  }
+
   activeItems.push(item);
   activeCategorySet.add(category);
 }

@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate-assets": "node scripts/generate-assets.mjs"
+    "generate-assets": "node scripts/generate-assets.mjs",
+    "generate-audio": "node scripts/generate-audio.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.183.1",
