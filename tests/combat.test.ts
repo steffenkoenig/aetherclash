@@ -53,7 +53,7 @@ function makeGroundedFighter(characterId = 'kael', stats = KAEL_STATS, x = 0, y 
     shieldHealth: 100,
     shieldBreakFrames: 0,
     attackFrame: 0,
-    currentMoveId: null,
+    currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
     stats,
   });
   return id;
@@ -634,7 +634,7 @@ describe('ledge mechanics', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 
@@ -852,7 +852,7 @@ describe('tech window', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 
@@ -896,7 +896,7 @@ describe('tech window', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 

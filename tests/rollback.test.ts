@@ -101,7 +101,7 @@ function setupFighters(): { p1: number; p2: number } {
     characterId: 'kael', state: 'jump', damagePercent: toFixed(0),
     stocks: 3, jumpCount: 1, hitstunFrames: 0, invincibleFrames: 0,
     hitlagFrames: 0, shieldHealth: 100, shieldBreakFrames: 0,
-    attackFrame: 0, currentMoveId: null, stats: KAEL_STATS,
+    attackFrame: 0, currentMoveId: null, grabVictimId: null, smashChargeFrames: 0, stats: KAEL_STATS,
   });
 
   const p2 = createEntity();
@@ -119,7 +119,7 @@ function setupFighters(): { p1: number; p2: number } {
     characterId: 'gorun', state: 'idle', damagePercent: toFixed(0),
     stocks: 3, jumpCount: 0, hitstunFrames: 0, invincibleFrames: 0,
     hitlagFrames: 0, shieldHealth: 100, shieldBreakFrames: 0,
-    attackFrame: 0, currentMoveId: null, stats: GORUN_STATS,
+    attackFrame: 0, currentMoveId: null, grabVictimId: null, smashChargeFrames: 0, stats: GORUN_STATS,
   });
 
   return { p1, p2 };
