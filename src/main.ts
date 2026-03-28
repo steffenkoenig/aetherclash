@@ -36,6 +36,11 @@ import {
 } from './engine/physics/stateMachine.js';
 import { initKeyboard, sampleKeyboard, type InputState } from './engine/input/keyboard.js';
 import { InputBuffer }                     from './engine/input/buffer.js';
+import {
+  initTouchControls,
+  sampleTouchInput,
+  mergeTouchInput,
+} from './engine/input/touch.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
 import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
@@ -789,8 +794,8 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
       tickFighterTimers(player1Id);
       tickFighterTimers(player2Id);
 
-      const input1 = sampleKeyboard();
-      const input2 = samplePlayer2Input();
+      const input1 = mergeTouchInput(sampleKeyboard(),       sampleTouchInput(0));
+      const input2 = mergeTouchInput(samplePlayer2Input(),   sampleTouchInput(1));
 
       processPlayerInput(player1Id, input1, buffer1);
       processPlayerInput(player2Id, input2, buffer2);
@@ -832,6 +837,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
 
 registerServiceWorker();
 initKeyboard();
+initTouchControls();
 initRenderer();
 
 initScreens({
