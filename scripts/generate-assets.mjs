@@ -766,48 +766,6 @@ function buildStage(stageDef) {
   return group;
 }
 
-/** Build a THREE.Group containing platform meshes, highlights, bg plane, and decorations. */
-function buildStage(stageDef) {
-  const group = new THREE.Group();
-  group.name = `${stageDef.id}_root`;
-
-  // Background plane
-  const bgPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(4000, 2000),
-    new THREE.MeshStandardMaterial({ color: stageDef.bgColor, metalness: 0, roughness: 1 }),
-  );
-  bgPlane.name = 'background';
-  bgPlane.position.set(0, 0, -200);
-  group.add(bgPlane);
-
-  // Platform meshes
-  for (const plat of stageDef.platforms) {
-    const width = plat.x2 - plat.x1;
-    const cx    = (plat.x1 + plat.x2) / 2;
-    const color = plat.passThru ? stageDef.passColor : stageDef.mainColor;
-
-    const platMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(width, 20, 50),
-      new THREE.MeshStandardMaterial({ color, metalness: 0, roughness: 0.8 }),
-    );
-    platMesh.position.set(cx, plat.y - 10, -20);
-    group.add(platMesh);
-
-    // Edge highlight strip on top surface
-    const hlColor = lightenColor(color, 0.1);
-    const hlMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(width, 3, 50),
-      new THREE.MeshStandardMaterial({ color: hlColor, metalness: 0, roughness: 0.7 }),
-    );
-    hlMesh.position.set(cx, plat.y + 1.5, -19);
-    group.add(hlMesh);
-  }
-
-  stageDef.decorations(group);
-
-  return group;
-}
-
 // ---------------------------------------------------------------------------
 // GLB export helper
 // ---------------------------------------------------------------------------
