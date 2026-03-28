@@ -22,6 +22,7 @@ import { fixedSub } from '../engine/physics/fixednum.js';
 import { camera } from './camera.js';
 import { loadGLTF } from './models.js';
 import { activeItems, ASSIST_ORB_MAX_HP, type ItemCategory } from '../game/items/items.js';
+import { buildStageEnvironment } from './stages/index.js';
 
 // ── Internal resolution ───────────────────────────────────────────────────────
 
@@ -37,6 +38,9 @@ let threeCamera: THREE.PerspectiveCamera;
 // Camera Z distance and Y tilt for the 2.5D perspective look.
 const PERSP_Z      = 700;
 const PERSP_TILT_Y = 100;  // camera sits this many units above the focus point
+
+let ambientLight: THREE.AmbientLight;
+let dirLight: THREE.DirectionalLight;
 
 // ── Character mesh registry ───────────────────────────────────────────────────
 
@@ -182,9 +186,25 @@ const STAGE_SKY_COLOR: Record<string, number> = {
   solarPinnacle:  0xff8c00,
 };
 
+interface StageLighting {
+  ambient: number; aIntensity: number;
+  dir: number; dIntensity: number;
+  fog: THREE.Fog | THREE.FogExp2 | null;
+}
+const STAGE_LIGHTING: Record<string, StageLighting> = {
+  aetherPlateau: { ambient: 0xfff8e0, aIntensity: 0.70, dir: 0xfff5c0, dIntensity: 1.1,  fog: new THREE.Fog(0xc8e8ff, 800, 2500) },
+  forge:         { ambient: 0x1a2030, aIntensity: 0.35, dir: 0xff8030, dIntensity: 1.3,  fog: new THREE.FogExp2(0x050a14, 0.0004) },
+  cloudCitadel:  { ambient: 0xfff0ff, aIntensity: 0.90, dir: 0xfff4ff, dIntensity: 0.9,  fog: new THREE.Fog(0xf0e8ff, 700, 2200) },
+  ancientRuin:   { ambient: 0x405030, aIntensity: 0.45, dir: 0xb0c880, dIntensity: 0.85, fog: new THREE.FogExp2(0x1e2c14, 0.0006) },
+  digitalGrid:   { ambient: 0x081828, aIntensity: 0.35, dir: 0x00ccff, dIntensity: 1.2,  fog: new THREE.FogExp2(0x020408, 0.0005) },
+  crystalCavern: { ambient: 0x0a1020, aIntensity: 0.30, dir: 0x44ffcc, dIntensity: 1.0,  fog: new THREE.FogExp2(0x050412, 0.0006) },
+  voidRift:      { ambient: 0x100028, aIntensity: 0.25, dir: 0x9933ff, dIntensity: 1.0,  fog: new THREE.FogExp2(0x080012, 0.0005) },
+  solarPinnacle: { ambient: 0x402808, aIntensity: 0.55, dir: 0xffcc22, dIntensity: 1.4,  fog: new THREE.Fog(0xff8000, 600, 2000) },
+};
+
 /**
- * Load the stage GLB into the scene as a background layer and update platform
- * mesh colours.  Call once per match before entities are spawned.
+ * Build the stage environment and update platform mesh colours.
+ * Call once per match before entities are spawned.
  */
 export function setStage(stageId: string): void {
   // Remove previous stage background
@@ -201,22 +221,29 @@ export function setStage(stageId: string): void {
     stageBackgroundGroup = null;
   }
 
-  // Clear platform mesh cache so new stage gets fresh visuals
   clearPlatformMeshes();
-
   currentStageId = stageId;
 
-  // Update scene background colour
+  // Update sky background colour
   const skyHex = STAGE_SKY_COLOR[stageId] ?? 0x0d0d1e;
   if (scene) scene.background = new THREE.Color(skyHex);
 
-  // Load stage GLB asynchronously and add to scene when ready
-  loadGLTF(`/assets/${stageId}/${stageId}.glb`).then((model) => {
-    if (!model.failed && model.root && currentStageId === stageId) {
-      stageBackgroundGroup = model.root;
-      scene?.add(stageBackgroundGroup);
-    }
-  });
+  // Apply stage lighting
+  const lighting = STAGE_LIGHTING[stageId] ?? STAGE_LIGHTING['aetherPlateau']!;
+  if (ambientLight) {
+    ambientLight.color.setHex(lighting.ambient);
+    ambientLight.intensity = lighting.aIntensity;
+  }
+  if (dirLight) {
+    dirLight.color.setHex(lighting.dir);
+    dirLight.intensity = lighting.dIntensity;
+  }
+  if (scene) scene.fog = lighting.fog;
+
+  // Build the stage environment directly (synchronous — no async GLB loading)
+  if (scene) {
+    stageBackgroundGroup = buildStageEnvironment(scene, stageId);
+  }
 }
 
 // ── Character colour palette ──────────────────────────────────────────────────
@@ -285,96 +312,238 @@ export function createCharacterMesh(characterId: string): THREE.Group {
   return group;
 }
 
-// ── Per-stage platform palette ────────────────────────────────────────────────
-
-interface PlatPalette {
-  main:    number; // solid platform colour
-  pass:    number; // pass-through platform colour
-  edge:    number; // top edge highlight
-  mat:     'toon' | 'standard';
-  emissive?: number;
-  emissiveIntensity?: number;
-  metalness?: number;
-  roughness?: number;
-}
-
-const STAGE_PLAT_PALETTE: Record<string, PlatPalette> = {
-  aetherPlateau: { main: 0xb8986a, pass: 0xd8b87e, edge: 0xd4c090, mat: 'toon' },
-  forge:         { main: 0x2e3e50, pass: 0x3e5060, edge: 0x607080,
-                   mat: 'standard', metalness: 0.55, roughness: 0.45 },
-  cloudCitadel:  { main: 0xf8f8ff, pass: 0xe0e8ff, edge: 0xffffff, mat: 'toon' },
-  ancientRuin:   { main: 0x6a6050, pass: 0x8a7a5a, edge: 0x9a8a6a, mat: 'toon' },
-  digitalGrid:   { main: 0x080620, pass: 0x100840, edge: 0x00ffee,
-                   mat: 'standard', emissive: 0x00ccbb, emissiveIntensity: 0.4,
-                   metalness: 0.1, roughness: 0.8 },
-  crystalCavern: { main: 0x1a1a2e, pass: 0x2a2a4e, edge: 0x44eecc,
-                   mat: 'standard', emissive: 0x226644, emissiveIntensity: 0.25,
-                   metalness: 0.0, roughness: 0.7 },
-  voidRift:      { main: 0x180a28, pass: 0x2a1a3a, edge: 0x8833ff,
-                   mat: 'standard', emissive: 0x440088, emissiveIntensity: 0.4,
-                   metalness: 0.0, roughness: 0.9 },
-  solarPinnacle: { main: 0xd4a84a, pass: 0xc09030, edge: 0xffe080,
-                   mat: 'standard', metalness: 0.0, roughness: 0.85 },
-};
-
-function makePlatMaterial(hex: number, palette: PlatPalette): THREE.Material {
-  if (palette.mat === 'toon') {
-    return new THREE.MeshToonMaterial({ color: hex });
-  }
-  return new THREE.MeshStandardMaterial({
-    color:             hex,
-    emissive:          palette.emissive ?? 0x000000,
-    emissiveIntensity: palette.emissiveIntensity ?? 0,
-    metalness:         palette.metalness ?? 0,
-    roughness:         palette.roughness ?? 0.8,
-  });
-}
-
-// ── Platform mesh builder ─────────────────────────────────────────────────────
+// ── Per-stage platform builders ────────────────────────────────────────────────
 
 const PLAT_THICKNESS = 20;
 const PLAT_DEPTH     = 50;
+
+function pmToon(color: number): THREE.MeshToonMaterial {
+  return new THREE.MeshToonMaterial({ color });
+}
+function pmStd(color: number, opts: {
+  emissive?: number; emissiveIntensity?: number;
+  metalness?: number; roughness?: number;
+} = {}): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive:          opts.emissive          ?? 0x000000,
+    emissiveIntensity: opts.emissiveIntensity ?? 0,
+    metalness:         opts.metalness         ?? 0,
+    roughness:         opts.roughness         ?? 0.8,
+  });
+}
+
+function platBox(group: THREE.Group, w: number, h: number, d: number, mat: THREE.Material,
+  ox = 0, oy = 0, oz = 0): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(ox, oy, oz);
+  group.add(mesh);
+  return mesh;
+}
+
+function buildPlatAetherPlateau(group: THREE.Group, w: number, isPass: boolean): void {
+  // Stone body + grass top + dark earth bottom
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0xc8a870 : 0xa87848));
+  platBox(group, w + 4, 6, PLAT_DEPTH + 4, pmToon(0x58a030), 0, PLAT_THICKNESS / 2 + 3, 0);
+  platBox(group, w, 8, PLAT_DEPTH, pmToon(0x3a2810), 0, -PLAT_THICKNESS / 2 - 4, 0);
+  // Grass tufts along top
+  const tuftCount = Math.max(2, Math.floor(w / 80));
+  for (let i = 0; i < tuftCount; i++) {
+    const tx = -w / 2 + (i + 0.5) * (w / tuftCount);
+    platBox(group, 18, 12, 14, pmToon(0x78c040), tx, PLAT_THICKNESS / 2 + 9, -5, );
+  }
+  // Hanging stalactites below main (not pass-through)
+  if (!isPass && w > 200) {
+    for (let s = 0; s < Math.floor(w / 150); s++) {
+      const sx = -w / 2 + 80 + s * 140;
+      const stalGroup = new THREE.Group();
+      stalGroup.add(new THREE.Mesh(new THREE.ConeGeometry(8, 35, 5), pmToon(0x7a6050)));
+      stalGroup.position.set(sx, -PLAT_THICKNESS / 2 - 17, 0);
+      stalGroup.rotation.z = Math.PI;
+      group.add(stalGroup);
+    }
+  }
+}
+
+function buildPlatForge(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(isPass ? 0x3e5060 : 0x2e3e50, { metalness: 0.65, roughness: 0.45 }));
+  // Grating bars across top
+  const barCount = Math.max(3, Math.floor(w / 50));
+  for (let b = 0; b < barCount; b++) {
+    const bx = -w / 2 + (b + 0.5) * (w / barCount);
+    platBox(group, 4, 4, PLAT_DEPTH + 4,
+      pmStd(0x3a4e60, { metalness: 0.7, roughness: 0.4 }), bx, PLAT_THICKNESS / 2 + 2, 0);
+  }
+  // Orange underglow emissive strip
+  platBox(group, w - 8, 4, PLAT_DEPTH - 4,
+    pmStd(0xff4400, { emissive: 0xff4400, emissiveIntensity: 0.9 }), 0, -PLAT_THICKNESS / 2 - 2, 0);
+  // Warning stripe end panels
+  platBox(group, 10, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0x888800 : 0xaaaa00), -w / 2 - 5, 0, 0);
+  platBox(group, 10, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0x888800 : 0xaaaa00),  w / 2 + 5, 0, 0);
+}
+
+function buildPlatCloudCitadel(group: THREE.Group, w: number, _isPass: boolean): void {
+  // Cloud puff shape — no flat box, overlapping flattened spheres
+  const puffCount = Math.max(2, Math.floor(w / 80));
+  for (let p = 0; p < puffCount; p++) {
+    const px = -w / 2 + (p + 0.5) * (w / puffCount);
+    const pr = 45 + (p % 3) * 12;
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(pr, 8, 6),
+      pmToon(p % 2 === 0 ? 0xf8f8ff : 0xe8e8ff),
+    );
+    puff.scale.set(1.0, 0.5, 0.9);
+    puff.position.set(px, 0, 0);
+    group.add(puff);
+  }
+  // Slight shimmer highlight
+  const shimmer = new THREE.Mesh(
+    new THREE.BoxGeometry(w, 3, PLAT_DEPTH),
+    pmToon(0xffffff),
+  );
+  shimmer.position.set(0, 22, 0);
+  group.add(shimmer);
+}
+
+function buildPlatAncientRuin(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0x8a7a5a : 0x6a6050));
+  // Moss top layer
+  platBox(group, w + 4, 5, PLAT_DEPTH + 4,
+    pmStd(0x2a4a18, { emissive: 0x1a3010, emissiveIntensity: 0.1 }), 0, PLAT_THICKNESS / 2 + 2, 0);
+  // Vertical crack lines
+  const crackCount = Math.max(2, Math.floor(w / 120));
+  for (let c = 0; c < crackCount; c++) {
+    const cx = -w / 2 + (c + 1) * (w / (crackCount + 1));
+    platBox(group, 2, PLAT_THICKNESS, PLAT_DEPTH + 2, pmToon(0x3a2c1c), cx, 0, 0);
+  }
+  // Small rubble at each edge
+  platBox(group, 20, 12, 20, pmToon(0x5a4a34), -w / 2 + 10, PLAT_THICKNESS / 2 + 6, 0);
+  platBox(group, 20, 12, 20, pmToon(0x5a4a34),  w / 2 - 10, PLAT_THICKNESS / 2 + 6, 0);
+}
+
+function buildPlatDigitalGrid(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(isPass ? 0x100840 : 0x080620, { emissive: 0x001a22, emissiveIntensity: 0.2, roughness: 0.9 }));
+  // Glowing cyan edge frame
+  platBox(group, w + 4, 3, PLAT_DEPTH + 4,
+    pmStd(0x00ffee, { emissive: 0x00ffee, emissiveIntensity: 1.0 }), 0, PLAT_THICKNESS / 2 + 1, 0);
+  platBox(group, w + 4, 3, PLAT_DEPTH + 4,
+    pmStd(0x00aacc, { emissive: 0x00aacc, emissiveIntensity: 0.8 }), 0, -PLAT_THICKNESS / 2 - 1, 0);
+  platBox(group, 3, PLAT_THICKNESS, PLAT_DEPTH + 4,
+    pmStd(0x00ffee, { emissive: 0x00ffee, emissiveIntensity: 1.0 }), -w / 2 - 1, 0, 0);
+  platBox(group, 3, PLAT_THICKNESS, PLAT_DEPTH + 4,
+    pmStd(0x00ffee, { emissive: 0x00ffee, emissiveIntensity: 1.0 }),  w / 2 + 1, 0, 0);
+  // Corner data nodes
+  const dataMat = pmStd(0x00aaff, { emissive: 0x00aaff, emissiveIntensity: 1.0 });
+  for (const cx of [-w / 2, w / 2]) {
+    const node = new THREE.Mesh(new THREE.SphereGeometry(5, 6, 4), dataMat);
+    node.position.set(cx, PLAT_THICKNESS / 2 + 2, 0);
+    group.add(node);
+  }
+  // Scan line data tendrils hanging below
+  for (let t = 0; t < 4; t++) {
+    const tx = -w / 3 + t * (w / 3) * 0.66;
+    for (let seg = 0; seg < 4; seg++) {
+      platBox(group, 3, 8, 3,
+        pmStd(0x00ffaa, { emissive: 0x00ffaa, emissiveIntensity: 0.8 - seg * 0.15,
+          ...(seg > 0 ? {} : {}) }),
+        tx, -PLAT_THICKNESS / 2 - 10 - seg * 14, 0);
+    }
+  }
+}
+
+function buildPlatCrystalCavern(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(isPass ? 0x2a2a4e : 0x1a1a2e, { emissive: 0x060614, emissiveIntensity: 0.1, roughness: 0.85 }));
+  // Crystal spires along top edge
+  const spireCount = Math.max(3, Math.floor(w / 60));
+  const spireColors = [0x44ffee, 0xcc44ff, 0x4488ff, 0x44ff88];
+  for (let s = 0; s < spireCount; s++) {
+    const sx = -w / 2 + (s + 0.5) * (w / spireCount);
+    const sc = spireColors[s % spireColors.length]!;
+    const h = 25 + (s % 3) * 15;
+    const spire = new THREE.Mesh(
+      new THREE.ConeGeometry(5 + (s % 3) * 2, h, 4),
+      pmStd(sc, { emissive: sc, emissiveIntensity: 0.6 }),
+    );
+    spire.position.set(sx, PLAT_THICKNESS / 2 + h / 2, (s % 2) * 6 - 3);
+    group.add(spire);
+  }
+  // Underglow teal strip
+  platBox(group, w - 4, 4, PLAT_DEPTH - 4,
+    pmStd(0x44ffcc, { emissive: 0x44ffcc, emissiveIntensity: 0.8 }), 0, -PLAT_THICKNESS / 2 - 2, 0);
+}
+
+function buildPlatVoidRift(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(isPass ? 0x2a1a3a : 0x180a28, { emissive: 0x0a0014, emissiveIntensity: 0.15, roughness: 0.95 }));
+  // Purple glowing edge outline
+  platBox(group, w + 4, 3, PLAT_DEPTH + 4,
+    pmStd(0x8833ff, { emissive: 0x8833ff, emissiveIntensity: 1.0 }), 0, PLAT_THICKNESS / 2 + 1, 0);
+  platBox(group, w + 4, 3, PLAT_DEPTH + 4,
+    pmStd(0x4400aa, { emissive: 0x4400aa, emissiveIntensity: 0.7 }), 0, -PLAT_THICKNESS / 2 - 1, 0);
+  platBox(group, 3, PLAT_THICKNESS, PLAT_DEPTH + 4,
+    pmStd(0x8833ff, { emissive: 0x8833ff, emissiveIntensity: 1.0 }), -w / 2 - 1, 0, 0);
+  platBox(group, 3, PLAT_THICKNESS, PLAT_DEPTH + 4,
+    pmStd(0x8833ff, { emissive: 0x8833ff, emissiveIntensity: 1.0 }),  w / 2 + 1, 0, 0);
+  // Void tendril cones hanging below
+  const tendrilCount = Math.max(2, Math.floor(w / 100));
+  for (let t = 0; t < tendrilCount; t++) {
+    const tx = -w / 2 + 60 + t * (w - 120) / Math.max(1, tendrilCount - 1);
+    const tendril = new THREE.Mesh(
+      new THREE.ConeGeometry(5, 28, 4),
+      pmStd(0x6600cc, { emissive: 0x6600cc, emissiveIntensity: 0.7 }),
+    );
+    tendril.position.set(tx, -PLAT_THICKNESS / 2 - 14, 0);
+    tendril.rotation.z = Math.PI;
+    group.add(tendril);
+  }
+}
+
+function buildPlatSolarPinnacle(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0xc09030 : 0xb87840));
+  // Snow/ice top strip
+  platBox(group, w + 4, 6, PLAT_DEPTH + 4, pmToon(0xf0f8ff), 0, PLAT_THICKNESS / 2 + 3, 0);
+  // Geological strata lines
+  platBox(group, w, 3, PLAT_DEPTH + 2, pmToon(0x9a5828), 0, 4, 0);
+  platBox(group, w, 3, PLAT_DEPTH + 2, pmToon(0xd4902e), 0, -4, 0);
+  // Warm golden edge glow
+  platBox(group, 6, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(0xffcc44, { emissive: 0xffcc44, emissiveIntensity: 0.6 }), -w / 2 - 3, 0, 0);
+  platBox(group, 6, PLAT_THICKNESS, PLAT_DEPTH,
+    pmStd(0xffcc44, { emissive: 0xffcc44, emissiveIntensity: 0.6 }),  w / 2 + 3, 0, 0);
+  // Rocky end protrusions
+  platBox(group, 30, 25, 30, pmToon(0xa06030), -w / 2 + 15, PLAT_THICKNESS / 2 + 12, 0);
+  platBox(group, 30, 25, 30, pmToon(0xa06030),  w / 2 - 15, PLAT_THICKNESS / 2 + 12, 0);
+}
+
+function buildPlatDefault(group: THREE.Group, w: number, isPass: boolean): void {
+  platBox(group, w, PLAT_THICKNESS, PLAT_DEPTH, pmToon(isPass ? 0xd8b87e : 0xa87848));
+  platBox(group, w + 4, 5, PLAT_DEPTH + 4, pmToon(0x58a030), 0, PLAT_THICKNESS / 2 + 2, 0);
+}
+
+// ── Platform mesh builder ─────────────────────────────────────────────────────
 
 export function buildPlatformMesh(plat: Platform): THREE.Group {
   const x1 = toFloat(plat.x1);
   const x2 = toFloat(plat.x2);
   const py  = toFloat(plat.y);
-  const width = toFloat(fixedSub(plat.x2, plat.x1));
+  const w   = toFloat(fixedSub(plat.x2, plat.x1));
   const cx  = (x1 + x2) / 2;
-  const cy  = py - 10; // top surface at platform.y
-
-  const palette = STAGE_PLAT_PALETTE[currentStageId] ?? STAGE_PLAT_PALETTE['aetherPlateau']!;
-
-  const bodyHex = plat.passThrough ? palette.pass : palette.main;
-  const edgeHex = palette.edge;
-
-  const bodyMat = makePlatMaterial(bodyHex, palette);
-  const edgeMat = palette.mat === 'toon'
-    ? new THREE.MeshToonMaterial({ color: edgeHex })
-    : new THREE.MeshStandardMaterial({
-        color:             edgeHex,
-        emissive:          palette.emissive ?? edgeHex,
-        emissiveIntensity: (palette.emissiveIntensity ?? 0) + 0.3,
-        metalness:         palette.metalness ?? 0,
-        roughness:         (palette.roughness ?? 0.8) * 0.5,
-      });
-
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(width, PLAT_THICKNESS, PLAT_DEPTH),
-    bodyMat,
-  );
-  body.position.set(0, 0, 0);
-
-  const edge = new THREE.Mesh(
-    new THREE.BoxGeometry(width, 3, PLAT_DEPTH),
-    edgeMat,
-  );
-  edge.position.set(0, PLAT_THICKNESS / 2 + 1.5, 0);
-
   const group = new THREE.Group();
-  group.add(body, edge);
-  group.position.set(cx, cy, -20);
-
+  switch (currentStageId) {
+    case 'aetherPlateau': buildPlatAetherPlateau(group, w, plat.passThrough ?? false); break;
+    case 'forge':         buildPlatForge(group, w, plat.passThrough ?? false);         break;
+    case 'cloudCitadel':  buildPlatCloudCitadel(group, w, plat.passThrough ?? false);  break;
+    case 'ancientRuin':   buildPlatAncientRuin(group, w, plat.passThrough ?? false);   break;
+    case 'digitalGrid':   buildPlatDigitalGrid(group, w, plat.passThrough ?? false);   break;
+    case 'crystalCavern': buildPlatCrystalCavern(group, w, plat.passThrough ?? false); break;
+    case 'voidRift':      buildPlatVoidRift(group, w, plat.passThrough ?? false);      break;
+    case 'solarPinnacle': buildPlatSolarPinnacle(group, w, plat.passThrough ?? false); break;
+    default:              buildPlatDefault(group, w, plat.passThrough ?? false);        break;
+  }
+  group.position.set(cx, py - PLAT_THICKNESS / 2, -20);
   return group;
 }
 
@@ -454,9 +623,10 @@ export function initRenderer(existingCanvas?: HTMLCanvasElement): HTMLCanvasElem
 
   scene = new THREE.Scene();
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
 
-  const dirLight = new THREE.DirectionalLight(0xffe8d0, 1.0);
+  dirLight = new THREE.DirectionalLight(0xffe8d0, 1.0);
   dirLight.position.set(300, 600, 800);
   scene.add(dirLight);
 
