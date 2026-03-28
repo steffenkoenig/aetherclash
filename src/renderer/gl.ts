@@ -168,46 +168,182 @@ function dimColor(hex: number, factor: number): number {
 
 export function createCharacterMesh(characterId: string): THREE.Group {
   const mainColor = CHARACTER_COLORS[characterId] ?? FALLBACK_COLOR;
-  const armColor  = dimColor(mainColor, 0.7);
-  const legColor  = dimColor(mainColor, 0.6);
 
-  const mainMat  = new THREE.MeshToonMaterial({ color: mainColor });
-  const armMat   = new THREE.MeshToonMaterial({ color: armColor });
-  const legMat   = new THREE.MeshToonMaterial({ color: legColor });
-  const eyeMat   = new THREE.MeshToonMaterial({ color: 0x111111 });
-
+  function toon(hex: number): THREE.MeshToonMaterial {
+    return new THREE.MeshToonMaterial({ color: hex });
+  }
   function box(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
     return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   }
-
-  const torso = box(26, 28, 16, mainMat);
-  torso.position.set(0, 3, 0);
-
-  const head = box(20, 20, 16, mainMat);
-  head.position.set(0, 28, 0);
-
-  const eyeL = box(4, 3, 2, eyeMat);
-  eyeL.position.set(-5, 30, 8);
-
-  const eyeR = box(4, 3, 2, eyeMat);
-  eyeR.position.set(5, 30, 8);
-
-  const armL = box(8, 22, 8, armMat);
-  armL.position.set(-17, 5, 0);
-
-  const armR = box(8, 22, 8, armMat);
-  armR.position.set(17, 5, 0);
-
-  const legL = box(10, 26, 10, legMat);
-  legL.position.set(-8, -21, 0);
-
-  const legR = box(10, 26, 10, legMat);
-  legR.position.set(8, -21, 0);
+  function add(group: THREE.Group, mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh {
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+    return mesh;
+  }
 
   const group = new THREE.Group();
-  group.add(torso, head, eyeL, eyeR, armL, armR, legL, legR);
+  let torso: THREE.Mesh, head: THREE.Mesh, armL: THREE.Mesh, armR: THREE.Mesh,
+      legL: THREE.Mesh, legR: THREE.Mesh;
 
-  group.userData['parts'] = { torso, head, armL, armR, legL, legR };
+  if (characterId === 'kael') {
+    // ── Kael: armoured warrior ─────────────────────────────────────────────
+    const bodyM  = toon(mainColor);
+    const armorM = toon(0x8899cc);
+    const darkM  = toon(0x1a2233);
+    const eyeM   = toon(0x88ccff);
+    const swordM = toon(0xdde8ff);
+    torso = add(group, box(28, 30, 15, bodyM),  0, 15,  0);
+    head  = add(group, box(20, 22, 17, bodyM),  0, 41,  0);
+    armL  = add(group, box( 9, 24,  9, bodyM), -21, 14, 0);
+    armR  = add(group, box( 9, 24,  9, bodyM),  21, 14, 0);
+    legL  = add(group, box(11, 26, 11, bodyM),  -7, -13, 0);
+    legR  = add(group, box(11, 26, 11, bodyM),   7, -13, 0);
+    add(group, box( 4, 4, 2, eyeM),  -5, 42, 9.5);
+    add(group, box( 4, 4, 2, eyeM),   5, 42, 9.5);
+    add(group, box(25, 22, 3, armorM), 0, 17,  9);   // chest plate
+    add(group, box(12,  8, 16, armorM), -22, 30, 0);  // pauldron L
+    add(group, box(12,  8, 16, armorM),  22, 30, 0);  // pauldron R
+    add(group, box(28,  5, 16, darkM),   0,  1,  0);  // belt
+    add(group, box(22,  4,  4, armorM),  0, 45, 9.5); // brow
+    add(group, box( 4, 10, 16, armorM),  0, 54,  0);  // crest
+    add(group, box(12, 14, 12, armorM), -7, -22, 1);  // greave L
+    add(group, box(12, 14, 12, armorM),  7, -22, 1);  // greave R
+    add(group, box( 3, 38,  4, swordM), 30,  2,  0);  // sword blade
+    add(group, box(16,  4,  5, darkM),  30, 21,  0);  // sword guard
+    add(group, box( 3, 20, 20, armorM), -26, 8,  0);  // shield
+
+  } else if (characterId === 'gorun') {
+    // ── Gorun: massive armoured giant ─────────────────────────────────────
+    const bodyM   = toon(mainColor);
+    const armorM  = toon(0x333333);
+    const accentM = toon(0xff4400);
+    const eyeM    = toon(0xff6600);
+    const hammerM = toon(0x555566);
+    torso = add(group, box(46, 32, 24, bodyM),   0, 16,  0);
+    head  = add(group, box(28, 24, 24, bodyM),   0, 44,  0);
+    armL  = add(group, box(16, 26, 16, bodyM), -33, 14,  0);
+    armR  = add(group, box(16, 26, 16, bodyM),  33, 14,  0);
+    legL  = add(group, box(18, 28, 18, bodyM), -12, -14, 0);
+    legR  = add(group, box(18, 28, 18, bodyM),  12, -14, 0);
+    add(group, box( 6, 3, 2, eyeM),  -6, 44, 13);
+    add(group, box( 6, 3, 2, eyeM),   6, 44, 13);
+    add(group, box(24, 10, 3, armorM),  0, 41, 13.5); // faceplate
+    add(group, box(30,  6, 4, armorM),  0, 51, 13);   // brow
+    add(group, box(22, 14, 24, armorM), -33, 32, 0);  // shoulder L
+    add(group, box(22, 14, 24, armorM),  33, 32, 0);  // shoulder R
+    add(group, box(42, 28, 4, armorM),   0, 18, 13);  // chest plate
+    for (const [rx, ry] of [[-10, 22] as const, [10, 22] as const,
+                              [-10, 10] as const, [10, 10] as const]) {
+      add(group, box(4, 4, 3, accentM), rx, ry, 15.5); // rivets
+    }
+    add(group, box(46,  7, 25, armorM),  0,  1,  0);  // belt plate
+    add(group, box(20, 10, 20, armorM), -12, -18, 2);  // knee L
+    add(group, box(20, 10, 20, armorM),  12, -18, 2);  // knee R
+    add(group, box( 8, 36,  8, armorM),  50, 10,  0);  // hammer shaft
+    add(group, box(24, 24, 22, hammerM), 50, -5,  0);  // hammer head
+    add(group, box(22,  4, 20, accentM), 50, -5,  0);  // hammer accent
+
+  } else if (characterId === 'vela') {
+    // ── Vela: tall lean blade master ───────────────────────────────────────
+    const bodyM  = toon(mainColor);
+    const darkM  = toon(0x111111);
+    const bladeM = toon(0xccddff);
+    const eyeM   = toon(0xaaffcc);
+    const clothM = toon(0x224433);
+    torso = add(group, box(22, 32, 13, bodyM),   0, 16,  0);
+    head  = add(group, box(18, 22, 15, bodyM),   0, 43,  0);
+    armL  = add(group, box( 7, 28,  7, bodyM), -16, 14,  0);
+    armR  = add(group, box( 7, 28,  7, bodyM),  16, 14,  0);
+    legL  = add(group, box( 9, 32,  9, bodyM),  -6, -16, 0);
+    legR  = add(group, box( 9, 32,  9, bodyM),   6, -16, 0);
+    add(group, box(4, 4, 2, eyeM), -4, 44, 8.5);
+    add(group, box(4, 4, 2, eyeM),  4, 44, 8.5);
+    add(group, box(6, 20, 4, bodyM),  0, 51,  -9); // ponytail 1
+    add(group, box(4, 14, 3, bodyM),  0, 41, -14); // ponytail 2
+    add(group, box(3, 10, 3, bodyM),  0, 33, -18); // ponytail 3
+    add(group, box(16, 5, 4, darkM),  0, 32, 7.5); // collar
+    add(group, box(22, 5, 14, darkM), 0,  1,  1);  // belt sash
+    add(group, box(4, 28,  2, clothM), -13, 6, -7); // cloak L
+    add(group, box(4, 28,  2, clothM),  13, 6, -7); // cloak R
+    add(group, box(3, 52,  4, bladeM),  22, -4, 0); // blade
+    add(group, box(16, 3,  5, darkM),   22, 21, 0); // guard
+    add(group, box(3, 12,  4, darkM),   22, 27, 0); // handle
+    add(group, box(10, 10, 10, darkM),  -6, -30, 0.5); // boot L
+    add(group, box(10, 10, 10, darkM),   6, -30, 0.5); // boot R
+
+  } else if (characterId === 'syne') {
+    // ── Syne: slim tech engineer ───────────────────────────────────────────
+    const bodyM  = toon(mainColor);
+    const techM  = toon(0x223344);
+    const glowM  = toon(0x00ffee);
+    const eyeM   = toon(0x00eeff);
+    const darkM  = toon(0x111122);
+    torso = add(group, box(20, 26, 14, bodyM),  0, 13,  0);
+    head  = add(group, box(18, 20, 18, bodyM),  0, 37,  0);
+    armL  = add(group, box( 7, 22,  7, bodyM), -15, 13, 0);
+    armR  = add(group, box( 7, 22,  7, bodyM),  15, 13, 0);
+    legL  = add(group, box( 8, 26,  8, bodyM),  -6, -13, 0);
+    legR  = add(group, box( 8, 26,  8, bodyM),   6, -13, 0);
+    add(group, box(6, 3, 2, eyeM), -5, 37, 9.5);
+    add(group, box(6, 3, 2, eyeM),  5, 37, 9.5);
+    add(group, box(18, 12, 18, techM),  0, 48,  0);   // helmet dome
+    add(group, box( 2, 14,  2, glowM),  6, 60,  0);   // antenna
+    add(group, box( 5,  5,  5, glowM),  6, 68,  0);   // antenna tip
+    add(group, box(18,  5,  3, glowM),  0, 37, 10.5); // visor
+    add(group, box(20, 26, 10, techM),  0, 13, -12);  // backpack
+    add(group, box( 8,  8,  8, glowM),  0, 15, -17);  // pack orb
+    add(group, box(16,  5, 14, techM),  0,  1,   0);  // belt pack
+    add(group, box(10, 10, 10, techM), -18, 5,   3);  // arm cannon
+    add(group, box( 5,  5, 14, darkM), -18, 5,  11);  // barrel
+    add(group, box( 9,  8, 11, techM),  -6, -25, 1);  // boot L
+    add(group, box( 9,  8, 11, techM),   6, -25, 1);  // boot R
+
+  } else if (characterId === 'zira') {
+    // ── Zira: compact agile street fighter ─────────────────────────────────
+    const bodyM   = toon(mainColor);
+    const darkM   = toon(0x550011);
+    const accentM = toon(0xff3300);
+    const eyeM    = toon(0xff9900);
+    const padM    = toon(0x222222);
+    torso = add(group, box(18, 24, 12, bodyM),   0, 12,  0);
+    head  = add(group, box(16, 18, 14, bodyM),   0, 33,  0);
+    armL  = add(group, box( 6, 20,  6, bodyM), -14, 12,  0);
+    armR  = add(group, box( 6, 20,  6, bodyM),  14, 12,  0);
+    legL  = add(group, box( 8, 28,  8, bodyM),  -6, -14, 0);
+    legR  = add(group, box( 8, 28,  8, bodyM),   6, -14, 0);
+    add(group, box(4, 3, 2, eyeM), -4, 33, 7.5);
+    add(group, box(4, 3, 2, eyeM),  4, 33, 7.5);
+    add(group, box(4, 14, 14, accentM), 0, 48, 0); // mohawk 1
+    add(group, box(3, 10, 10, accentM), 0, 57, 0); // mohawk 2
+    add(group, box(2,  7,  7, accentM), 0, 65, 0); // mohawk 3
+    add(group, box(7,  5,  7, padM),  -14, 4,  0); // wristband L
+    add(group, box(7,  5,  7, padM),   14, 4,  0); // wristband R
+    add(group, box(18, 4,  2, darkM),   0, 20,  7); // stripe 1
+    add(group, box(18, 4,  2, darkM),   0, 10,  7); // stripe 2
+    add(group, box(9,  7,  9, padM),   -6, -10, 1.5); // knee L
+    add(group, box(9,  7,  9, padM),    6, -10, 1.5); // knee R
+    add(group, box(9, 10, 13, darkM),  -6, -26,  2);  // boot L
+    add(group, box(9, 10, 13, darkM),   6, -26,  2);  // boot R
+    add(group, box(9,  4,  4, accentM), -6, -28, 9); // toe cap L
+    add(group, box(9,  4,  4, accentM),  6, -28, 9); // toe cap R
+
+  } else {
+    // ── Fallback: simple box-humanoid ──────────────────────────────────────
+    const bodyM  = toon(mainColor);
+    const dimM   = toon(dimColor(mainColor, 0.7));
+    const darkM  = toon(dimColor(mainColor, 0.6));
+    const eyeM   = toon(0x111111);
+    torso = add(group, box(26, 28, 16, bodyM),   0,  3, 0);
+    head  = add(group, box(20, 20, 16, bodyM),   0, 28, 0);
+    armL  = add(group, box( 8, 22,  8, dimM),  -17,  5, 0);
+    armR  = add(group, box( 8, 22,  8, dimM),   17,  5, 0);
+    legL  = add(group, box(10, 26, 10, darkM),  -8, -21, 0);
+    legR  = add(group, box(10, 26, 10, darkM),   8, -21, 0);
+    add(group, box(4, 3, 2, eyeM), -5, 30, 8);
+    add(group, box(4, 3, 2, eyeM),  5, 30, 8);
+  }
+
+  group.userData['parts'] = { torso: torso!, head: head!, armL: armL!, armR: armR!, legL: legL!, legR: legR! };
 
   return group;
 }
