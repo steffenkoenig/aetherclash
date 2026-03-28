@@ -22,6 +22,7 @@ import {
   setEntityPassThroughInput,
   setEntityShieldInput,
   FIGHTER_HALF_HEIGHT,
+  FIGHTER_HALF_WIDTH,
   checkHitboxSystem,
   clearHitRegistry,
   setLandingLagLookup,
@@ -336,6 +337,13 @@ const PUMMEL_DAMAGE = toFixed(2);
 const PUMMEL_COOLDOWN_FRAMES = 20;
 /** Frames the grabbed victim is immobilised after a throw. */
 const THROW_VICTIM_HITSTUN_BASE = 20;
+/**
+ * Horizontal reach of a grab in world units (Q16.16).
+ * Measured from the grabber's centre to the far edge of the grab box.
+ * Set to 2.5 × FIGHTER_HALF_WIDTH so the grab connects when fighters are
+ * standing roughly adjacent to each other.
+ */
+const GRAB_REACH: number = (FIGHTER_HALF_WIDTH * 5) >> 1; // ≈ toFixed(37.5)
 
 // ── Up-special recovery constants ────────────────────────────────────────────
 
@@ -530,11 +538,16 @@ function processPlayerInput(
 
     // If the victim escaped (e.g. KO'd, grab timer expired) — release immediately.
     const grabTimer = grabFramesMap.get(playerId) ?? 0;
-    if (!victim || grabTimer <= 0) {
+    if (!victim || victim.state === 'KO' || grabTimer <= 0) {
       fighter.grabVictimId = null;
       transitionFighterState(playerId, 'idle');
       syncAnimation(fighter, renderable);
       return;
+    }
+
+    // Keep victim frozen in hitstun for as long as the grab holds.
+    if (victim.hitstunFrames <= 1) {
+      victim.hitstunFrames = 1;
     }
 
     // Pummel: attack press while holding — rapid damage, no knockback.
@@ -724,11 +737,44 @@ function processPlayerInput(
     if (buffer.consume('grab', matchState.frame)) {
       // If holding an item, grab-press throws/uses it instead of grappling
       if (!useHeldItem(playerId, transform.facingRight)) {
-        transitionFighterState(playerId, 'grabbing');
-        grabFramesMap.set(playerId, GRAB_TOTAL_FRAMES);
-        phys.vx = toFixed(0);
-        syncAnimation(fighter, renderable);
-        return;
+        // Scan for an opponent within grab reach in the facing direction.
+        let grabbedId: number | null = null;
+        for (const [candidateId, candidateFighter] of fighterComponents) {
+          if (candidateId === playerId) continue;
+          // Cannot grab fighters in these states (KO, invincible dodges, ledge).
+          const cs = candidateFighter.state;
+          if (cs === 'KO' || cs === 'ledgeHang' || cs === 'rolling' ||
+              cs === 'spotDodge' || cs === 'airDodge') continue;
+          const ct = transformComponents.get(candidateId);
+          if (!ct) continue;
+          const dx = ct.x - transform.x;
+          const dy = ct.y - transform.y;
+          // Must be in front of the grabber and within reach.
+          const inFront = transform.facingRight ? dx > 0 : dx < 0;
+          const absDx = dx < 0 ? -dx : dx;
+          const absDy = dy < 0 ? -dy : dy;
+          if (inFront && absDx <= GRAB_REACH && absDy <= (FIGHTER_HALF_WIDTH << 1)) {
+            grabbedId = candidateId;
+            break;
+          }
+        }
+        if (grabbedId !== null) {
+          fighter.grabVictimId = grabbedId;
+          // Pin victim in hitstun for the grab duration so they cannot act.
+          // Grab beats shield: force shielding victim to idle first so the
+          // state machine allows the hitstun transition.
+          const victimFighter = fighterComponents.get(grabbedId)!;
+          if (victimFighter.state === 'shielding') {
+            transitionFighterState(grabbedId, 'idle');
+          }
+          victimFighter.hitstunFrames = GRAB_TOTAL_FRAMES;
+          transitionFighterState(grabbedId, 'hitstun');
+          transitionFighterState(playerId, 'grabbing');
+          grabFramesMap.set(playerId, GRAB_TOTAL_FRAMES);
+          phys.vx = toFixed(0);
+          syncAnimation(fighter, renderable);
+          return;
+        }
       }
     }
   }
