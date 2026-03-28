@@ -42,10 +42,25 @@ import {
   sampleTouchInput,
   mergeTouchInput,
 } from './engine/input/touch.js';
+import {
+  initGamepad,
+  pollGamepads,
+  sampleGamepad,
+  mergeGamepadInput,
+} from './engine/input/gamepad.js';
 import { startLoop, stopLoop }             from './engine/loop.js';
 import { initRenderer, render, resetRenderer, resetItemMeshes } from './renderer/gl.js';
 import { updateCamera } from './renderer/camera.js';
 import { initHud, updateHud, disposeHud, registerP2KeysGetter }  from './renderer/hud.js';
+import {
+  triggerScreenShake,
+  spawnHitSpark,
+  spawnLaunchTrail,
+  endLaunchTrail,
+  triggerKOFlash,
+  updateParticles,
+  disposeParticles,
+} from './renderer/particles.js';
 import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
 import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
 import { VELA_STATS, VELA_MOVES }          from './game/characters/vela.js';
@@ -783,22 +798,50 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   const buffer1 = new InputBuffer();
   const buffer2 = new InputBuffer();
 
+  // ── Per-player previous-frame state (for particle effect detection) ────
+  const prevState: Record<number, string> = {
+    [player1Id]: 'idle',
+    [player2Id]: 'idle',
+  };
+
   // ── HUD ────────────────────────────────────────────────────────────────
   disposeHud();
+  disposeParticles();
   registerP2KeysGetter(getP2KeysDown);
   initHud([player1Id, player2Id]);
   resetItemMeshes();
   resetRenderer();
 
+  // Accent colours for hit sparks (must match CHARACTER_COLORS in gl.ts)
+  const CHARACTER_ACCENT: Record<string, string> = {
+    kael:  '#4488ee',
+    gorun: '#ee6600',
+    vela:  '#44dd66',
+    syne:  '#cc44ff',
+    zira:  '#ffd700',
+  };
+
+  /** Scale from damage percentage to launch-trail force threshold (renderer only). */
+  const DAMAGE_TO_FORCE_SCALE = 0.3;
+
   // ── Game loop ──────────────────────────────────────────────────────────
   stopLoop();
+  let lastRenderMs = performance.now();
   startLoop(
     () => {
       tickFighterTimers(player1Id);
       tickFighterTimers(player2Id);
 
-      const input1 = mergeTouchInput(sampleKeyboard(),       sampleTouchInput(0));
-      const input2 = mergeTouchInput(samplePlayer2Input(),   sampleTouchInput(1));
+      // Poll gamepad API and merge with keyboard / touch input
+      pollGamepads();
+      const input1 = mergeGamepadInput(
+        mergeTouchInput(sampleKeyboard(),     sampleTouchInput(0)),
+        sampleGamepad(0),
+      );
+      const input2 = mergeGamepadInput(
+        mergeTouchInput(samplePlayer2Input(), sampleTouchInput(1)),
+        sampleGamepad(1),
+      );
 
       processPlayerInput(player1Id, input1, buffer1);
       processPlayerInput(player2Id, input2, buffer2);
@@ -811,6 +854,54 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
       trySpawnItem(matchState.frame);
       tickItems(matchState.frame);
       tickHazards();
+
+      // ── Particle effect triggers (state-transition detection) ────────────
+      for (const entityId of [player1Id, player2Id]) {
+        const fighter   = fighterComponents.get(entityId);
+        const transform = transformComponents.get(entityId);
+        if (!fighter || !transform) continue;
+
+        const prev = prevState[entityId] ?? 'idle';
+        const curr = fighter.state;
+
+        if (curr !== prev) {
+          const wx = toFloat(transform.x);
+          const wy = toFloat(transform.y);
+          const color = CHARACTER_ACCENT[fighter.characterId] ?? '#ffffff';
+
+          // Fighter just entered hitstun → hit confirmed → spawn sparks + shake
+          if (curr === 'hitstun') {
+            spawnHitSpark(wx, wy, color);
+            const dmgFloat = toFloat(fighter.damagePercent);
+            if (dmgFloat >= 80) {
+              triggerScreenShake(12, 300); // smash-level
+            } else {
+              triggerScreenShake(6, 200);  // standard hit
+            }
+          }
+
+          // Fighter just entered KO → KO flash + strong shake
+          if (curr === 'KO') {
+            triggerKOFlash();
+            triggerScreenShake(20, 500);
+          }
+
+          // Fighter left hitstun → end launch trail
+          if (prev === 'hitstun' && curr !== 'hitstun') {
+            endLaunchTrail(entityId);
+          }
+
+          prevState[entityId] = curr;
+        }
+
+        // While in hitstun, keep updating the launch trail
+        if (fighter.state === 'hitstun') {
+          const wx = toFloat(transform.x);
+          const wy = toFloat(transform.y);
+          const dmgFloat = toFloat(fighter.damagePercent);
+          spawnLaunchTrail(entityId, wx, wy, dmgFloat * DAMAGE_TO_FORCE_SCALE);
+        }
+      }
 
       // ── Match-end detection ──────────────────────────────────────────────
       const mf1 = fighterComponents.get(player1Id);
@@ -832,6 +923,12 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
       render(platforms, alpha);
       updateHud();
       updateDebugOverlay();
+
+      // Advance and render all particle / VFX systems
+      const nowMs  = performance.now();
+      const deltaMs = Math.min(nowMs - lastRenderMs, 50);
+      lastRenderMs = nowMs;
+      updateParticles(deltaMs);
     },
   );
 }
@@ -840,6 +937,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
 
 registerServiceWorker();
 initKeyboard();
+initGamepad();
 initTouchControls();
 initRenderer();
 

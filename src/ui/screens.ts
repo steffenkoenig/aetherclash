@@ -216,6 +216,8 @@ function showStageSelect(): void {
   const box = makePanel('SELECT STAGE', '700px');
 
   const grid = document.createElement('div');
+  grid.setAttribute('role', 'radiogroup');
+  grid.setAttribute('aria-label', 'Select stage');
   Object.assign(grid.style, {
     display: 'grid',
     gridTemplateColumns: 'repeat(5, 1fr)',
@@ -238,16 +240,31 @@ function showStageSelect(): void {
       <div style="font-weight:bold;font-size:13px">${stage.label}</div>
       <div style="font-size:11px;color:#999;margin-top:4px">${stage.description}</div>`;
 
+    card.setAttribute('role', 'radio');
+    card.setAttribute('aria-label', stage.label);
+    card.setAttribute('aria-checked', 'false');
+    card.tabIndex = 0;
+
+    const selectCard = () => {
+      selectedStage = stage.id;
+      grid.querySelectorAll<HTMLDivElement>('[data-stage]').forEach(el => {
+        el.style.borderColor = '#444';
+        el.setAttribute('aria-checked', 'false');
+      });
+      card.style.borderColor = '#44FF66';
+      card.setAttribute('aria-checked', 'true');
+    };
+
     card.onmouseenter = () => { card.style.borderColor = '#44FF66'; };
     card.onmouseleave = () => {
       card.style.borderColor = selectedStage === stage.id ? '#44FF66' : '#444';
     };
-    card.onclick = () => {
-      selectedStage = stage.id;
-      grid.querySelectorAll<HTMLDivElement>('[data-stage]').forEach(el => {
-        el.style.borderColor = '#444';
-      });
-      card.style.borderColor = '#44FF66';
+    card.onclick = selectCard;
+    card.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectCard();
+      }
     };
     card.dataset['stage'] = stage.id;
 
