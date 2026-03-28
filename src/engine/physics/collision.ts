@@ -406,3 +406,67 @@ export function ledgeGrabSystem(): void {
     }
   }
 }
+
+// ── Fighter body collision ────────────────────────────────────────────────────
+
+/**
+ * Prevent fighters from passing through each other.
+ * For each overlapping pair, push them apart along the X axis by half the
+ * penetration depth and zero out the velocity component that drives the
+ * overlap so they don't immediately re-enter each other.
+ *
+ * Only horizontal separation is applied; vertical pass-through is intentional
+ * (fighters can jump over each other), but if two fighters are at the same
+ * height the separation keeps them side-by-side.
+ */
+export function fighterBodyCollisionSystem(entityIds: EntityId[]): void {
+  const FULL_WIDTH  = FIGHTER_HALF_WIDTH  << 1; // toFixed(30) — full fighter width (diameter)
+  const FULL_HEIGHT = FIGHTER_HALF_HEIGHT << 1; // toFixed(60) — full fighter height (diameter)
+
+  for (let i = 0; i < entityIds.length; i++) {
+    for (let j = i + 1; j < entityIds.length; j++) {
+      const idA = entityIds[i]!;
+      const idB = entityIds[j]!;
+
+      const tA = transformComponents.get(idA);
+      const tB = transformComponents.get(idB);
+      const pA = physicsComponents.get(idA);
+      const pB = physicsComponents.get(idB);
+      const fA = fighterComponents.get(idA);
+      const fB = fighterComponents.get(idB);
+
+      if (!tA || !tB || !pA || !pB || !fA || !fB) continue;
+
+      // Don't separate fighters that are KO'd — blast-zone logic owns them.
+      if (fA.state === 'KO' || fB.state === 'KO') continue;
+
+      // Check Y overlap first — if they're on very different heights they
+      // haven't collided (one jumped over the other).
+      const dy = tA.y > tB.y ? fixedSub(tA.y, tB.y) : fixedSub(tB.y, tA.y);
+      if (dy >= FULL_HEIGHT) continue;
+
+      // Check X overlap.
+      const dx = tA.x > tB.x ? fixedSub(tA.x, tB.x) : fixedSub(tB.x, tA.x);
+      if (dx >= FULL_WIDTH) continue;
+
+      // Penetration depth and half-separation in Q16.16.
+      const penetration = fixedSub(FULL_WIDTH, dx);
+      const halfSep     = penetration >> 1;
+
+      if (tA.x >= tB.x) {
+        // A is to the right: push A further right, B further left.
+        tA.x = fixedAdd(tA.x, halfSep);
+        tB.x = fixedSub(tB.x, halfSep);
+        // Clamp velocities so the fighters don't immediately re-penetrate.
+        if (pA.vx < 0) pA.vx = toFixed(0);
+        if (pB.vx > 0) pB.vx = toFixed(0);
+      } else {
+        // A is to the left: push A further left, B further right.
+        tA.x = fixedSub(tA.x, halfSep);
+        tB.x = fixedAdd(tB.x, halfSep);
+        if (pA.vx > 0) pA.vx = toFixed(0);
+        if (pB.vx < 0) pB.vx = toFixed(0);
+      }
+    }
+  }
+}

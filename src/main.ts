@@ -18,6 +18,7 @@ import { applyGravitySystem }          from './engine/physics/gravity.js';
 import {
   platforms,
   platformCollisionSystem,
+  fighterBodyCollisionSystem,
   setEntityPassThroughInput,
   setEntityShieldInput,
   FIGHTER_HALF_HEIGHT,
@@ -1059,6 +1060,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     integratePositions();
     applyGravitySystem();
     platformCollisionSystem();
+    fighterBodyCollisionSystem([player1Id, player2Id]);
     checkHitboxSystem([player1Id, player2Id], MOVE_DATA, inputMap);
     blastZoneSystem();
     trySpawnItem(matchState.frame);

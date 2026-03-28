@@ -834,26 +834,47 @@ type Parts = {
   legR:  THREE.Mesh;
 };
 
-function applyPose(group: THREE.Group, state: FighterState): void {
+function applyPose(group: THREE.Group, state: FighterState, moveId?: string | null): void {
   const parts = group.userData['parts'] as Parts | undefined;
   if (!parts) return;
 
   const { armL, armR, legL, legR } = parts;
-  // Date.now() is renderer-only (visual animation, never touches physics state).
-  // The determinism rule applies only to the simulation path.
-  const t = Date.now() * 0.001;
+  // renderTime is wall-clock seconds — renderer-only, never fed into physics.
+  // Using Date.now() here is intentional and determinism-safe; it only drives
+  // visual animation, not the simulation state.
+  const renderTime = Date.now() * 0.001;
 
   // Reset per-frame transient transforms before applying state pose.
   // rotation.y (facing direction) is set by the caller — do not touch it here.
   group.rotation.z = 0;
   group.scale.set(1, 1, 1);
 
-  // Reset arm forward position (used by attack)
+  // Reset arm Z offsets before any pose branch so all states start clean.
   armR.position.z = 0;
+  armL.position.z = 0;
+
+  // ── Special-move emissive glow ──────────────────────────────────────────
+  // When the fighter is executing a special move, pulse the character meshes
+  // with an emissive colour so specials are visually distinct from normals.
+  const isSpecial = state === 'attack' && moveId != null &&
+    (moveId.endsWith('Special') || moveId.includes('special'));
+  group.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const mat = obj.material;
+    if (mat instanceof THREE.MeshToonMaterial) {
+      if (isSpecial) {
+        // Yellow-white pulse: bright when active, fades with a sine wave.
+        const pulse = (Math.sin(renderTime * 12) + 1) * 0.5; // 0→1 fast pulse
+        mat.emissive = new THREE.Color(0.6 + pulse * 0.4, 0.8 + pulse * 0.2, 0.2);
+      } else {
+        mat.emissive = new THREE.Color(0, 0, 0);
+      }
+    }
+  });
 
   switch (state) {
     case 'idle': {
-      const bob = Math.sin(Date.now() * 0.003) * 1.5;
+      const bob = Math.sin(renderTime * 3) * 1.5;
       group.position.y += bob;
       legL.rotation.x = 0;
       legR.rotation.x = 0;
@@ -862,7 +883,7 @@ function applyPose(group: THREE.Group, state: FighterState): void {
       break;
     }
     case 'run': {
-      const s = Math.sin(t * 6);
+      const s = Math.sin(renderTime * 6);
       legL.rotation.x =  s * 0.5;
       legR.rotation.x = -s * 0.5;
       armL.rotation.x = -s * 0.3;
@@ -878,12 +899,23 @@ function applyPose(group: THREE.Group, state: FighterState): void {
       break;
 
     case 'attack':
-      armR.rotation.x = -Math.PI / 2;
-      armR.position.z = 10;
+      if (isSpecial) {
+        // Special pose: both arms raised and spread wide (charging stance).
+        armL.rotation.x = -Math.PI * 0.65;
+        armR.rotation.x = -Math.PI * 0.65;
+        armL.position.z = 8;
+        armR.position.z = 8;
+        // Slight forward lean.
+        group.rotation.z = 0.12;
+      } else {
+        // Normal attack: raise right arm forward.
+        armR.rotation.x = -Math.PI / 2;
+        armR.position.z = 10;
+      }
       break;
 
     case 'hitstun':
-      group.rotation.z = Math.sin(Date.now() * 0.05) * 0.2;
+      group.rotation.z = Math.sin(renderTime * 50) * 0.2;
       break;
 
     case 'KO':
@@ -1099,7 +1131,7 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     if (glbSwapped.has(id)) {
       updateMixer(id, fighter.state);
     } else {
-      applyPose(group, fighter.state);
+      applyPose(group, fighter.state, fighter.currentMoveId);
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────
