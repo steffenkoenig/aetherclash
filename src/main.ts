@@ -44,6 +44,7 @@ import {
   L_CANCEL_WINDOW,
   meteorCancelWindowMap,
   wavedashFramesMap,
+  ledgeHangFramesMap,
 } from './engine/physics/stateMachine.js';
 import {
   applyKnockback,

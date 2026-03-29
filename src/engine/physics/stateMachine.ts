@@ -2,7 +2,7 @@
 // Fighter state machine: validates transitions, fires callbacks, ticks timers.
 
 import type { EntityId } from '../ecs/entity.js';
-import { fighterComponents, physicsComponents, type FighterState } from '../ecs/component.js';
+import { fighterComponents, type FighterState } from '../ecs/component.js';
 
 // ── Supplemental per-entity timer maps ────────────────────────────────────────
 

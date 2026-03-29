@@ -654,7 +654,7 @@ describe('ledge mechanics', () => {
 // ── Ledge hang: input handling (regression for missing handler) ───────────────
 
 import { ledgeHangFramesMap } from '../src/engine/physics/stateMachine.js';
-import { fixedMul, fixedNeg } from '../src/engine/physics/fixednum.js';
+import { fixedMul } from '../src/engine/physics/fixednum.js';
 
 describe('ledgeHang input handling', () => {
   function makeLedgeFighter() {
@@ -1741,7 +1741,6 @@ describe('crouch state', () => {
 
 // ── Bug regression: syncAnimation loop for crouch ─────────────────────────────
 
-import type { Renderable } from '../src/engine/ecs/component.js';
 import { renderableComponents } from '../src/engine/ecs/component.js';
 
 describe('syncAnimation: loop flag', () => {
