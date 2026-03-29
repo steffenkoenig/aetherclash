@@ -136,6 +136,9 @@ const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').Fighter
   spotDodge:  'idle',
   rolling:    'run',
   airDodge:   'jump',
+  crouch:     'idle',
+  grabbing:   'idle',
+  ledgeHang:  'jump',
 };
 
 function updateMixer(entityId: number, state: import('../engine/ecs/component.js').FighterState): void {
@@ -1031,6 +1034,49 @@ function applyPose(
       armR.rotation.x = -0.5;
       legL.rotation.x = 0.5;
       legR.rotation.x = 0.5;
+      break;
+
+    case 'walk': {
+      // Slower walk cycle — same leg/arm swing as run but at half speed/amplitude.
+      const w = Math.sin(renderTime * 4);
+      legL.rotation.x =  w * 0.35;
+      legR.rotation.x = -w * 0.35;
+      armL.rotation.x = -w * 0.2;
+      armR.rotation.x =  w * 0.2;
+      break;
+    }
+
+    case 'crouch':
+      // Compressed squat: legs bent, body low, arms guard-raised.
+      group.scale.y = 0.65;
+      legL.rotation.x = 0.7;
+      legR.rotation.x = 0.7;
+      armL.rotation.x = -0.45;
+      armR.rotation.x = -0.45;
+      armL.position.z = 6;
+      armR.position.z = 6;
+      break;
+
+    case 'grabbing':
+      // Clinch grab: both arms thrust forward to hold the opponent.
+      armL.rotation.x = -Math.PI / 2;
+      armR.rotation.x = -Math.PI / 2;
+      armL.position.z = 18;
+      armR.position.z = 18;
+      legL.rotation.x = 0.25;
+      legR.rotation.x = 0.25;
+      group.rotation.z = facingRight ? -0.1 : 0.1;
+      break;
+
+    case 'ledgeHang':
+      // Hanging from ledge: arms raised overhead, legs dangling below.
+      armL.rotation.x = -Math.PI * 0.75;
+      armR.rotation.x = -Math.PI * 0.75;
+      armL.position.z = 4;
+      armR.position.z = 4;
+      legL.rotation.x = 0.4;
+      legR.rotation.x = 0.4;
+      group.scale.y = 1.05; // slight stretch from hanging
       break;
 
     default:
