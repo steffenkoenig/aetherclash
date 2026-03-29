@@ -41,6 +41,18 @@ export const SYNE_MOVES: Record<string, Move> = {
     iasa: 11, landingLag: 0, nextJab: 'neutralJab3',
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 28,
+    hitboxes: [{
+      activeFrames: [5, 14],
+      offsetX: toFixed(16), offsetY: toFixed(2),
+      width: toFixed(34), height: toFixed(32),
+      damage: 7, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3),
+      launchAngle: 42, hitlagFrames: 4, id: 'syne_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 22, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 26,
     hitboxes: [{

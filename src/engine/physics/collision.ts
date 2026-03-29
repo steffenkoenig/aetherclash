@@ -13,7 +13,8 @@ import {
 } from '../ecs/component.js';
 import type { InputState } from '../input/keyboard.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
-import { hitlagMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap } from './stateMachine.js';
+import { hitlagMap, dodgeFramesMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap } from './stateMachine.js';
+import { fixedMul } from './fixednum.js';
 
 export interface Platform {
   x1: Fixed;
@@ -110,13 +111,32 @@ export function platformCollisionSystem(): void {
             // gravity and aerial movement rules continue to apply correctly.
             transitionFighterState(id, 'jump');
           } else if (fighter.state === 'hitstun' && fighter.hitstunFrames > 0) {
-            // Floor tech: if shield was pressed within the tech window, normal landing.
-            // Otherwise, add hard-knockdown frames (stay in grounded hitstun).
+            // Floor tech: if shield was pressed within the tech window, apply a
+            // tech. The stick direction at the moment of the tech determines
+            // whether the fighter rolls left, rolls right, or stays in place.
             const techWin = techWindowMap.get(id) ?? 0;
             if (getEntityShieldInput(id) && techWin > 0) {
               fighter.hitstunFrames = 0;
               techWindowMap.set(id, 0);
-              transitionFighterState(id, 'idle');
+              fighter.invincibleFrames = TECH_INVINCIBILITY_FRAMES;
+
+              const stickX = getEntityStickX(id);
+              if (stickX > TECH_STICK_THRESHOLD) {
+                // Tech roll right
+                transitionFighterState(id, 'rolling');
+                phys.vx = fixedMul(fighter.stats.runSpeed, TECH_ROLL_SPEED);
+                transform.facingRight = true;
+                dodgeFramesMap.set(id, TECH_ROLL_TOTAL_FRAMES);
+              } else if (stickX < -TECH_STICK_THRESHOLD) {
+                // Tech roll left
+                transitionFighterState(id, 'rolling');
+                phys.vx = fixedNeg(fixedMul(fighter.stats.runSpeed, TECH_ROLL_SPEED));
+                transform.facingRight = false;
+                dodgeFramesMap.set(id, TECH_ROLL_TOTAL_FRAMES);
+              } else {
+                // Tech in place
+                transitionFighterState(id, 'idle');
+              }
             } else {
               fighter.hitstunFrames = 30;
             }
@@ -201,6 +221,48 @@ export function setEntityShieldInput(entityId: number, shielding: boolean): void
 export function getEntityShieldInput(entityId: number): boolean {
   return shieldInputs.get(entityId) ?? false;
 }
+
+// Per-entity main-stick X input; used by tech-roll and shield-interaction code.
+const stickXInputs = new Map<number, number>();
+
+export function setEntityStickX(entityId: number, stickX: number): void {
+  stickXInputs.set(entityId, stickX);
+}
+
+export function getEntityStickX(entityId: number): number {
+  return stickXInputs.get(entityId) ?? 0;
+}
+
+// ── Shield-hit constants ───────────────────────────────────────────────────────
+
+/**
+ * Fraction of an attack's damage dealt to the shield when blocked.
+ * Shields take 70 % of the raw hitbox damage (to match SSB64/Melee feel).
+ */
+const SHIELD_DAMAGE_RATIO = 0.7;
+
+/**
+ * Velocity magnitude pushed onto the attacker when their move is shielded
+ * (shield-pushback). Applied away from the victim so both fighters separate.
+ */
+const SHIELD_PUSHBACK = toFixed(3.0);
+
+// ── Tech-roll constants ────────────────────────────────────────────────────────
+
+/** Frames the fighter is invincible during/after a tech or tech roll. */
+const TECH_INVINCIBILITY_FRAMES = 10;
+
+/**
+ * Duration of a tech roll in frames (matches normal roll but slightly shorter
+ * to reward the skill of teching with direction).
+ */
+const TECH_ROLL_TOTAL_FRAMES = 25;
+
+/** Q16.16 speed multiplier for the lateral movement during a tech roll. */
+const TECH_ROLL_SPEED = toFixed(0.7); // same as normal roll
+
+/** Stick threshold to decide left/right tech roll vs. tech-in-place. */
+const TECH_STICK_THRESHOLD = 0.5;
 
 // ── Hit registry ──────────────────────────────────────────────────────────────
 
@@ -342,6 +404,38 @@ export function checkHitboxSystem(
 
         // ── Hit confirmed ─────────────────────────────────────────────────
         hitRegistry.add(registryKey);
+
+        // ── Shield hit: attack absorbed by an active shield ───────────────
+        if (victimFighter.state === 'shielding') {
+          // Deal shield damage (fraction of raw hitbox damage).
+          const shieldDamage = hitbox.damage * SHIELD_DAMAGE_RATIO;
+          victimFighter.shieldHealth -= shieldDamage;
+
+          // Freeze both combatants for hitlag (same as a normal hit — creates
+          // the "shield-hit lag" window used for shield pressure timing).
+          const hitlag = computeHitlagFrames(hitbox.damage);
+          hitlagMap.set(attackerId, hitlag);
+          attackerFighter.hitlagFrames = hitlag;
+          hitlagMap.set(victimId, hitlag);
+          victimFighter.hitlagFrames = hitlag;
+
+          // Push the attacker away from the shielding victim (shield pushback).
+          const attackerPhys = physicsComponents.get(attackerId);
+          if (attackerPhys) {
+            attackerPhys.vx = facingRight
+              ? fixedNeg(SHIELD_PUSHBACK)
+              : SHIELD_PUSHBACK;
+          }
+
+          // If the shield is broken, trigger shield-break stun.
+          if (victimFighter.shieldHealth <= 0) {
+            victimFighter.shieldHealth = 0;
+            transitionFighterState(victimId, 'idle', { shieldBreakFrames: 180 });
+          }
+          continue;
+        }
+
+        // ── Normal hit ────────────────────────────────────────────────────
 
         // Read victim's DI stick input (clamped to ±1) for Directional
         // Influence. Only the first frame of hitstun uses DI (applied once

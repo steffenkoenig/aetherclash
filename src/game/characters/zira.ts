@@ -54,6 +54,18 @@ export const ZIRA_MOVES: Record<string, Move> = {
     iasa: 4, landingLag: 0,
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 26,
+    hitboxes: [{
+      activeFrames: [4, 13],
+      offsetX: toFixed(15), offsetY: toFixed(2),
+      width: toFixed(32), height: toFixed(30),
+      damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(2),
+      launchAngle: 45, hitlagFrames: 4, id: 'zira_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 20, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 24,
     hitboxes: [{

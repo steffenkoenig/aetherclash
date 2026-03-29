@@ -77,7 +77,7 @@ const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([
   ['jump',       new Set<FighterState>(['idle', 'jump', 'doubleJump', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['doubleJump', new Set<FighterState>(['idle', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['attack',     new Set<FighterState>(['idle', 'jump', 'hitstun', 'KO'])],
-  ['hitstun',    new Set<FighterState>(['hitstun', 'idle', 'KO', 'ledgeHang'])],
+  ['hitstun',    new Set<FighterState>(['hitstun', 'idle', 'rolling', 'KO', 'ledgeHang'])],
   ['shielding',  new Set<FighterState>(['idle', 'rolling', 'spotDodge', 'KO'])],
   ['rolling',    new Set<FighterState>(['idle', 'KO'])],
   ['spotDodge',  new Set<FighterState>(['idle', 'KO'])],

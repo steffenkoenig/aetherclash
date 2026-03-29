@@ -29,6 +29,18 @@ export const GORUN_MOVES: Record<string, Move> = {
     iasa: 22, landingLag: 0,
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 40,
+    hitboxes: [{
+      activeFrames: [9, 18],
+      offsetX: toFixed(24), offsetY: toFixed(-2),
+      width: toFixed(50), height: toFixed(38),
+      damage: 13, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5),
+      launchAngle: 35, hitlagFrames: 5, id: 'gorun_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 32, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 35,
     hitboxes: [{

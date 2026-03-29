@@ -264,7 +264,7 @@ describe('hitstun', () => {
 
 // ── Hitbox / Hurtbox ──────────────────────────────────────────────────────────
 
-import { checkHitboxSystem } from '../src/engine/physics/collision.js';
+import { checkHitboxSystem, setEntityStickX } from '../src/engine/physics/collision.js';
 
 function makeAttacker(x: number, moveId: string, frame: number) {
   const id = makeGroundedFighter('kael', KAEL_STATS, x, 30);
@@ -971,5 +971,247 @@ describe('fighterBodyCollisionSystem', () => {
     expect(toFloat(tA.x)).toBeCloseTo(0, 3);
     expect(toFloat(tB.x)).toBeCloseTo(0, 3);
   });
+});
+
+// ── Shield hit interaction (Gap 1) ────────────────────────────────────────────
+
+describe('shield hit interaction', () => {
+  function makeShieldMove(): Move {
+    return {
+      totalFrames: 30,
+      hitboxes: [{
+        activeFrames: [3, 10],
+        offsetX: toFixed(30), offsetY: toFixed(0),
+        width: toFixed(40), height: toFixed(40),
+        damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(5),
+        launchAngle: 45, hitlagFrames: 4, id: 'test_shield_hitbox',
+      }],
+      hurtboxes: [{
+        activeFrames: [0, 30], offsetX: toFixed(0), offsetY: toFixed(0),
+        width: toFixed(30), height: toFixed(60), intangible: false, invincible: false,
+      }],
+      iasa: 25, landingLag: 0,
+    };
+  }
+
+  it('attack on shielding opponent reduces shield health instead of dealing hitstun', () => {
+    const attackerId = makeAttacker(0, 'shieldMove', 5);
+    const victimId   = makeGroundedFighter('kael', KAEL_STATS, 40, 30);
+
+    // Put victim in shielding state with full health
+    transitionFighterState(victimId, 'shielding');
+    const victim = fighterComponents.get(victimId)!;
+    victim.shieldHealth = 100;
+
+    const moveData = makeMoveData('kael', 'shieldMove', makeShieldMove());
+    checkHitboxSystem([attackerId, victimId], moveData);
+
+    // Shield should have lost health
+    expect(victim.shieldHealth).toBeLessThan(100);
+    // Victim must NOT be in hitstun — shield absorbed the hit
+    expect(victim.state).toBe('shielding');
+    // Victim should not have taken damage to their percent
+    expect(victim.damagePercent).toBe(toFixed(0));
+  });
+
+  it('both fighters receive hitlag when attack is shielded', () => {
+    const attackerId = makeAttacker(0, 'shieldMove2', 5);
+    const victimId   = makeGroundedFighter('kael', KAEL_STATS, 40, 30);
+
+    transitionFighterState(victimId, 'shielding');
+
+    const move = makeShieldMove();
+    move.hitboxes[0]!.id = 'test_shield_hitbox_2';
+    const moveData = makeMoveData('kael', 'shieldMove2', move);
+    checkHitboxSystem([attackerId, victimId], moveData);
+
+    const expectedHitlag = computeHitlagFrames(10);
+    expect(fighterComponents.get(attackerId)!.hitlagFrames).toBe(expectedHitlag);
+    expect(fighterComponents.get(victimId)!.hitlagFrames).toBe(expectedHitlag);
+  });
+
+  it('shield breaks when health is depleted by a hit', () => {
+    const attackerId = makeAttacker(0, 'shieldBreaker', 5);
+    const victimId   = makeGroundedFighter('kael', KAEL_STATS, 40, 30);
+
+    transitionFighterState(victimId, 'shielding');
+    // Deplete shield almost entirely so one hit finishes it
+    fighterComponents.get(victimId)!.shieldHealth = 1;
+
+    const move = makeShieldMove();
+    move.hitboxes[0]!.id = 'test_shield_break';
+    const moveData = makeMoveData('kael', 'shieldBreaker', move);
+    checkHitboxSystem([attackerId, victimId], moveData);
+
+    const victim = fighterComponents.get(victimId)!;
+    expect(victim.shieldHealth).toBe(0);
+    // After shield break the fighter must no longer be shielding
+    expect(victim.state).not.toBe('shielding');
+  });
+
+  it('same hitbox does not re-hit a shielding fighter on the next frame', () => {
+    const attackerId = makeAttacker(0, 'shieldRepeat', 5);
+    const victimId   = makeGroundedFighter('kael', KAEL_STATS, 40, 30);
+
+    transitionFighterState(victimId, 'shielding');
+    const victim = fighterComponents.get(victimId)!;
+    const startHealth = victim.shieldHealth;
+
+    const move = makeShieldMove();
+    move.hitboxes[0]!.id = 'test_shield_repeat';
+    const moveData = makeMoveData('kael', 'shieldRepeat', move);
+
+    checkHitboxSystem([attackerId, victimId], moveData);
+    const healthAfterFirst = victim.shieldHealth;
+
+    // Reset hitlag so the system re-runs
+    hitlagMap.set(attackerId, 0);
+    fighterComponents.get(attackerId)!.hitlagFrames = 0;
+    hitlagMap.set(victimId, 0);
+    victim.hitlagFrames = 0;
+
+    checkHitboxSystem([attackerId, victimId], moveData);
+    // Shield health must not decrease again (hit already registered)
+    expect(victim.shieldHealth).toBe(healthAfterFirst);
+    expect(victim.shieldHealth).toBeLessThan(startHealth);
+  });
+});
+
+// ── Directional tech roll (Gap 2) ─────────────────────────────────────────────
+
+describe('directional tech roll', () => {
+  function makeHitstunFighterAbovePlatform(x = 0) {
+    const plat = { x1: toFixed(-200), x2: toFixed(200), y: toFixed(0), passThrough: false };
+    platforms.push(plat);
+
+    const id = createEntity();
+    transformComponents.set(id, {
+      x: toFixed(x),
+      prevX: toFixed(x),
+      prevY: toFixed(0) + FIGHTER_HALF_HEIGHT + toFixed(2),
+      y:     toFixed(0) + FIGHTER_HALF_HEIGHT - toFixed(2),
+      facingRight: true,
+    });
+    physicsComponents.set(id, {
+      vx: toFixed(0), vy: toFixed(-3),
+      gravityMultiplier: toFixed(1.0),
+      grounded: false, fastFalling: false,
+    });
+    fighterComponents.set(id, {
+      characterId: 'kael',
+      state: 'hitstun',
+      damagePercent: toFixed(0),
+      stocks: 3,
+      jumpCount: 1,
+      hitstunFrames: 15,
+      invincibleFrames: 0,
+      hitlagFrames: 0,
+      shieldHealth: 100,
+      shieldBreakFrames: 0,
+      attackFrame: 0,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
+      stats: KAEL_STATS,
+    });
+    techWindowMap.set(id, 10);
+    return id;
+  }
+
+  it('tech-in-place (no stick): fighter returns to idle', () => {
+    const id = makeHitstunFighterAbovePlatform();
+    setEntityShieldInput(id, true);
+    setEntityStickX(id, 0);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.state).toBe('idle');
+    expect(fighter.hitstunFrames).toBe(0);
+    expect(fighter.invincibleFrames).toBeGreaterThan(0);
+  });
+
+  it('tech roll right (stick right): fighter enters rolling state moving right', () => {
+    const id = makeHitstunFighterAbovePlatform();
+    setEntityShieldInput(id, true);
+    setEntityStickX(id, 1.0);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.state).toBe('rolling');
+    expect(fighter.hitstunFrames).toBe(0);
+    expect(fighter.invincibleFrames).toBeGreaterThan(0);
+    // Should be moving right
+    expect(physicsComponents.get(id)!.vx).toBeGreaterThan(0);
+    expect(transformComponents.get(id)!.facingRight).toBe(true);
+  });
+
+  it('tech roll left (stick left): fighter enters rolling state moving left', () => {
+    const id = makeHitstunFighterAbovePlatform();
+    setEntityShieldInput(id, true);
+    setEntityStickX(id, -1.0);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.state).toBe('rolling');
+    expect(fighter.hitstunFrames).toBe(0);
+    expect(fighter.invincibleFrames).toBeGreaterThan(0);
+    // Should be moving left
+    expect(physicsComponents.get(id)!.vx).toBeLessThan(0);
+    expect(transformComponents.get(id)!.facingRight).toBe(false);
+  });
+
+  it('no tech (no shield): hard-knockdown applies 30 frames hitstun', () => {
+    const id = makeHitstunFighterAbovePlatform();
+    setEntityShieldInput(id, false);
+    setEntityStickX(id, 0);
+
+    platformCollisionSystem();
+
+    const fighter = fighterComponents.get(id)!;
+    expect(fighter.hitstunFrames).toBe(30);
+    // State stays hitstun (grounded hard-knockdown)
+    expect(fighter.state).toBe('hitstun');
+  });
+});
+
+// ── Dash attack per character (Gap 3) ─────────────────────────────────────────
+
+import { KAEL_MOVES }  from '../src/game/characters/kael.js';
+import { SYNE_MOVES }  from '../src/game/characters/syne.js';
+import { VELA_MOVES }  from '../src/game/characters/vela.js';
+import { GORUN_MOVES } from '../src/game/characters/gorun.js';
+import { ZIRA_MOVES }  from '../src/game/characters/zira.js';
+
+describe('dash attack moves', () => {
+  const characters: [string, Record<string, Move>][] = [
+    ['kael',  KAEL_MOVES],
+    ['syne',  SYNE_MOVES],
+    ['vela',  VELA_MOVES],
+    ['gorun', GORUN_MOVES],
+    ['zira',  ZIRA_MOVES],
+  ];
+
+  for (const [charId, moves] of characters) {
+    it(`${charId} has a dedicated dashAttack move`, () => {
+      expect(moves.dashAttack).toBeDefined();
+    });
+
+    it(`${charId} dashAttack has valid active frames and damage`, () => {
+      const da = moves.dashAttack!;
+      expect(da.hitboxes.length).toBeGreaterThan(0);
+      const hb = da.hitboxes[0]!;
+      expect(hb.damage).toBeGreaterThan(0);
+      expect(hb.activeFrames[1]).toBeGreaterThan(hb.activeFrames[0]);
+      expect(da.iasa).toBeGreaterThan(0);
+      expect(da.iasa).toBeLessThan(da.totalFrames);
+    });
+
+    it(`${charId} dashAttack hitbox id is unique`, () => {
+      const da = moves.dashAttack!;
+      const hb = da.hitboxes[0]!;
+      expect(hb.id).toBe(`${charId}_dash`);
+    });
+  }
 });
 

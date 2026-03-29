@@ -21,6 +21,7 @@ import {
   fighterBodyCollisionSystem,
   setEntityPassThroughInput,
   setEntityShieldInput,
+  setEntityStickX,
   FIGHTER_HALF_HEIGHT,
   FIGHTER_HALF_WIDTH,
   checkHitboxSystem,
@@ -446,8 +447,11 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
       moveId = moves?.has('upSmash') ? 'upSmash' : 'upTilt';
     } else if (Math.abs(input.stickX) > STICK_THRESHOLD) {
       if (fighter.state === 'run') {
-        // Dash attack — forward tilt used as dash attack (SSB64 style)
-        moveId = moves?.has('forwardTilt') ? 'forwardTilt' : 'neutralJab';
+        // Dash attack — dedicated dashAttack move takes priority; fall back to
+        // forwardTilt for characters that don't have one yet.
+        moveId = moves?.has('dashAttack')  ? 'dashAttack'
+               : moves?.has('forwardTilt') ? 'forwardTilt'
+               : 'neutralJab';
       } else {
         // Standing forward: forwardSmash
         moveId = moves?.has('forwardSmash') ? 'forwardSmash' : 'forwardTilt';
@@ -524,6 +528,7 @@ function processPlayerInput(
   const renderable = renderableComponents.get(playerId)!;
 
   setEntityShieldInput(playerId, input.shield);
+  setEntityStickX(playerId, input.stickX);
 
   const hitlag = hitlagMap.get(playerId) ?? 0;
   if (
@@ -1017,8 +1022,8 @@ function snapGrabbedFighters(entityIds: number[]): void {
     const victimP  = physicsComponents.get(fighter.grabVictimId);
     if (!grabberT || !victimT || !victimP) continue;
     victimT.x = grabberT.facingRight
-      ? (grabberT.x + GRAB_CARRY_OFFSET) | 0
-      : (grabberT.x - GRAB_CARRY_OFFSET) | 0;
+      ? fixedAdd(grabberT.x, GRAB_CARRY_OFFSET)
+      : fixedSub(grabberT.x, GRAB_CARRY_OFFSET);
     victimT.y       = grabberT.y;
     victimP.vx      = toFixed(0);
     victimP.vy      = toFixed(0);

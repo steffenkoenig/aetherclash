@@ -53,6 +53,18 @@ export const KAEL_MOVES: Record<string, Move> = {
     iasa: 16, landingLag: 0,
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 32,
+    hitboxes: [{
+      activeFrames: [6, 16],
+      offsetX: toFixed(18), offsetY: toFixed(0),
+      width: toFixed(38), height: toFixed(35),
+      damage: 8, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(3),
+      launchAngle: 40, hitlagFrames: 4, id: 'kael_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 30,
     hitboxes: [{

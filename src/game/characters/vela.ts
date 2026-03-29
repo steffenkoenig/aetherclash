@@ -41,6 +41,18 @@ export const VELA_MOVES: Record<string, Move> = {
     iasa: 14, landingLag: 0, nextJab: 'neutralJab3',
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 35,
+    hitboxes: [{
+      activeFrames: [7, 17],
+      offsetX: toFixed(22), offsetY: toFixed(0),
+      width: toFixed(48), height: toFixed(36),
+      damage: 10, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(4),
+      launchAngle: 38, hitlagFrames: 4, id: 'vela_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 35], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 28,
     hitboxes: [{
