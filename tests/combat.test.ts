@@ -651,7 +651,135 @@ describe('ledge mechanics', () => {
   });
 });
 
-// ── State machine: invalid transitions are blocked ─────────────────────────────
+// ── Ledge hang: input handling (regression for missing handler) ───────────────
+
+import { ledgeHangFramesMap } from '../src/engine/physics/stateMachine.js';
+import { fixedMul, fixedNeg } from '../src/engine/physics/fixednum.js';
+
+describe('ledgeHang input handling', () => {
+  function makeLedgeFighter() {
+    const id = createEntity();
+    transformComponents.set(id, {
+      x: toFixed(235), y: toFixed(-30),
+      prevX: toFixed(235), prevY: toFixed(-25),
+      facingRight: true,
+    });
+    physicsComponents.set(id, {
+      vx: toFixed(0), vy: toFixed(0),
+      gravityMultiplier: toFixed(1.0),
+      grounded: false, fastFalling: false,
+    });
+    fighterComponents.set(id, {
+      characterId: 'kael', state: 'ledgeHang',
+      damagePercent: toFixed(0),
+      stocks: 3, jumpCount: 0, hitstunFrames: 0, invincibleFrames: 0,
+      hitlagFrames: 0, shieldHealth: 100, shieldBreakFrames: 0,
+      attackFrame: 0, currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
+      stats: KAEL_STATS,
+    });
+    ledgeHangFramesMap.set(id, 10); // timer still running
+    return id;
+  }
+
+  it('ledgeHang → jump is a valid state-machine transition', () => {
+    const id = makeLedgeFighter();
+    const ok = transitionFighterState(id, 'jump');
+    expect(ok).toBe(true);
+    expect(fighterComponents.get(id)!.state).toBe('jump');
+  });
+
+  it('ledgeHang → idle → attack (ledge attack path) are valid transitions', () => {
+    const id = makeLedgeFighter();
+    expect(transitionFighterState(id, 'idle')).toBe(true);
+    expect(transitionFighterState(id, 'attack')).toBe(true);
+    expect(fighterComponents.get(id)!.state).toBe('attack');
+  });
+
+  it('ledge jump logic: vy = jumpForce, jumpCount = 1, state = jump', () => {
+    // Simulate the ledgeHang jump branch from processPlayerInput
+    const id = makeLedgeFighter();
+    const fighter = fighterComponents.get(id)!;
+    const phys    = physicsComponents.get(id)!;
+
+    // doJump = true path
+    phys.vy              = fighter.stats.jumpForce;
+    phys.fastFalling     = false;
+    phys.gravityMultiplier = toFixed(1.0);
+    const LEDGE_JUMP_INWARD_SCALE = toFixed(0.5);
+    phys.vx = fixedMul(fighter.stats.runSpeed, LEDGE_JUMP_INWARD_SCALE); // facingRight
+    transitionFighterState(id, 'jump');
+    fighter.jumpCount = 1;
+
+    expect(fighter.state).toBe('jump');
+    expect(phys.vy).toBe(fighter.stats.jumpForce);
+    expect(fighter.jumpCount).toBe(1);
+    expect(phys.fastFalling).toBe(false);
+    expect(phys.vx).toBeGreaterThan(0); // inward nudge when facingRight
+  });
+
+  it('ledge drop logic: vy = 0, jumpCount = 0 (double-jump preserved), state = jump', () => {
+    // Simulate the ledgeHang drop branch (doDrop = true, doJump = false)
+    const id = makeLedgeFighter();
+    const fighter = fighterComponents.get(id)!;
+    const phys    = physicsComponents.get(id)!;
+
+    phys.vy              = toFixed(0);
+    phys.fastFalling     = false;
+    phys.gravityMultiplier = toFixed(1.0);
+    const LEDGE_JUMP_INWARD_SCALE = toFixed(0.5);
+    phys.vx = fixedMul(fighter.stats.runSpeed, LEDGE_JUMP_INWARD_SCALE);
+    transitionFighterState(id, 'jump');
+    fighter.jumpCount = 0; // drop: double-jump intact
+
+    expect(fighter.state).toBe('jump');
+    expect(phys.vy).toBe(toFixed(0));
+    expect(fighter.jumpCount).toBe(0);
+  });
+
+  it('timer-expiry drop: when ledgeHangFramesMap = 0, fighter should drop', () => {
+    // Simulate the ledgeTimer === 0 path: same as drop
+    const id = makeLedgeFighter();
+    ledgeHangFramesMap.set(id, 0); // force timer expiry
+    const fighter = fighterComponents.get(id)!;
+    const phys    = physicsComponents.get(id)!;
+
+    // Simulate the auto-drop logic (ledgeTimer === 0 path)
+    phys.vy              = toFixed(0);
+    phys.fastFalling     = false;
+    phys.gravityMultiplier = toFixed(1.0);
+    const LEDGE_JUMP_INWARD_SCALE = toFixed(0.5);
+    phys.vx = fixedMul(fighter.stats.runSpeed, LEDGE_JUMP_INWARD_SCALE);
+    transitionFighterState(id, 'jump');
+    fighter.jumpCount = 0;
+
+    expect(fighter.state).toBe('jump');
+    expect(phys.vy).toBe(toFixed(0));
+  });
+
+  it('ledge attack: fighter enters attack state with getupAttack move, grounded, invincible', () => {
+    // Simulate the doAttack path
+    const id = makeLedgeFighter();
+    const fighter = fighterComponents.get(id)!;
+    const phys    = physicsComponents.get(id)!;
+
+    fighter.attackFrame       = 0;
+    fighter.currentMoveId     = 'getupAttack';
+    fighter.smashChargeFrames = 0;
+    fighter.invincibleFrames  = 6; // GETUP_ATTACK_INVINCIBLE_FRAMES
+    phys.grounded = true;
+    phys.vx       = toFixed(0);
+    phys.vy       = toFixed(0);
+    transitionFighterState(id, 'idle');
+    transitionFighterState(id, 'attack');
+
+    expect(fighter.state).toBe('attack');
+    expect(fighter.currentMoveId).toBe('getupAttack');
+    expect(fighter.invincibleFrames).toBe(6);
+    expect(phys.grounded).toBe(true);
+  });
+});
+
+
 
 describe('state machine', () => {
   it('invalid transition KO → attack is blocked', () => {

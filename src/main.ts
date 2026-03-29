@@ -328,6 +328,13 @@ const SHIELD_REGEN_PER_FRAME = 0.1;
 const GETUP_ATTACK_INVINCIBLE_FRAMES = 6;
 
 /**
+ * Fraction of run speed applied inward (toward the stage centre) when a
+ * fighter jumps or drops off a ledge.  Ensures they clear the stage edge and
+ * land on the main platform rather than dropping straight down the blast zone.
+ */
+const LEDGE_JUMP_INWARD_SCALE = toFixed(0.5);
+
+/**
  * Friction applied per Q16.16 unit of horizontal velocity per frame during a
  * wavedash/waveland slide.  Larger = faster stop; smaller = longer slide.
  */
@@ -705,7 +712,51 @@ function processPlayerInput(
     return;
   }
 
-  // ── Landing lag — fighter is grounded but cannot act yet ─────────────────
+  // ── Ledge hang: jump off, drop, or get-up attack ──────────────────────────
+  // While hanging on a ledge the fighter can:
+  //   • Jump  → ledge jump (full-height leap back onto the stage)
+  //   • Down-stick → drop off (fall with no upward velocity but air-jump intact)
+  //   • Attack → ledge get-up attack (snap to ground, execute getupAttack move)
+  //   • Timer expiry → auto-drop (same as down-stick; prevents infinite stall)
+  // An inward horizontal nudge is applied so the fighter naturally lands back on
+  // the stage rather than falling straight into the blast zone.
+  if (fighter.state === 'ledgeHang') {
+    const ledgeTimer = ledgeHangFramesMap.get(playerId) ?? 0;
+    const doJump   = input.jumpJustPressed;
+    const doDrop   = input.stickY < -STICK_THRESHOLD;
+    const doAttack = input.attackJustPressed;
+
+    if (doJump || doDrop || ledgeTimer === 0) {
+      // Launch vertically for a ledge jump; just release for a drop.
+      phys.vy              = doJump ? fighter.stats.jumpForce : toFixed(0);
+      phys.fastFalling     = false;
+      phys.gravityMultiplier = toFixed(1.0);
+      // Nudge the fighter inward so they clear the stage edge.
+      phys.vx = transform.facingRight
+        ? fixedMul(fighter.stats.runSpeed, LEDGE_JUMP_INWARD_SCALE)
+        : fixedNeg(fixedMul(fighter.stats.runSpeed, LEDGE_JUMP_INWARD_SCALE));
+      transitionFighterState(playerId, 'jump');
+      // Ledge-jump costs the first air-jump; a drop preserves the double-jump.
+      fighter.jumpCount = doJump ? 1 : 0;
+    } else if (doAttack) {
+      // Ledge get-up attack: snap to grounded position and execute getup attack.
+      const moves       = getMoves(fighter.characterId);
+      const getupMoveId = moves?.has('getupAttack') ? 'getupAttack' : 'neutralJab1';
+      fighter.attackFrame       = 0;
+      fighter.currentMoveId     = getupMoveId;
+      fighter.smashChargeFrames = 0;
+      fighter.invincibleFrames  = GETUP_ATTACK_INVINCIBLE_FRAMES;
+      phys.grounded = true;
+      phys.vx       = toFixed(0);
+      phys.vy       = toFixed(0);
+      transitionFighterState(playerId, 'idle');   // ledgeHang → idle
+      transitionFighterState(playerId, 'attack'); // idle → attack
+    }
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+
   const currentLandingLag = landingLagMap.get(playerId) ?? 0;
   if (currentLandingLag > 0) {
     // Still in landing lag; no action allowed. Allow L-cancel window update.
