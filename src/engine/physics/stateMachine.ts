@@ -2,7 +2,7 @@
 // Fighter state machine: validates transitions, fires callbacks, ticks timers.
 
 import type { EntityId } from '../ecs/entity.js';
-import { fighterComponents, type FighterState } from '../ecs/component.js';
+import { fighterComponents, physicsComponents, type FighterState } from '../ecs/component.js';
 
 // ── Supplemental per-entity timer maps ────────────────────────────────────────
 
@@ -47,6 +47,22 @@ export const landingLagMap = new Map<EntityId, number>();
  */
 export const lCancelWindowMap = new Map<EntityId, number>();
 
+/**
+ * Meteor-cancel window per fighter.
+ * Set to 20 when applyKnockback launches a fighter downward (angle 220°–320°).
+ * While > 0 and the fighter is airborne in hitstun, pressing jump cancels the
+ * downward velocity and applies a small upward boost.
+ */
+export const meteorCancelWindowMap = new Map<EntityId, number>();
+
+/**
+ * Wavedash/waveland momentum frames per fighter.
+ * Set when a fighter lands while in airDodge state with non-zero horizontal
+ * velocity.  While > 0 the ground movement code applies friction-based decay
+ * instead of immediately zeroing vx (preserving the air-dodge momentum).
+ */
+export const wavedashFramesMap = new Map<EntityId, number>();
+
 /** Frames the L-cancel window stays open after shield is pressed. */
 export const L_CANCEL_WINDOW = 7;
 
@@ -66,14 +82,16 @@ export function clearStateMachineMaps(): void {
   airDodgeUsedSet.clear();
   landingLagMap.clear();
   lCancelWindowMap.clear();
+  meteorCancelWindowMap.clear();
+  wavedashFramesMap.clear();
 }
 
 // ── Transition table ──────────────────────────────────────────────────────────
 
 const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([
-  ['idle',       new Set<FighterState>(['idle', 'walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
-  ['walk',       new Set<FighterState>(['idle', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
-  ['run',        new Set<FighterState>(['idle', 'walk', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'KO', 'ledgeHang'])],
+  ['idle',       new Set<FighterState>(['idle', 'walk', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'crouch', 'KO', 'ledgeHang'])],
+  ['walk',       new Set<FighterState>(['idle', 'run', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'crouch', 'KO', 'ledgeHang'])],
+  ['run',        new Set<FighterState>(['idle', 'walk', 'jump', 'attack', 'hitstun', 'shielding', 'grabbing', 'spotDodge', 'rolling', 'crouch', 'KO', 'ledgeHang'])],
   ['jump',       new Set<FighterState>(['idle', 'jump', 'doubleJump', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['doubleJump', new Set<FighterState>(['idle', 'attack', 'hitstun', 'airDodge', 'KO', 'ledgeHang'])],
   ['attack',     new Set<FighterState>(['idle', 'jump', 'hitstun', 'KO'])],
@@ -84,6 +102,7 @@ const VALID_TRANSITIONS = new Map<FighterState, ReadonlySet<FighterState>>([
   ['airDodge',   new Set<FighterState>(['idle', 'hitstun', 'KO', 'ledgeHang'])],
   ['grabbing',   new Set<FighterState>(['idle', 'attack', 'KO'])],
   ['ledgeHang',  new Set<FighterState>(['idle', 'jump', 'rolling', 'attack', 'KO'])],
+  ['crouch',     new Set<FighterState>(['idle', 'attack', 'hitstun', 'shielding', 'rolling', 'spotDodge', 'KO'])],
   ['KO',         new Set<FighterState>(['KO'])],
 ]);
 
@@ -194,6 +213,10 @@ export function tickFighterTimers(entityId: EntityId): void {
   if (fighter.hitstunFrames > 0) {
     fighter.hitstunFrames--;
     if (fighter.hitstunFrames === 0 && fighter.state === 'hitstun') {
+      // If the fighter is grounded (hard-knockdown recovery), transition to idle.
+      // Getup options (attack/roll) are handled in processPlayerInput before this
+      // branch fires; they clear hitstunFrames early so we only reach here for the
+      // natural timeout.
       transitionFighterState(entityId, 'idle');
     }
   }
@@ -264,5 +287,22 @@ export function tickFighterTimers(entityId: EntityId): void {
   const lCancel = lCancelWindowMap.get(entityId) ?? 0;
   if (lCancel > 0) {
     lCancelWindowMap.set(entityId, lCancel - 1);
+  }
+
+  // 11. Meteor-cancel window countdown
+  const meteorWin = meteorCancelWindowMap.get(entityId) ?? 0;
+  if (meteorWin > 0) {
+    meteorCancelWindowMap.set(entityId, meteorWin - 1);
+  }
+
+  // 12. Wavedash momentum countdown
+  const wavedash = wavedashFramesMap.get(entityId) ?? 0;
+  if (wavedash > 0) {
+    const next = wavedash - 1;
+    if (next === 0) {
+      wavedashFramesMap.delete(entityId);
+    } else {
+      wavedashFramesMap.set(entityId, next);
+    }
   }
 }

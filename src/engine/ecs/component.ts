@@ -36,6 +36,7 @@ export type FighterState =
   | 'airDodge'
   | 'grabbing'
   | 'ledgeHang'
+  | 'crouch'
   | 'KO';
 
 export interface FighterStats {

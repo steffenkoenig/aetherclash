@@ -13,7 +13,7 @@ import {
 } from '../ecs/component.js';
 import type { InputState } from '../input/keyboard.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
-import { hitlagMap, dodgeFramesMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap } from './stateMachine.js';
+import { hitlagMap, dodgeFramesMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap, wavedashFramesMap } from './stateMachine.js';
 import { fixedMul } from './fixednum.js';
 
 export interface Platform {
@@ -142,10 +142,18 @@ export function platformCollisionSystem(): void {
             }
           } else if (
             fighter.state === 'jump' ||
-            fighter.state === 'doubleJump' ||
-            fighter.state === 'airDodge'
+            fighter.state === 'doubleJump'
           ) {
             transitionFighterState(id, 'idle');
+          } else if (fighter.state === 'airDodge') {
+            // Waveland / wavedash: preserve horizontal momentum from the air dodge
+            // for WAVEDASH_FRAMES frames using friction-based deceleration.
+            // If vx == 0 (e.g. pure vertical air dodge), no slide occurs.
+            const wasMoving = phys.vx !== 0;
+            transitionFighterState(id, 'idle');
+            if (wasMoving) {
+              wavedashFramesMap.set(id, WAVEDASH_FRAMES);
+            }
           } else if (fighter.state === 'attack' && fighter.currentMoveId !== null) {
             // Landing while in an aerial attack: apply landing lag.
             // L-cancel: pressing shield within L_CANCEL_WINDOW frames before
@@ -263,6 +271,13 @@ const TECH_ROLL_SPEED = toFixed(0.7); // same as normal roll
 
 /** Stick threshold to decide left/right tech roll vs. tech-in-place. */
 const TECH_STICK_THRESHOLD = 0.5;
+
+/**
+ * Frames of wavedash/waveland momentum preservation after landing from
+ * an air dodge with non-zero horizontal velocity.  During these frames,
+ * ground movement applies friction decay instead of an instant stop.
+ */
+const WAVEDASH_FRAMES = 10;
 
 // ── Hit registry ──────────────────────────────────────────────────────────────
 
@@ -397,6 +412,14 @@ export function checkHitboxSystem(
               hurtH = activeHurtbox.height;
             }
           }
+        }
+
+        // Crouch: smaller hurtbox — feet stay at the same position but the top
+        // of the box is only half as high, making the fighter harder to hit with
+        // attacks aimed at the upper body.
+        if (victimFighter.state === 'crouch') {
+          hurtH = FIGHTER_HALF_HEIGHT;                          // half normal height
+          hurtY = fixedSub(victimTransform.y, FIGHTER_HALF_HEIGHT >> 1); // shift centre down
         }
 
         if (!aabbOverlap(hbWorldX, hbWorldY, hitbox.width, hitbox.height,

@@ -41,6 +41,18 @@ export const GORUN_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 40], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 32, landingLag: 0,
   },
+  getupAttack: {
+    totalFrames: 28,
+    hitboxes: [{
+      activeFrames: [7, 17],
+      offsetX: toFixed(22), offsetY: toFixed(-10),
+      width: toFixed(44), height: toFixed(30),
+      damage: 8, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(5),
+      launchAngle: 78, hitlagFrames: 5, id: 'gorun_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 22, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 35,
     hitboxes: [{

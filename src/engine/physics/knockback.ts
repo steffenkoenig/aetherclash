@@ -17,7 +17,7 @@ import {
   fighterComponents,
 } from '../ecs/component.js';
 import { sinDeg, cosDeg } from './trig.js';
-import { transitionFighterState } from './stateMachine.js';
+import { transitionFighterState, meteorCancelWindowMap } from './stateMachine.js';
 
 // ── Pre-computed fixed-point constants ────────────────────────────────────────
 
@@ -133,6 +133,12 @@ export function applyKnockback(
   phys.vx       = vx;
   phys.vy       = vy;
   phys.grounded = false;
+
+  // Meteor-cancel window: downward spikes (angle 220°–320°) grant a 20-frame
+  // window in which pressing jump cancels the downward momentum.
+  if (angle > 220 && angle < 320) {
+    meteorCancelWindowMap.set(victimEntityId, 20);
+  }
 
   const hitstunFrames = computeHitstunFrames(force);
   transitionFighterState(victimEntityId, 'hitstun', { hitstunFrames });

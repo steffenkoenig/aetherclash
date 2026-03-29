@@ -65,6 +65,18 @@ export const KAEL_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 32], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 26, landingLag: 0,
   },
+  getupAttack: {
+    totalFrames: 24,
+    hitboxes: [{
+      activeFrames: [5, 14],
+      offsetX: toFixed(20), offsetY: toFixed(-8),
+      width: toFixed(36), height: toFixed(28),
+      damage: 6, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(4),
+      launchAngle: 75, hitlagFrames: 4, id: 'kael_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 24], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 20, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 30,
     hitboxes: [{

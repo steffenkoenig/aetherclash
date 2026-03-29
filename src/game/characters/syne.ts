@@ -53,6 +53,18 @@ export const SYNE_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 22, landingLag: 0,
   },
+  getupAttack: {
+    totalFrames: 20,
+    hitboxes: [{
+      activeFrames: [4, 12],
+      offsetX: toFixed(18), offsetY: toFixed(-5),
+      width: toFixed(34), height: toFixed(26),
+      damage: 5, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3),
+      launchAngle: 80, hitlagFrames: 4, id: 'syne_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 20], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 16, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 26,
     hitboxes: [{

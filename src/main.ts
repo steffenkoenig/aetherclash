@@ -42,6 +42,8 @@ import {
   landingLagMap,
   lCancelWindowMap,
   L_CANCEL_WINDOW,
+  meteorCancelWindowMap,
+  wavedashFramesMap,
 } from './engine/physics/stateMachine.js';
 import {
   applyKnockback,
@@ -325,6 +327,15 @@ const SHIELD_DRAIN_PER_FRAME = 0.5;
 /** Shield health regenerated per frame when not shielding (slow regen). */
 const SHIELD_REGEN_PER_FRAME = 0.1;
 
+/** Invincibility frames granted when executing a getup attack from hard knockdown. */
+const GETUP_ATTACK_INVINCIBLE_FRAMES = 6;
+
+/**
+ * Friction applied per Q16.16 unit of horizontal velocity per frame during a
+ * wavedash/waveland slide.  Larger = faster stop; smaller = longer slide.
+ */
+const WAVEDASH_FRICTION = toFixed(0.5);
+
 // ── Smash charge constants ────────────────────────────────────────────────────
 
 /** Frames the player must hold attack before a smash is fully charged. */
@@ -531,6 +542,53 @@ function processPlayerInput(
   setEntityStickX(playerId, input.stickX);
 
   const hitlag = hitlagMap.get(playerId) ?? 0;
+
+  // ── Airborne hitstun: meteor cancel ──────────────────────────────────────
+  // While in hitstun in the air with a downward spike, pressing jump within
+  // the meteor-cancel window reverses the downward momentum.
+  if (fighter.state === 'hitstun' && !phys.grounded) {
+    const meteorWin = meteorCancelWindowMap.get(playerId) ?? 0;
+    if (meteorWin > 0 && input.jumpJustPressed) {
+      phys.vy          = fixedMul(fighter.stats.jumpForce, toFixed(0.5));
+      phys.fastFalling = false;
+      meteorCancelWindowMap.delete(playerId);
+    }
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // ── Grounded hitstun: getup options ──────────────────────────────────────
+  // During hard knockdown, the fighter lies on the ground for hitstunFrames.
+  // Pressing attack executes a getup attack; shield+direction executes a getup
+  // roll.  No input = automatic standup when hitstunFrames expires normally.
+  if (fighter.state === 'hitstun' && phys.grounded && fighter.hitstunFrames > 0) {
+    if (input.attackJustPressed) {
+      // Getup attack: cancel hitstun and execute a getup move with brief invincibility.
+      fighter.hitstunFrames = 0;
+      const moves = getMoves(fighter.characterId);
+      const getupMoveId = moves?.has('getupAttack') ? 'getupAttack' : 'neutralJab1';
+      transitionFighterState(playerId, 'idle');       // hitstun → idle
+      fighter.attackFrame       = 0;
+      fighter.currentMoveId     = getupMoveId;
+      fighter.smashChargeFrames = 0;
+      fighter.invincibleFrames  = GETUP_ATTACK_INVINCIBLE_FRAMES;
+      transitionFighterState(playerId, 'attack');     // idle → attack
+    } else if (input.shield && Math.abs(input.stickX) > STICK_THRESHOLD) {
+      // Getup roll: cancel hitstun and roll in the direction of the stick.
+      fighter.hitstunFrames = 0;
+      transitionFighterState(playerId, 'idle');
+      transitionFighterState(playerId, 'rolling');
+      fighter.invincibleFrames = ROLL_INVINCIBLE_FRAMES;
+      dodgeFramesMap.set(playerId, ROLL_TOTAL_FRAMES);
+      phys.vx = input.stickX > 0
+        ? fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER)
+        : fixedNeg(fixedMul(fighter.stats.runSpeed, ROLL_SPEED_MULTIPLIER));
+      transform.facingRight = input.stickX > 0;
+    }
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
   if (
     fighter.state === 'KO'        ||
     fighter.state === 'hitstun'   ||
@@ -666,6 +724,38 @@ function processPlayerInput(
 
   setEntityPassThroughInput(playerId, input.stickY < -STICK_THRESHOLD);
 
+  // ── Crouch: grounded + down-stick from idle/walk/run/crouch ──────────────
+  // Crouching reduces the fighter's hurtbox to roughly half height and signals
+  // to the attack system to use down-tilts when attack is pressed.
+  // Releasing the stick (or pressing shield/jump) exits crouch.
+  if (
+    phys.grounded &&
+    !input.shield &&
+    input.stickY < -STICK_THRESHOLD &&
+    (fighter.state === 'idle'   ||
+     fighter.state === 'walk'   ||
+     fighter.state === 'run'    ||
+     fighter.state === 'crouch')
+  ) {
+    if (fighter.state !== 'crouch') {
+      phys.vx = toFixed(0);
+      transitionFighterState(playerId, 'crouch');
+    }
+    // Allow attacking from crouch — stickY is already < -STICK_THRESHOLD so
+    // startAttack will naturally select the down-tilt move.
+    if (input.attackJustPressed) {
+      if (!useHeldItem(playerId, transform.facingRight)) {
+        startAttack(playerId, fighter, phys, input);
+      }
+    }
+    syncAnimation(fighter, renderable);
+    return;
+  }
+
+  // Exit crouch when stick is released or shield/jump pressed.
+  if (fighter.state === 'crouch') {
+    transitionFighterState(playerId, 'idle');
+  }
   // ── Jump hold tracking (for short-hop detection) ──────────────────────────
   if (input.jump) {
     jumpHeldFrames.set(playerId, (jumpHeldFrames.get(playerId) ?? 0) + 1);
@@ -895,6 +985,7 @@ function processPlayerInput(
         if (fighter.state !== 'walk' && fighter.state !== 'run') transitionFighterState(playerId, 'walk');
       }
       transform.facingRight = true;
+      wavedashFramesMap.delete(playerId); // directional input breaks wavedash slide
     } else if (input.stickX < -WALK_THRESHOLD) {
       const isRun = absX >= RUN_THRESHOLD || fighter.state === 'run';
       if (isRun) {
@@ -905,10 +996,27 @@ function processPlayerInput(
         if (fighter.state !== 'walk' && fighter.state !== 'run') transitionFighterState(playerId, 'walk');
       }
       transform.facingRight = false;
+      wavedashFramesMap.delete(playerId); // directional input breaks wavedash slide
     } else {
-      phys.vx = toFixed(0);
-      if (fighter.state === 'run' || fighter.state === 'walk') {
-        transitionFighterState(playerId, 'idle');
+      // No stick input: check for active wavedash momentum before stopping.
+      const wdFrames = wavedashFramesMap.get(playerId) ?? 0;
+      if (wdFrames > 0) {
+        // Waveland/wavedash slide: apply friction-based deceleration each frame
+        // instead of instantly zeroing velocity.  This preserves the characteristic
+        // sliding feel of a well-timed Melee wavedash.
+        if (phys.vx > WAVEDASH_FRICTION) {
+          phys.vx = fixedSub(phys.vx, WAVEDASH_FRICTION);
+        } else if (phys.vx < fixedNeg(WAVEDASH_FRICTION)) {
+          phys.vx = fixedAdd(phys.vx, WAVEDASH_FRICTION);
+        } else {
+          phys.vx = toFixed(0);
+          wavedashFramesMap.delete(playerId);
+        }
+      } else {
+        phys.vx = toFixed(0);
+        if (fighter.state === 'run' || fighter.state === 'walk') {
+          transitionFighterState(playerId, 'idle');
+        }
       }
     }
   } else {

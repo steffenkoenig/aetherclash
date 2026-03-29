@@ -66,6 +66,18 @@ export const ZIRA_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 20, landingLag: 0,
   },
+  getupAttack: {
+    totalFrames: 18,
+    hitboxes: [{
+      activeFrames: [3, 11],
+      offsetX: toFixed(16), offsetY: toFixed(-6),
+      width: toFixed(32), height: toFixed(24),
+      damage: 4, knockbackScaling: toFixed(0.7), baseKnockback: toFixed(3),
+      launchAngle: 82, hitlagFrames: 4, id: 'zira_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 18], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 14, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 24,
     hitboxes: [{

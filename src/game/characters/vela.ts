@@ -53,6 +53,18 @@ export const VELA_MOVES: Record<string, Move> = {
     hurtboxes: [{ activeFrames: [0, 35], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
     iasa: 28, landingLag: 0,
   },
+  getupAttack: {
+    totalFrames: 22,
+    hitboxes: [{
+      activeFrames: [4, 13],
+      offsetX: toFixed(22), offsetY: toFixed(-6),
+      width: toFixed(40), height: toFixed(28),
+      damage: 6, knockbackScaling: toFixed(0.85), baseKnockback: toFixed(4),
+      launchAngle: 72, hitlagFrames: 4, id: 'vela_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 22], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 18, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 28,
     hitboxes: [{
