@@ -68,6 +68,64 @@ const TURN_LERP = 0.18;
 // Maps entity id → semi-transparent sphere shown while shielding.
 const shieldBubbleMeshes = new Map<number, THREE.Mesh>();
 
+// ── Trump "The Wall" effect mesh registry ─────────────────────────────────────
+// Maps entity id → gold-plated brick wall group shown during sideSpecial.
+const trumpWallMeshes = new Map<number, THREE.Group>();
+
+// ── Musk "Mars Colonization" effect mesh registry ─────────────────────────────
+// Maps entity id → SpaceX rocket cone shown during downSpecial.
+const muskRocketMeshes = new Map<number, THREE.Group>();
+
+/** Build a gold-plated brick wall group (Trump sideSpecial). */
+function buildTrumpWall(): THREE.Group {
+  const g    = new THREE.Group();
+  const goldM = new THREE.MeshStandardMaterial({
+    color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 0.35,
+    metalness: 0.8, roughness: 0.25,
+  });
+  // Main wall slab
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(16, 70, 20), goldM);
+  g.add(wall);
+  // Brick-row lines (darker gold strips)
+  const lineM = new THREE.MeshStandardMaterial({ color: 0xb8860b, metalness: 0.6, roughness: 0.5 });
+  for (let row = -3; row <= 3; row++) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(16.5, 1.5, 21), lineM);
+    line.position.y = row * 10;
+    g.add(line);
+  }
+  return g;
+}
+
+/** Build a SpaceX-style rocket cone group (Musk downSpecial). */
+function buildMuskRocket(): THREE.Group {
+  const g       = new THREE.Group();
+  const bodyM   = new THREE.MeshStandardMaterial({ color: 0xddddee, metalness: 0.7, roughness: 0.25 });
+  const exhaustM = new THREE.MeshStandardMaterial({
+    color: 0x00ffee, emissive: 0x00ffee, emissiveIntensity: 0.9,
+    transparent: true, opacity: 0.75,
+  });
+  const finM = new THREE.MeshStandardMaterial({ color: 0x223355, metalness: 0.5, roughness: 0.4 });
+  // Rocket body cylinder
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 40, 10), bodyM);
+  g.add(body);
+  // Nose cone
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(5, 16, 10), bodyM);
+  nose.position.y = 28;
+  g.add(nose);
+  // Exhaust cone (flares downward)
+  const exhaust = new THREE.Mesh(new THREE.ConeGeometry(7, 22, 10), exhaustM);
+  exhaust.rotation.x = Math.PI;
+  exhaust.position.y = -30;
+  g.add(exhaust);
+  // Grid-fin pair
+  for (const sx of [-1, 1]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 1.5), finM);
+    fin.position.set(sx * 7, -14, 0);
+    g.add(fin);
+  }
+  return g;
+}
+
 /** Radius of the shield bubble in world units. */
 const SHIELD_BUBBLE_RADIUS = 45;
 
@@ -990,6 +1048,18 @@ export function resetRenderer(): void {
     (mesh.material as THREE.Material).dispose();
   }
   shieldBubbleMeshes.clear();
+  // Clear Trump wall effects
+  for (const g of trumpWallMeshes.values()) {
+    scene?.remove(g);
+    g.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+  }
+  trumpWallMeshes.clear();
+  // Clear Musk rocket effects
+  for (const g of muskRocketMeshes.values()) {
+    scene?.remove(g);
+    g.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+  }
+  muskRocketMeshes.clear();
   // Clear platform mesh cache — new stage will rebuild with its own palette.
   clearPlatformMeshes();
 }
@@ -1494,6 +1564,59 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
           mat.depthWrite  = false;
         }
       });
+    }
+
+    // ── Trump "The Wall" — gold-plated barrier during sideSpecial ────────────
+    // Active frames [10, 60] of sideSpecial; wall appears in front of Trump.
+    const isTrumpWall = fighter.characterId === 'trump' &&
+      fighter.state === 'attack' && fighter.currentMoveId === 'sideSpecial' &&
+      fighter.attackFrame >= 10 && fighter.attackFrame <= 60;
+    {
+      let wallGroup = trumpWallMeshes.get(id);
+      if (isTrumpWall) {
+        if (!wallGroup) {
+          wallGroup = buildTrumpWall();
+          scene.add(wallGroup);
+          trumpWallMeshes.set(id, wallGroup);
+        }
+        // Position in front of the fighter (offsetX ≈ 60 world units from move data)
+        const wallOffX = transform.facingRight ? 60 : -60;
+        wallGroup.position.set(wx + wallOffX, wy, zOffset - 5);
+        wallGroup.visible = true;
+      } else if (wallGroup) {
+        wallGroup.visible = false;
+      }
+    }
+
+    // ── Musk "Mars Colonization" — rocket during downSpecial ─────────────────
+    // Active frames [10, 55]; rocket rises above Musk and launches upward.
+    const isMuskRocket = fighter.characterId === 'musk' &&
+      fighter.state === 'attack' && fighter.currentMoveId === 'downSpecial' &&
+      fighter.attackFrame >= 10 && fighter.attackFrame <= 55;
+    {
+      let rocketGroup = muskRocketMeshes.get(id);
+      if (isMuskRocket) {
+        if (!rocketGroup) {
+          rocketGroup = buildMuskRocket();
+          scene.add(rocketGroup);
+          muskRocketMeshes.set(id, rocketGroup);
+        }
+        // Rocket rises: translate upward proportional to attackFrame
+        const riseY = (fighter.attackFrame - 10) * 2.5; // climbs ~112 units over 45 frames
+        rocketGroup.position.set(wx, wy + 30 + riseY, zOffset - 8);
+        rocketGroup.visible = true;
+        // Pulse exhaust emissive intensity
+        const renderTime = Date.now() * 0.001;
+        rocketGroup.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          const mat = obj.material;
+          if (mat instanceof THREE.MeshStandardMaterial && mat.emissive.getHex() === 0x00ffee) {
+            mat.emissiveIntensity = 0.6 + Math.abs(Math.sin(renderTime * 20)) * 0.4;
+          }
+        });
+      } else if (rocketGroup) {
+        rocketGroup.visible = false;
+      }
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────

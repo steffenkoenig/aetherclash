@@ -19,7 +19,7 @@ import {
   platforms,
   checkHitboxSystem,
 } from '../src/engine/physics/collision.js';
-import { hitlagMap, transitionFighterState } from '../src/engine/physics/stateMachine.js';
+import { hitlagMap } from '../src/engine/physics/stateMachine.js';
 import { seedRng, nextRng } from '../src/engine/physics/lcg.js';
 
 import { TRUMP_STATS, TRUMP_MOVES }  from '../src/game/characters/trump.js';
@@ -27,42 +27,6 @@ import { MUSK_STATS,  MUSK_MOVES  }  from '../src/game/characters/musk.js';
 import { PUTIN_STATS, PUTIN_MOVES }  from '../src/game/characters/putin.js';
 import { XI_STATS,    XI_MOVES    }  from '../src/game/characters/xi.js';
 import { LIZZY_STATS, LIZZY_MOVES }  from '../src/game/characters/lizzy.js';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function makeGroundedFighter(
-  characterId: string,
-  stats: ReturnType<typeof TRUMP_STATS extends infer S ? () => S : never> = TRUMP_STATS as any,
-  x = 0, y = 30,
-) {
-  const id = createEntity();
-  transformComponents.set(id, {
-    x: toFixed(x), y: toFixed(y),
-    prevX: toFixed(x), prevY: toFixed(y),
-    facingRight: true,
-  });
-  physicsComponents.set(id, {
-    vx: toFixed(0), vy: toFixed(0),
-    gravityMultiplier: toFixed(1.0),
-    grounded: true, fastFalling: false,
-  });
-  fighterComponents.set(id, {
-    characterId,
-    state: 'idle',
-    damagePercent: toFixed(0),
-    stocks: 3,
-    jumpCount: 0,
-    hitstunFrames: 0,
-    invincibleFrames: 0,
-    hitlagFrames: 0,
-    shieldHealth: 100,
-    shieldBreakFrames: 0,
-    attackFrame: 0,
-    currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
-    stats,
-  });
-  return id;
-}
 
 beforeEach(() => {
   clearAllComponents();
@@ -73,14 +37,6 @@ beforeEach(() => {
 });
 
 // ── Move-set completeness ─────────────────────────────────────────────────────
-
-const REQUIRED_MOVES = [
-  'neutralJab1', 'dashAttack', 'forwardTilt', 'upTilt', 'downTilt',
-  'forwardSmash', 'upSmash', 'downSmash',
-  'forwardThrow', 'backThrow', 'upThrow', 'downThrow',
-  'neutralAir', 'forwardAir', 'backAir', 'upAir', 'downAir',
-  'neutralSpecial', 'sideSpecial', 'upSpecial', 'downSpecial',
-];
 
 // Some characters use a single neutralJab without a chain — either neutralJab1 or neutralJab is required.
 const JABS_ALTERNATIVE = ['neutralJab', 'neutralJab1'];
