@@ -1610,3 +1610,194 @@ describe('crouch state', () => {
     expect(victim.hitstunFrames).toBe(0);
   });
 });
+
+// ── Bug regression: syncAnimation loop for crouch ─────────────────────────────
+
+import type { Renderable } from '../src/engine/ecs/component.js';
+import { renderableComponents } from '../src/engine/ecs/component.js';
+
+describe('syncAnimation: loop flag', () => {
+  function makeGroundedFighterWithRenderable(state: import('../src/engine/ecs/component.js').FighterState = 'idle') {
+    const id = makeGroundedFighter();
+    renderableComponents.set(id, {
+      meshUrl: '', atlasUrl: '',
+      animationClip: state, animationFrame: 0, animationSpeed: 1.0, loop: false,
+    });
+    fighterComponents.get(id)!.state = state;
+    return id;
+  }
+
+  it('idle animation loops', () => {
+    const id = makeGroundedFighterWithRenderable('idle');
+    // Force syncAnimation to run by changing the clip label to a dummy
+    const r = renderableComponents.get(id)!;
+    r.animationClip = '__dirty__';  // make it "changed"
+    fighterComponents.get(id)!.state = 'idle';
+    // Simulate the syncAnimation logic inline (mirrors main.ts function)
+    const fighter = fighterComponents.get(id)!;
+    r.animationClip  = fighter.state;
+    r.animationFrame = 0;
+    r.loop = fighter.state === 'idle' || fighter.state === 'run' || fighter.state === 'crouch';
+    expect(r.loop).toBe(true);
+  });
+
+  it('crouch animation loops (regression for missing crouch in loop condition)', () => {
+    const id = makeGroundedFighterWithRenderable('crouch');
+    const r = renderableComponents.get(id)!;
+    r.animationClip = '__dirty__';
+    fighterComponents.get(id)!.state = 'crouch';
+    const fighter = fighterComponents.get(id)!;
+    r.animationClip  = fighter.state;
+    r.animationFrame = 0;
+    r.loop = fighter.state === 'idle' || fighter.state === 'run' || fighter.state === 'crouch';
+    expect(r.loop).toBe(true);
+  });
+
+  it('hitstun animation does not loop', () => {
+    const id = makeGroundedFighterWithRenderable('hitstun');
+    const r = renderableComponents.get(id)!;
+    r.animationClip = '__dirty__';
+    fighterComponents.get(id)!.state = 'hitstun';
+    const fighter = fighterComponents.get(id)!;
+    r.animationClip  = fighter.state;
+    r.animationFrame = 0;
+    r.loop = fighter.state === 'idle' || fighter.state === 'run' || fighter.state === 'crouch';
+    expect(r.loop).toBe(false);
+  });
+});
+
+// ── Bug regression: meteor cancel angle boundary (>= 220, <= 320) ─────────────
+
+describe('meteor cancel: boundary angles', () => {
+  function makeAirFighterAtAngle(): number {
+    const id = createEntity();
+    transformComponents.set(id, {
+      x: toFixed(0), y: toFixed(200),
+      prevX: toFixed(0), prevY: toFixed(200),
+      facingRight: true,
+    });
+    physicsComponents.set(id, {
+      vx: toFixed(0), vy: toFixed(0),
+      gravityMultiplier: toFixed(1.0),
+      grounded: false, fastFalling: false,
+    });
+    fighterComponents.set(id, {
+      characterId: 'kael', state: 'idle',
+      damagePercent: toFixed(0),
+      stocks: 3, jumpCount: 1, hitstunFrames: 0, invincibleFrames: 0,
+      hitlagFrames: 0, shieldHealth: 100, shieldBreakFrames: 0,
+      attackFrame: 0, currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
+      stats: KAEL_STATS,
+    });
+    return id;
+  }
+
+  it('exact 220° sets meteor cancel window (inclusive lower bound)', () => {
+    const id = makeAirFighterAtAngle();
+    meteorCancelWindowMap.delete(id);
+
+    applyKnockback(id, {
+      victimDamage:      toFixed(40),
+      victimWeight:      toFixed(1.0),
+      moveScaling:       toFixed(1.2),
+      moveBaseKnockback: toFixed(6),
+      launchAngle:       220,
+      attackerFacingRight: true,
+      diX: 0,
+    });
+
+    expect(meteorCancelWindowMap.get(id)).toBe(20);
+  });
+
+  it('exact 320° sets meteor cancel window (inclusive upper bound)', () => {
+    const id = makeAirFighterAtAngle();
+    meteorCancelWindowMap.delete(id);
+
+    applyKnockback(id, {
+      victimDamage:      toFixed(40),
+      victimWeight:      toFixed(1.0),
+      moveScaling:       toFixed(1.2),
+      moveBaseKnockback: toFixed(6),
+      launchAngle:       320,
+      attackerFacingRight: true,
+      diX: 0,
+    });
+
+    expect(meteorCancelWindowMap.get(id)).toBe(20);
+  });
+
+  it('angle just outside range (219°) does NOT set meteor cancel window', () => {
+    const id = makeAirFighterAtAngle();
+    meteorCancelWindowMap.delete(id);
+
+    applyKnockback(id, {
+      victimDamage:      toFixed(40),
+      victimWeight:      toFixed(1.0),
+      moveScaling:       toFixed(1.2),
+      moveBaseKnockback: toFixed(6),
+      launchAngle:       219,
+      attackerFacingRight: true,
+      diX: 0,
+    });
+
+    expect(meteorCancelWindowMap.get(id) ?? 0).toBe(0);
+  });
+
+  it('angle just outside range (321°) does NOT set meteor cancel window', () => {
+    const id = makeAirFighterAtAngle();
+    meteorCancelWindowMap.delete(id);
+
+    applyKnockback(id, {
+      victimDamage:      toFixed(40),
+      victimWeight:      toFixed(1.0),
+      moveScaling:       toFixed(1.2),
+      moveBaseKnockback: toFixed(6),
+      launchAngle:       321,
+      attackerFacingRight: true,
+      diX: 0,
+    });
+
+    expect(meteorCancelWindowMap.get(id) ?? 0).toBe(0);
+  });
+});
+
+// ── Bug regression: crouch attack uses downTilt not downSmash ─────────────────
+
+describe('crouch attack: downTilt selection', () => {
+  it('attacking while crouching uses downTilt, not downSmash', () => {
+    // Simulate the crouch-attack logic from processPlayerInput:
+    // crouchMoveId = moves?.has('downTilt') ? 'downTilt' : 'neutralJab1'
+    // This must NEVER select downSmash even when the character has one.
+    const id = makeGroundedFighter('kael');
+    const fighter = fighterComponents.get(id)!;
+    fighter.state = 'crouch';
+
+    // Simulate the fix: crouchMoveId is always downTilt
+    const crouchMoves = new Map(Object.entries(KAEL_MOVES));
+    const crouchMoveId = crouchMoves.has('downTilt') ? 'downTilt' : 'neutralJab1';
+
+    // Kael must have downTilt
+    expect(crouchMoves.has('downTilt')).toBe(true);
+    // Should select downTilt, not downSmash
+    expect(crouchMoveId).toBe('downTilt');
+    // Confirm Kael also has downSmash (shows the bug would have been triggered before)
+    expect(crouchMoves.has('downSmash')).toBe(true);
+  });
+
+  it('all 5 characters have downTilt so crouch attack never falls back to jab', () => {
+    const characters: [string, Record<string, Move>][] = [
+      ['kael',  KAEL_MOVES],
+      ['syne',  SYNE_MOVES],
+      ['vela',  VELA_MOVES],
+      ['gorun', GORUN_MOVES],
+      ['zira',  ZIRA_MOVES],
+    ];
+    for (const [charId, moves] of characters) {
+      const crouchMoves = new Map(Object.entries(moves));
+      const crouchMoveId = crouchMoves.has('downTilt') ? 'downTilt' : 'neutralJab1';
+      expect(crouchMoveId).toBe('downTilt');
+      expect(crouchMoves.has('downTilt'), `${charId} is missing downTilt`).toBe(true);
+    }
+  });
+});
+

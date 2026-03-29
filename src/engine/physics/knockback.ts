@@ -136,7 +136,7 @@ export function applyKnockback(
 
   // Meteor-cancel window: downward spikes (angle 220°–320°) grant a 20-frame
   // window in which pressing jump cancels the downward momentum.
-  if (angle > 220 && angle < 320) {
+  if (angle >= 220 && angle <= 320) {
     meteorCancelWindowMap.set(victimEntityId, 20);
   }
 

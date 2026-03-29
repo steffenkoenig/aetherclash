@@ -308,9 +308,6 @@ const prevCStickActive = new Map<number, boolean>();
  */
 const pummelCooldown = new Map<number, number>();
 
-/**
- */
-
 // ── Dodge / grab / shield constants ──────────────────────────────────────────
 
 const SPOT_DODGE_INVINCIBLE_FRAMES = 8;
@@ -439,7 +436,7 @@ function syncAnimation(fighter: Fighter, renderable: Renderable): void {
   if (renderable.animationClip !== fighter.state) {
     renderable.animationClip  = fighter.state;
     renderable.animationFrame = 0;
-    renderable.loop = fighter.state === 'idle' || fighter.state === 'run';
+    renderable.loop = fighter.state === 'idle' || fighter.state === 'run' || fighter.state === 'crouch';
   }
 }
 
@@ -741,11 +738,17 @@ function processPlayerInput(
       phys.vx = toFixed(0);
       transitionFighterState(playerId, 'crouch');
     }
-    // Allow attacking from crouch — stickY is already < -STICK_THRESHOLD so
-    // startAttack will naturally select the down-tilt move.
+    // Allow attacking from crouch — always use downTilt (not downSmash, which
+    // requires a stick-flick; crouching hold-down + attack = tilt in every
+    // Smash game).  Fall back to a neutral jab if the character has no downTilt.
     if (input.attackJustPressed) {
       if (!useHeldItem(playerId, transform.facingRight)) {
-        startAttack(playerId, fighter, phys, input);
+        const crouchMoves = getMoves(fighter.characterId);
+        const crouchMoveId = crouchMoves?.has('downTilt') ? 'downTilt' : 'neutralJab1';
+        fighter.attackFrame       = 0;
+        fighter.currentMoveId     = crouchMoveId;
+        fighter.smashChargeFrames = 0;
+        transitionFighterState(playerId, 'attack');
       }
     }
     syncAnimation(fighter, renderable);
