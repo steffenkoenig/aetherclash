@@ -315,202 +315,201 @@ export function createCharacterMesh(characterId: string): THREE.Group {
     return mesh;
   }
 
-  const group = new THREE.Group();
-  let torso: THREE.Mesh, head: THREE.Mesh, armL: THREE.Mesh, armR: THREE.Mesh,
-      legL: THREE.Mesh, legR: THREE.Mesh;
+  // ── Shared biped rig helper ───────────────────────────────────────────────
+  // Creates named THREE.Group objects anchored at joint pivots (shoulder, hip,
+  // neck) so that applyPose rotations swing limbs from the correct joint.
+  // CapsuleGeometry(r,L): total height = L+2r; centred at origin.
+  // To span [pivot … pivot−span]: centre at y=−span/2, L = span−2r.
+  function makeRig(torsoW: number, waistW: number, torsoH: number,
+    shX: number, shY: number, ar: number, aLen: number,
+    hpX: number, lr: number, lLen: number,
+    bodyM: THREE.Material, skinM: THREE.Material) {
 
-  if (characterId === 'kael') {
-    // ── Kael: armoured warrior (organic shapes) ────────────────────────────
-    const bodyM  = toon(mainColor);
-    const armorM = toon(0x8899cc);
-    const darkM  = toon(0x1a2233);
-    const eyeM   = toon(0x88ccff);
-    const swordM = toon(0xdde8ff);
-    torso = add(group, cylinder(13, 10, 30, 12, bodyM),   0, 15,  0);
-    head  = add(group, sphere(11, bodyM),                  0, 41,  0);
-    armL  = add(group, capsule(4.5, 14, bodyM),          -21, 14,  0);
-    armR  = add(group, capsule(4.5, 14, bodyM),           21, 14,  0);
-    legL  = add(group, capsule(5.5, 15, bodyM),           -7, -13, 0);
-    legR  = add(group, capsule(5.5, 15, bodyM),            7, -13, 0);
-    add(group, sphere(2.5, eyeM, 8, 6),  -5, 42, 10);
-    add(group, sphere(2.5, eyeM, 8, 6),   5, 42, 10);
-    // chest plate: flattened sphere
-    const chestPl = sphere(14, armorM); chestPl.scale.set(1, 0.8, 0.3);
-    add(group, chestPl, 0, 18, 9);
-    // pauldrons: flattened spheres
-    const pL = sphere(8, armorM); pL.scale.set(1.5, 0.65, 1.5);
-    add(group, pL, -22, 30, 0);
-    const pR = sphere(8, armorM); pR.scale.set(1.5, 0.65, 1.5);
-    add(group, pR,  22, 30, 0);
-    // belt torus
-    const beltM = torus(11, 2.5, darkM); beltM.rotation.x = Math.PI / 2;
-    add(group, beltM, 0, 1, 0);
-    add(group, cylinder(11.5, 11.5, 3, 14, armorM), 0, 45, 0); // helmet brow band
-    add(group, cylinder(1.5, 2.5, 12, 6, armorM),   0, 54, 0); // helmet crest
-    add(group, cylinder(7, 6, 10, 8, armorM),  -7, -22, 1);    // greave L
-    add(group, cylinder(7, 6, 10, 8, armorM),   7, -22, 1);    // greave R
-    add(group, cylinder(1.2, 0.3, 38, 8, swordM), 30,  2, 0);  // sword blade
-    add(group, cylinder(8, 8, 2.5, 8, darkM),  30, 21, 0);     // sword guard
-    const shd = cylinder(13, 13, 3, 12, armorM); shd.rotation.z = Math.PI / 2;
-    add(group, shd, -27, 8, 0);                                 // shield disc
+    const ltH = torsoH * 0.42, utH = torsoH * 0.58;
+    const uaL = aLen * 0.54,   faL = aLen * 0.46;
+    const thL = lLen * 0.54,   shL = lLen * 0.46;
 
-  } else if (characterId === 'gorun') {
-    // ── Gorun: massive armoured giant (organic) ─────────────────────────────
-    const bodyM   = toon(mainColor);
-    const armorM  = toon(0x333333);
-    const accentM = toon(0xff4400);
-    const eyeM    = toon(0xff6600);
-    const hammerM = toon(0x555566);
-    torso = add(group, cylinder(22, 16, 32, 10, bodyM),   0, 16,  0);
-    head  = add(group, sphere(14, bodyM),                  0, 44,  0);
-    armL  = add(group, capsule(7.5, 13, bodyM),          -33, 14,  0);
-    armR  = add(group, capsule(7.5, 13, bodyM),           33, 14,  0);
-    legL  = add(group, capsule(9, 12, bodyM),             -12, -14, 0);
-    legR  = add(group, capsule(9, 12, bodyM),              12, -14, 0);
-    const eL = sphere(3, eyeM); eL.scale.set(1.8, 0.6, 0.5);
-    add(group, eL, -7, 45, 13);
-    const eR = sphere(3, eyeM); eR.scale.set(1.8, 0.6, 0.5);
-    add(group, eR,  7, 45, 13);
-    add(group, cylinder(14.5, 14.5, 4, 14, armorM), 0, 41, 0); // visor band
-    add(group, cone(4, 20, 8, armorM), -10, 60, 0);             // horn L
-    add(group, cone(4, 20, 8, armorM),  10, 60, 0);             // horn R
-    const shL = sphere(13, armorM); shL.scale.set(1.5, 0.6, 1.5);
-    add(group, shL, -33, 32, 0);                                 // shoulder L
-    const shR = sphere(13, armorM); shR.scale.set(1.5, 0.6, 1.5);
-    add(group, shR,  33, 32, 0);                                 // shoulder R
-    add(group, cone(5, 16, 8, accentM), -33, 44, 0);            // spike L
-    add(group, cone(5, 16, 8, accentM),  33, 44, 0);            // spike R
-    const cpL = sphere(20, armorM); cpL.scale.set(1, 0.7, 0.35);
-    add(group, cpL, 0, 18, 12);                                  // chest plate
-    const bltR = torus(17, 3.5, armorM); bltR.rotation.x = Math.PI / 2;
-    add(group, bltR, 0, 1, 0);                                   // belt ring
-    const kpL = sphere(11, armorM); kpL.scale.set(1, 0.55, 0.9);
-    add(group, kpL, -12, -18, 5);                                // knee L
-    const kpR = sphere(11, armorM); kpR.scale.set(1, 0.55, 0.9);
-    add(group, kpR,  12, -18, 5);                                // knee R
-    add(group, cylinder(4, 4, 36, 8, armorM), 50, 10, 0);       // hammer shaft
-    const hh = sphere(14, hammerM); hh.scale.set(1.5, 1.2, 1.2);
-    add(group, hh, 50, -5, 0);                                   // hammer head
+    // Torso group (waist pivot)
+    const torsoG = new THREE.Group();
+    torsoG.position.set(0, 0, 0); group.add(torsoG);
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(waistW * 1.1, 10, 7), bodyM);
+      m.scale.set(1.3, 0.65, 1.0); m.position.set(0, -4, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(waistW, waistW * 1.1, ltH, 10), bodyM);
+      m.position.set(0, ltH * 0.5, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(torsoW, waistW, utH, 10), bodyM);
+      m.position.set(0, ltH + utH * 0.5, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.5, 7, 8), skinM);
+      m.position.set(0, torsoH + 3.5, 0); torsoG.add(m); }
 
-  } else if (characterId === 'vela') {
-    // ── Vela: tall lean blade master (organic) ─────────────────────────────
-    const bodyM  = toon(mainColor);
-    const darkM  = toon(0x111111);
-    const bladeM = toon(0xccddff);
-    const eyeM   = toon(0xaaffcc);
-    const clothM = toon(0x224433);
-    torso = add(group, cylinder(11, 8, 32, 10, bodyM),   0, 16,  0);
-    head  = add(group, sphere(9.5, bodyM),                0, 43,  0);
-    armL  = add(group, capsule(3.5, 21, bodyM),         -16, 14,  0);
-    armR  = add(group, capsule(3.5, 21, bodyM),          16, 14,  0);
-    legL  = add(group, capsule(4.5, 23, bodyM),          -6, -16, 0);
-    legR  = add(group, capsule(4.5, 23, bodyM),           6, -16, 0);
-    add(group, sphere(2, eyeM, 8, 6),  -4, 44, 8.5);
-    add(group, sphere(2, eyeM, 8, 6),   4, 44, 8.5);
-    // ponytail: chain of shrinking spheres
-    add(group, sphere(4, bodyM),   0, 52,  -7);
-    add(group, sphere(3, bodyM),   0, 47, -12);
-    add(group, sphere(2.2, bodyM), 0, 41, -17);
-    add(group, sphere(1.6, bodyM), 0, 35, -21);
-    const colR = torus(7, 2, darkM); colR.rotation.x = Math.PI / 2;
-    add(group, colR, 0, 33, 0);                                  // collar ring
-    const sasR = torus(9, 2, darkM); sasR.rotation.x = Math.PI / 2;
-    add(group, sasR, 0, 1, 0);                                   // belt sash
-    add(group, cylinder(2, 3.5, 28, 6, clothM), -13, 6, -7);    // cloak L
-    add(group, cylinder(2, 3.5, 28, 6, clothM),  13, 6, -7);    // cloak R
-    add(group, cylinder(1.5, 0.4, 52, 8, bladeM), 22, -4, 0);   // sword blade
-    add(group, cylinder(7, 7, 2, 8, darkM),        22, 22, 0);   // sword guard
-    add(group, cylinder(5.5, 5, 9, 8, darkM),      -6, -30, 0.5); // boot L
-    add(group, cylinder(5.5, 5, 9, 8, darkM),       6, -30, 0.5); // boot R
+    // Head group (neck-top pivot)
+    const headG = new THREE.Group();
+    headG.position.set(0, torsoH + 7, 0); group.add(headG);
 
-  } else if (characterId === 'syne') {
-    // ── Syne: slim tech engineer (organic) ─────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const techM  = toon(0x223344);
-    const glowM  = toon(0x00ffee);
-    const eyeM   = toon(0x00eeff);
-    const darkM  = toon(0x111122);
-    torso = add(group, cylinder(10, 8, 26, 10, bodyM),  0, 13,  0);
-    head  = add(group, sphere(9, bodyM),                 0, 37,  0);
-    armL  = add(group, capsule(3, 16, bodyM),          -15, 13,  0);
-    armR  = add(group, capsule(3, 16, bodyM),           15, 13,  0);
-    legL  = add(group, capsule(3.5, 19, bodyM),         -6, -13, 0);
-    legR  = add(group, capsule(3.5, 19, bodyM),          6, -13, 0);
-    const evL = sphere(3, eyeM); evL.scale.set(1.8, 0.55, 0.5);
-    add(group, evL, -5, 37, 9.5);
-    const evR = sphere(3, eyeM); evR.scale.set(1.8, 0.55, 0.5);
-    add(group, evR,  5, 37, 9.5);
-    add(group, sphere(11, techM),               0, 44,  0);  // dome helmet
-    add(group, cylinder(1, 1, 14, 6, glowM),    6, 56,  0);  // antenna
-    add(group, sphere(3, glowM),                6, 64,  0);  // antenna tip
-    const bkPk = cylinder(9, 8, 26, 8, techM); bkPk.rotation.x = Math.PI / 2;
-    add(group, bkPk, 0, 13, -12);                             // backpack
-    add(group, sphere(4.5, glowM),              0, 15, -17); // pack orb
-    const bltPk = torus(9, 2.5, techM); bltPk.rotation.x = Math.PI / 2;
-    add(group, bltPk, 0, 1, 0);                               // belt ring
-    const cnPk = cylinder(5.5, 5.5, 12, 8, techM); cnPk.rotation.x = Math.PI / 2;
-    add(group, cnPk, -18, 7, 5);                              // arm cannon
-    const brPk = cylinder(2.5, 2.5, 14, 8, darkM); brPk.rotation.x = Math.PI / 2;
-    add(group, brPk, -18, 7, 13);                             // cannon barrel
-    add(group, cylinder(4.5, 4, 8, 8, techM),  -6, -25, 1); // boot L
-    add(group, cylinder(4.5, 4, 8, 8, techM),   6, -25, 1); // boot R
+    // Arm groups (shoulder pivot — geometry hangs downward)
+    function makeArm(side: number): THREE.Group {
+      const g = new THREE.Group();
+      g.position.set(side * shX, shY, 0); group.add(g);
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar + 1.5, 8, 6), bodyM); g.add(m); }
+      { const cL = Math.max(1, uaL - ar * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(ar, cL, 5, 8), bodyM);
+        m.position.set(0, -uaL * 0.5, 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar * 0.88, 7, 5), bodyM);
+        m.position.set(0, -uaL, 0); g.add(m); }
+      { const fr = ar * 0.78; const cL = Math.max(1, faL - fr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(fr, cL, 5, 8), bodyM);
+        m.position.set(0, -(uaL + faL * 0.5), 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar * 0.86, 7, 6), skinM);
+        m.scale.set(0.92, 0.86, 1.2); m.position.set(0, -(uaL + faL), 0); g.add(m); }
+      return g;
+    }
 
-  } else if (characterId === 'zira') {
-    // ── Zira: compact agile street fighter (organic) ────────────────────────
-    const bodyM   = toon(mainColor);
-    const darkM   = toon(0x550011);
-    const accentM = toon(0xff3300);
-    const eyeM    = toon(0xff9900);
-    const padM    = toon(0x222222);
-    torso = add(group, cylinder(9, 7, 24, 10, bodyM),   0, 12,  0);
-    head  = add(group, sphere(8, bodyM),                 0, 33,  0);
-    armL  = add(group, capsule(2.8, 14, bodyM),        -13, 12,  0);
-    armR  = add(group, capsule(2.8, 14, bodyM),         13, 12,  0);
-    legL  = add(group, capsule(3.8, 20, bodyM),         -6, -14, 0);
-    legR  = add(group, capsule(3.8, 20, bodyM),          6, -14, 0);
-    add(group, sphere(2, eyeM, 8, 6),  -4, 33, 7.5);
-    add(group, sphere(2, eyeM, 8, 6),   4, 33, 7.5);
-    add(group, cone(2.5, 18, 6, accentM), 0, 49, 0);           // mohawk
-    const mhBs = torus(3.5, 1.5, accentM); mhBs.rotation.x = Math.PI / 2;
-    add(group, mhBs, 0, 41, 0);                                 // mohawk base ring
-    const wbL = torus(3.5, 1.5, padM); wbL.rotation.x = Math.PI / 2;
-    add(group, wbL, -13, 4, 0);                                 // wristband L
-    const wbR = torus(3.5, 1.5, padM); wbR.rotation.x = Math.PI / 2;
-    add(group, wbR,  13, 4, 0);                                 // wristband R
-    const nkRg = torus(6, 1.5, darkM); nkRg.rotation.x = Math.PI / 2;
-    add(group, nkRg, 0, 24, 0);                                 // neck collar
-    const cb1 = torus(8.5, 1.2, darkM); cb1.rotation.x = Math.PI / 2;
-    add(group, cb1, 0, 20, 0);                                  // chest band 1
-    const cb2 = torus(8, 1.2, darkM); cb2.rotation.x = Math.PI / 2;
-    add(group, cb2, 0, 11, 0);                                  // chest band 2
-    const kpL = sphere(5, padM); kpL.scale.set(1, 0.55, 0.8);
-    add(group, kpL, -6, -10, 4);                                // knee pad L
-    const kpR = sphere(5, padM); kpR.scale.set(1, 0.55, 0.8);
-    add(group, kpR,  6, -10, 4);                                // knee pad R
-    add(group, cylinder(4.5, 4, 9, 8, darkM),  -6, -26, 2);   // boot L
-    add(group, cylinder(4.5, 4, 9, 8, darkM),   6, -26, 2);   // boot R
-    const tcL = sphere(4, accentM); tcL.scale.set(1, 0.5, 0.7);
-    add(group, tcL, -6, -29, 7);                                // toe cap L
-    const tcR = sphere(4, accentM); tcR.scale.set(1, 0.5, 0.7);
-    add(group, tcR,  6, -29, 7);                                // toe cap R
+    // Leg groups (hip pivot — geometry hangs downward)
+    function makeLeg(side: number): THREE.Group {
+      const g = new THREE.Group();
+      g.position.set(side * hpX, 0, 0); group.add(g);
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.9, 8, 6), bodyM);
+        m.position.set(0, -lr * 0.2, 0); g.add(m); }
+      { const cL = Math.max(1, thL - lr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(lr, cL, 5, 8), bodyM);
+        m.position.set(0, -thL * 0.5, 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.84, 7, 5), bodyM);
+        m.position.set(0, -thL, 0); g.add(m); }
+      { const sr = lr * 0.8; const cL = Math.max(1, shL - sr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(sr, cL, 5, 8), bodyM);
+        m.position.set(0, -(thL + shL * 0.5), 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.86, 7, 5), bodyM);
+        m.scale.set(0.9, 0.58, 1.65); m.position.set(0, -(thL + shL), 4); g.add(m); }
+      return g;
+    }
 
-  } else {
-    // ── Fallback: organic humanoid ──────────────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const dimM   = toon(dimColor(mainColor, 0.7));
-    const darkM  = toon(dimColor(mainColor, 0.6));
-    const eyeM   = toon(0x111111);
-    torso = add(group, cylinder(12, 9, 28, 10, bodyM),  0, 14, 0);
-    head  = add(group, sphere(10, bodyM),                0, 38, 0);
-    armL  = add(group, capsule(4, 16, dimM),           -17,  5, 0);
-    armR  = add(group, capsule(4, 16, dimM),            17,  5, 0);
-    legL  = add(group, capsule(5, 18, darkM),           -8, -21, 0);
-    legR  = add(group, capsule(5, 18, darkM),            8, -21, 0);
-    add(group, sphere(2.5, eyeM, 8, 6), -5, 40, 9);
-    add(group, sphere(2.5, eyeM, 8, 6),  5, 40, 9);
+    return {
+      torso: torsoG as unknown as THREE.Object3D,
+      head:  headG  as unknown as THREE.Object3D,
+      armL:  makeArm(-1) as unknown as THREE.Object3D,
+      armR:  makeArm(1)  as unknown as THREE.Object3D,
+      legL:  makeLeg(-1) as unknown as THREE.Object3D,
+      legR:  makeLeg(1)  as unknown as THREE.Object3D,
+    };
   }
 
-  group.userData['parts'] = { torso: torso!, head: head!, armL: armL!, armR: armR!, legL: legL!, legR: legR! };
+  const group = new THREE.Group();
+
+  let parts: { torso: THREE.Object3D; head: THREE.Object3D;
+               armL: THREE.Object3D; armR: THREE.Object3D;
+               legL: THREE.Object3D; legR: THREE.Object3D; };
+
+  if (characterId === 'kael') {
+    const bodyM = toon(mainColor); const armorM = toon(0x8899cc);
+    const darkM = toon(0x1a2233); const eyeM = toon(0x88ccff);
+    const swordM = toon(0xdde8ff);
+    parts = makeRig(13, 9, 28, 16, 26, 4.5, 24, 7, 5.5, 28, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(11, bodyM), 0, 11, 0);
+    add(h, sphere(2.5, eyeM, 8, 6), -5, 13, 10);
+    add(h, sphere(2.5, eyeM, 8, 6),  5, 13, 10);
+    add(h, cylinder(11.5, 11.5, 3, 14, armorM), 0, 7, 0);
+    add(h, cylinder(1.5, 2.5, 12, 6, armorM), 0, 22, 0);
+    const t = parts.torso as THREE.Group;
+    const cp = sphere(14, armorM); cp.scale.set(1, 0.8, 0.32); add(t, cp, 0, 18, 11);
+    const blt = torus(11, 2.5, darkM); blt.rotation.x = Math.PI / 2; add(t, blt, 0, 1, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const p = sphere(8, armorM); p.scale.set(1.4, 0.65, 1.4); arm.add(p);
+    }
+    add(group, cylinder(1.2, 0.3, 38, 8, swordM), 28, 2, 0);
+    add(group, cylinder(8, 8, 2.5, 8, darkM), 28, 21, 0);
+    const shd = cylinder(13, 13, 3, 12, armorM); shd.rotation.z = Math.PI / 2;
+    add(group, shd, -29, 8, 0);
+
+  } else if (characterId === 'gorun') {
+    const bodyM = toon(mainColor); const armorM = toon(0x333333);
+    const accentM = toon(0xff4400); const eyeM = toon(0xff6600);
+    const hammerM = toon(0x555566);
+    parts = makeRig(22, 16, 32, 26, 30, 7.5, 30, 12, 9, 34, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(14, bodyM), 0, 14, 0);
+    const eL = sphere(3, eyeM); eL.scale.set(1.8, 0.6, 0.5); add(h, eL, -7, 16, 13);
+    const eR = sphere(3, eyeM); eR.scale.set(1.8, 0.6, 0.5); add(h, eR,  7, 16, 13);
+    add(h, cylinder(14.5, 14.5, 4, 14, armorM), 0, 8, 0);
+    add(h, cone(4, 22, 8, armorM), -11, 28, 0);
+    add(h, cone(4, 22, 8, armorM),  11, 28, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const p = sphere(14, armorM); p.scale.set(1.5, 0.6, 1.5); arm.add(p);
+    }
+    add(group, cylinder(4, 4, 38, 8, armorM), 52, 10, 0);
+    const hh = sphere(14, hammerM); hh.scale.set(1.5, 1.2, 1.2); add(group, hh, 52, -6, 0);
+
+  } else if (characterId === 'vela') {
+    const bodyM = toon(mainColor); const darkM = toon(0x111111);
+    const bladeM = toon(0xccddff); const eyeM = toon(0xaaffcc);
+    const clothM = toon(0x224433);
+    parts = makeRig(11, 8, 30, 14, 28, 3.5, 28, 6, 4.5, 32, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(9.5, bodyM), 0, 10, 0);
+    add(h, sphere(2, eyeM, 8, 6), -4, 12, 8.5);
+    add(h, sphere(2, eyeM, 8, 6),  4, 12, 8.5);
+    for (const [py, pz, pr] of [[17, -4, 4], [12, -10, 3], [6, -16, 2.2], [0, -22, 1.6]] as number[][]) {
+      add(h, sphere(pr, bodyM), 0, py, pz);
+    }
+    const t = parts.torso as THREE.Group;
+    const col = torus(7, 2, darkM); col.rotation.x = Math.PI / 2; add(t, col, 0, 30, 0);
+    const sash = torus(9, 2, darkM); sash.rotation.x = Math.PI / 2; add(t, sash, 0, 1, 0);
+    add(t, cylinder(2, 3.5, 28, 6, clothM), -13, 6, -7);
+    add(t, cylinder(2, 3.5, 28, 6, clothM),  13, 6, -7);
+    add(group, cylinder(1.5, 0.4, 52, 8, bladeM), 20, -4, 0);
+    add(group, cylinder(7, 7, 2, 8, darkM), 20, 22, 0);
+
+  } else if (characterId === 'syne') {
+    const bodyM = toon(mainColor); const techM = toon(0x223344);
+    const glowM = toon(0x00ffee); const eyeM = toon(0x00eeff);
+    const darkM = toon(0x111122);
+    parts = makeRig(10, 8, 26, 14, 24, 3, 22, 6, 3.5, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(9, bodyM), 0, 9, 0);
+    add(h, sphere(11, techM), 0, 11, 0);
+    const evL = sphere(3, eyeM); evL.scale.set(1.8, 0.55, 0.5); add(h, evL, -5, 10, 9.5);
+    const evR = sphere(3, eyeM); evR.scale.set(1.8, 0.55, 0.5); add(h, evR,  5, 10, 9.5);
+    add(h, cylinder(1, 1, 14, 6, glowM), 6, 22, 0);
+    add(h, sphere(3, glowM), 6, 30, 0);
+    const t = parts.torso as THREE.Group;
+    const bkPk = cylinder(9, 8, 26, 8, techM); bkPk.rotation.x = Math.PI / 2; add(t, bkPk, 0, 13, -12);
+    add(t, sphere(4.5, glowM), 0, 13, -18);
+    const bltR = torus(9, 2.5, techM); bltR.rotation.x = Math.PI / 2; add(t, bltR, 0, 1, 0);
+    const cnPk = cylinder(5.5, 5.5, 12, 8, techM); cnPk.rotation.x = Math.PI / 2;
+    (parts.armL as THREE.Group).add(cnPk); cnPk.position.set(0, -8, 5);
+    const brPk = cylinder(2.5, 2.5, 14, 8, darkM); brPk.rotation.x = Math.PI / 2;
+    (parts.armL as THREE.Group).add(brPk); brPk.position.set(0, -8, 13);
+
+  } else if (characterId === 'zira') {
+    const bodyM = toon(mainColor); const darkM = toon(0x550011);
+    const accentM = toon(0xff3300); const eyeM = toon(0xff9900);
+    const padM = toon(0x222222);
+    parts = makeRig(9, 7, 24, 12, 22, 2.8, 20, 6, 3.8, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(8, bodyM), 0, 8, 0);
+    add(h, sphere(2, eyeM, 8, 6), -4, 10, 7.5);
+    add(h, sphere(2, eyeM, 8, 6),  4, 10, 7.5);
+    const mhBs = torus(3.5, 1.5, accentM); mhBs.rotation.x = Math.PI / 2; add(h, mhBs, 0, 16, 0);
+    add(h, cone(2.5, 18, 6, accentM), 0, 25, 0);
+    const t = parts.torso as THREE.Group;
+    const nkRg = torus(6, 1.5, darkM); nkRg.rotation.x = Math.PI / 2; add(t, nkRg, 0, 24, 0);
+    const cb1 = torus(8.5, 1.2, darkM); cb1.rotation.x = Math.PI / 2; add(t, cb1, 0, 18, 0);
+    const cb2 = torus(8, 1.2, darkM); cb2.rotation.x = Math.PI / 2; add(t, cb2, 0, 10, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const wb = torus(3.5, 1.5, padM); wb.rotation.x = Math.PI / 2;
+      arm.add(wb); wb.position.set(0, -20, 0);
+    }
+
+  } else {
+    // ── Fallback: jointed humanoid ─────────────────────────────────────────
+    const bodyM = toon(mainColor); const eyeM = toon(0x111111);
+    parts = makeRig(12, 9, 28, 15, 26, 4, 22, 7, 5, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(10, bodyM), 0, 10, 0);
+    add(h, sphere(2.5, eyeM, 8, 6), -5, 12, 9);
+    add(h, sphere(2.5, eyeM, 8, 6),  5, 12, 9);
+  }
+
+  group.userData['parts'] = parts;
 
   return group;
 }
