@@ -44,7 +44,8 @@ export type ItemType =
   // ── Assist orb (summoner) ──────────────────────────────────────────────────
   | 'assistOrb'       // orb with 20 HP — breaking summons a Guardian NPC
   // ── Healing charms ────────────────────────────────────────────────────────
-  | 'aetherCrystal';  // auto-heal on pickup — reduces damage% by 30
+  | 'aetherCrystal'   // auto-heal on pickup — reduces damage% by 30
+  | 'starOrb';        // invincibility star — grants 300 frames of full invincibility on pickup
 
 // ── Orb / Guardian colours ────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ export const RUNESHARD_SHOT_INTERVAL = 30;
 export const SPEED_BOOTS_FRAMES = 480;
 /** mirrorShard: invincibility frames granted on pickup. */
 export const MIRROR_SHARD_INVINCIBILITY = 90;
+/** starOrb: invincibility frames granted on pickup (5 s @ 60 Hz). */
+export const STAR_ORB_INVINCIBILITY = 300;
 /** blastImp: frames on stage before it stands up and walks. */
 export const BLAST_IMP_STANDBY_FRAMES = 300;
 /** blastImp: frames the blastImp walks before detonating. */
@@ -311,9 +314,11 @@ function buildItem(category: ItemCategory, x: Fixed, y: Fixed): ItemEntity {
       orbHp = ASSIST_ORB_MAX_HP;
       orbColour = ORB_COLOURS[nextRng() % ORB_COLOURS.length] ?? 'gold';
       break;
-    case 'healingCharm':
-      itemType = 'aetherCrystal';
+    case 'healingCharm': {
+      // 50/50 between heal crystal and invincibility star
+      itemType = (nextRng() % 2 === 0) ? 'aetherCrystal' : 'starOrb';
       break;
+    }
     default:
       itemType = 'aetherCrystal';
   }
@@ -340,7 +345,7 @@ function buildItem(category: ItemCategory, x: Fixed, y: Fixed): ItemEntity {
     walkActive:     false,
     deployed:       false,
     deployFrames:   0,
-    reflectReady:   itemType === 'mirrorShard',
+    reflectReady:   itemType === 'mirrorShard' || itemType === 'starOrb',
     flightFrames:   0,
     creatureActive: false,
     creatureFrames: 0,
@@ -423,6 +428,17 @@ export function tickItems(currentFrame: number): void {
           hf.invincibleFrames = Math.max(hf.invincibleFrames, MIRROR_SHARD_INVINCIBILITY);
         }
         // One-use: remove after granting
+        removeItem(i);
+        continue;
+      }
+
+      // starOrb: grant full invincibility for STAR_ORB_INVINCIBILITY frames on pickup
+      if (item.itemType === 'starOrb' && item.reflectReady) {
+        item.reflectReady = false;
+        const hf = fighterComponents.get(item.heldBy);
+        if (hf) {
+          hf.invincibleFrames = Math.max(hf.invincibleFrames, STAR_ORB_INVINCIBILITY);
+        }
         removeItem(i);
         continue;
       }
@@ -673,6 +689,7 @@ export function tickItems(currentFrame: number): void {
       case 'runeshard':
       case 'speedBoots':
       case 'mirrorShard':
+      case 'starOrb':
       case 'aetherCrystal':
       case 'assistOrb':
         item.vy = fixedAdd(item.vy, GRAVITY);
@@ -916,7 +933,8 @@ function checkFighterPickup(
       case 'runeshard':
       case 'speedBoots':
       case 'mirrorShard':
-        // Picked up by fighter — attach
+      case 'starOrb':
+        // Picked up by fighter — attach (mirrorShard and starOrb auto-activate on next tick)
         item.heldBy = fid;
         return;
 

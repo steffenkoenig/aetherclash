@@ -26,7 +26,7 @@ export const SYNE_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 3, id: 'syne_jab1',
     }],
     hurtboxes: [{ activeFrames: [0, 14], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 11, landingLag: 0,
+    iasa: 11, landingLag: 0, nextJab: 'neutralJab2',
   },
   neutralJab2: {
     totalFrames: 14,
@@ -38,9 +38,33 @@ export const SYNE_MOVES: Record<string, Move> = {
       launchAngle: 45, hitlagFrames: 3, id: 'syne_jab2',
     }],
     hurtboxes: [{ activeFrames: [0, 14], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 11, landingLag: 0,
+    iasa: 11, landingLag: 0, nextJab: 'neutralJab3',
   },
   // === TILTS ===
+  dashAttack: {
+    totalFrames: 28,
+    hitboxes: [{
+      activeFrames: [5, 14],
+      offsetX: toFixed(16), offsetY: toFixed(2),
+      width: toFixed(34), height: toFixed(32),
+      damage: 7, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3),
+      launchAngle: 42, hitlagFrames: 4, id: 'syne_dash',
+    }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 22, landingLag: 0,
+  },
+  getupAttack: {
+    totalFrames: 20,
+    hitboxes: [{
+      activeFrames: [4, 12],
+      offsetX: toFixed(18), offsetY: toFixed(-5),
+      width: toFixed(34), height: toFixed(26),
+      damage: 5, knockbackScaling: toFixed(0.8), baseKnockback: toFixed(3),
+      launchAngle: 80, hitlagFrames: 4, id: 'syne_getup',
+    }],
+    hurtboxes: [{ activeFrames: [0, 20], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 16, landingLag: 0,
+  },
   forwardTilt: {
     totalFrames: 26,
     hitboxes: [{
@@ -88,7 +112,7 @@ export const SYNE_MOVES: Record<string, Move> = {
       launchAngle: 40, hitlagFrames: 6, id: 'syne_fsmash',
     }],
     hurtboxes: [{ activeFrames: [0, 50], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 40, landingLag: 0,
+    iasa: 40, landingLag: 0, canCharge: true,
   },
   upSmash: {
     totalFrames: 42,
@@ -100,7 +124,7 @@ export const SYNE_MOVES: Record<string, Move> = {
       launchAngle: 88, hitlagFrames: 5, id: 'syne_usmash',
     }],
     hurtboxes: [{ activeFrames: [0, 42], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 34, landingLag: 0,
+    iasa: 34, landingLag: 0, canCharge: true,
   },
   downSmash: {
     totalFrames: 38,
@@ -109,7 +133,32 @@ export const SYNE_MOVES: Record<string, Move> = {
       { activeFrames: [7, 13], offsetX: toFixed(-24), offsetY: toFixed(-14), width: toFixed(32), height: toFixed(22), damage: 12, knockbackScaling: toFixed(1.1), baseKnockback: toFixed(5), launchAngle: 150, hitlagFrames: 5, id: 'syne_dsmash_l' },
     ],
     hurtboxes: [{ activeFrames: [0, 38], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
-    iasa: 30, landingLag: 0,
+    iasa: 30, landingLag: 0, canCharge: true,
+  },
+  // === THROWS ===
+  forwardThrow: {
+    totalFrames: 26,
+    hitboxes: [{ activeFrames: [7, 9], offsetX: toFixed(20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 7, knockbackScaling: toFixed(0.9), baseKnockback: toFixed(8), launchAngle: 20, hitlagFrames: 4, id: 'syne_fthrow' }],
+    hurtboxes: [{ activeFrames: [0, 26], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 26, landingLag: 0, isThrow: true,
+  },
+  backThrow: {
+    totalFrames: 28,
+    hitboxes: [{ activeFrames: [9, 11], offsetX: toFixed(-20), offsetY: toFixed(0), width: toFixed(20), height: toFixed(20), damage: 9, knockbackScaling: toFixed(1.0), baseKnockback: toFixed(9), launchAngle: 155, hitlagFrames: 4, id: 'syne_bthrow' }],
+    hurtboxes: [{ activeFrames: [0, 28], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 28, landingLag: 0, isThrow: true,
+  },
+  upThrow: {
+    totalFrames: 24,
+    hitboxes: [{ activeFrames: [7, 9], offsetX: toFixed(0), offsetY: toFixed(20), width: toFixed(20), height: toFixed(20), damage: 6, knockbackScaling: toFixed(0.85), baseKnockback: toFixed(10), launchAngle: 90, hitlagFrames: 4, id: 'syne_uthrow' }],
+    hurtboxes: [{ activeFrames: [0, 24], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 24, landingLag: 0, isThrow: true,
+  },
+  downThrow: {
+    totalFrames: 30,
+    hitboxes: [{ activeFrames: [9, 11], offsetX: toFixed(0), offsetY: toFixed(-10), width: toFixed(20), height: toFixed(20), damage: 5, knockbackScaling: toFixed(0.75), baseKnockback: toFixed(6), launchAngle: 70, hitlagFrames: 4, id: 'syne_dthrow' }],
+    hurtboxes: [{ activeFrames: [0, 30], offsetX: toFixed(0), offsetY: toFixed(0), width: toFixed(30), height: toFixed(60), intangible: false, invincible: false }],
+    iasa: 30, landingLag: 0, isThrow: true,
   },
   // === AERIALS ===
   neutralAir: {

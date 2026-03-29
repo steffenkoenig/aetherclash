@@ -80,7 +80,7 @@ function makeAirborneEntity() {
     shieldHealth: 100,
     shieldBreakFrames: 0,
     attackFrame: 0,
-    currentMoveId: null,
+    currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
     stats: KAEL_STATS,
   });
   return id;
@@ -209,7 +209,7 @@ describe('collision', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 
@@ -245,7 +245,7 @@ describe('collision', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 
@@ -281,7 +281,7 @@ describe('collision', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 
@@ -323,7 +323,7 @@ describe('collision', () => {
       shieldHealth: 100,
       shieldBreakFrames: 0,
       attackFrame: 0,
-      currentMoveId: null,
+      currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
       stats: KAEL_STATS,
     });
 

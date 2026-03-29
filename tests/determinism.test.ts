@@ -106,7 +106,7 @@ function setupFighters(): { p1: number; p2: number } {
     shieldHealth: 100,
     shieldBreakFrames: 0,
     attackFrame: 0,
-    currentMoveId: null,
+    currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
     stats: KAEL_STATS,
   });
 
@@ -134,7 +134,7 @@ function setupFighters(): { p1: number; p2: number } {
     shieldHealth: 100,
     shieldBreakFrames: 0,
     attackFrame: 0,
-    currentMoveId: null,
+    currentMoveId: null, grabVictimId: null, smashChargeFrames: 0,
     stats: GORUN_STATS,
   });
 

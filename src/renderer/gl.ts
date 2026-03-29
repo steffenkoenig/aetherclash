@@ -40,6 +40,11 @@ let threeCamera: THREE.PerspectiveCamera;
 const PERSP_Z      = 700;
 const PERSP_TILT_Y = 100;  // camera sits this many units above the focus point
 
+// Pre-allocated quaternion and axis for the per-frame camera roll (tilt).
+// Avoids heap allocation in the render hot path.
+const _camRollAxis = new THREE.Vector3(0, 0, 1);
+const _camRollQ    = new THREE.Quaternion();
+
 let ambientLight: THREE.AmbientLight;
 let dirLight: THREE.DirectionalLight;
 
@@ -120,7 +125,7 @@ let lastMixerTime = 0;
 /** Map fighter state names to GLB animation clip names. */
 const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').FighterState, string>> = {
   idle:       'idle',
-  walk:       'run',
+  walk:       'walk',
   run:        'run',
   jump:       'jump',
   doubleJump: 'jump',
@@ -131,6 +136,9 @@ const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').Fighter
   spotDodge:  'idle',
   rolling:    'run',
   airDodge:   'jump',
+  crouch:     'crouch',
+  grabbing:   'grabbing',
+  ledgeHang:  'ledgeHang',
 };
 
 function updateMixer(entityId: number, state: import('../engine/ecs/component.js').FighterState): void {
@@ -147,7 +155,8 @@ function updateMixer(entityId: number, state: import('../engine/ecs/component.js
 
   mixer.stopAllAction();
   const action = mixer.clipAction(clip);
-  const loop = clipName === 'idle' || clipName === 'run';
+  const loop = clipName === 'idle' || clipName === 'run' || clipName === 'walk' ||
+               clipName === 'hitstun' || clipName === 'ledgeHang';
   action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
   action.clampWhenFinished = !loop;
   action.reset().play();
@@ -193,6 +202,8 @@ const STAGE_SKY_COLOR: Record<string, number> = {
   crystalCavern:  0x0a0a1a,
   voidRift:       0x000008,
   solarPinnacle:  0xff8c00,
+  windyHeights:   0x5ec8f0,
+  battlefield:    0x1a2a3a,
 };
 
 interface StageLighting {
@@ -209,6 +220,8 @@ const STAGE_LIGHTING: Record<string, StageLighting> = {
   crystalCavern: { ambient: 0x0a1020, aIntensity: 0.30, dir: 0x44ffcc, dIntensity: 1.0,  fog: new THREE.FogExp2(0x050412, 0.0006) },
   voidRift:      { ambient: 0x100028, aIntensity: 0.25, dir: 0x9933ff, dIntensity: 1.0,  fog: new THREE.FogExp2(0x080012, 0.0005) },
   solarPinnacle: { ambient: 0x402808, aIntensity: 0.55, dir: 0xffcc22, dIntensity: 1.4,  fog: new THREE.Fog(0xff8000, 600, 2000) },
+  windyHeights:  { ambient: 0xfff8e0, aIntensity: 0.80, dir: 0xfff0a0, dIntensity: 1.15, fog: new THREE.Fog(0xa8e4f8, 900, 2800) },
+  battlefield:   { ambient: 0x304050, aIntensity: 0.60, dir: 0x88aacc, dIntensity: 1.10, fog: new THREE.Fog(0x0a1520, 800, 2400) },
 };
 
 /**
@@ -263,17 +276,17 @@ const CHARACTER_COLORS: Record<string, number> = {
   vela:  0x44dd66,
   syne:  0xcc44ff,
   zira:  0xffd700,
+  // satirical roster
+  trump: 0xff8800,
+  musk:  0x00aaff,
+  putin: 0x4c7c4c,
+  xi:    0xcc2222,
+  lizzy: 0x88ccff,
 };
 const FALLBACK_COLOR = 0xff4444;
 
 // ── Procedural character mesh ─────────────────────────────────────────────────
 
-function dimColor(hex: number, factor: number): number {
-  const r = ((hex >> 16) & 0xff) * factor;
-  const g = ((hex >>  8) & 0xff) * factor;
-  const b = ( hex        & 0xff) * factor;
-  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}
 
 export function createCharacterMesh(characterId: string): THREE.Group {
   const mainColor = CHARACTER_COLORS[characterId] ?? FALLBACK_COLOR;
@@ -281,8 +294,20 @@ export function createCharacterMesh(characterId: string): THREE.Group {
   function toon(hex: number): THREE.MeshToonMaterial {
     return new THREE.MeshToonMaterial({ color: hex });
   }
-  function box(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
-    return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  function sphere(r: number, mat: THREE.Material, wSeg = 14, hSeg = 10): THREE.Mesh {
+    return new THREE.Mesh(new THREE.SphereGeometry(r, wSeg, hSeg), mat);
+  }
+  function capsule(r: number, l: number, mat: THREE.Material): THREE.Mesh {
+    return new THREE.Mesh(new THREE.CapsuleGeometry(r, l, 5, 8), mat);
+  }
+  function cylinder(rt: number, rb: number, h: number, segs: number, mat: THREE.Material): THREE.Mesh {
+    return new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, segs), mat);
+  }
+  function cone(r: number, h: number, segs: number, mat: THREE.Material): THREE.Mesh {
+    return new THREE.Mesh(new THREE.ConeGeometry(r, h, segs), mat);
+  }
+  function torus(r: number, tube: number, mat: THREE.Material): THREE.Mesh {
+    return new THREE.Mesh(new THREE.TorusGeometry(r, tube, 7, 14), mat);
   }
   function add(group: THREE.Group, mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh {
     mesh.position.set(x, y, z);
@@ -290,169 +315,307 @@ export function createCharacterMesh(characterId: string): THREE.Group {
     return mesh;
   }
 
-  const group = new THREE.Group();
-  let torso: THREE.Mesh, head: THREE.Mesh, armL: THREE.Mesh, armR: THREE.Mesh,
-      legL: THREE.Mesh, legR: THREE.Mesh;
+  // ── Shared biped rig helper ───────────────────────────────────────────────
+  // Creates named THREE.Group objects anchored at joint pivots (shoulder, hip,
+  // neck) so that applyPose rotations swing limbs from the correct joint.
+  // CapsuleGeometry(r,L): total height = L+2r; centred at origin.
+  // To span [pivot … pivot−span]: centre at y=−span/2, L = span−2r.
+  function makeRig(torsoW: number, waistW: number, torsoH: number,
+    shX: number, shY: number, ar: number, aLen: number,
+    hpX: number, lr: number, lLen: number,
+    bodyM: THREE.Material, skinM: THREE.Material) {
 
-  if (characterId === 'kael') {
-    // ── Kael: armoured warrior ─────────────────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const armorM = toon(0x8899cc);
-    const darkM  = toon(0x1a2233);
-    const eyeM   = toon(0x88ccff);
-    const swordM = toon(0xdde8ff);
-    torso = add(group, box(28, 30, 15, bodyM),  0, 15,  0);
-    head  = add(group, box(20, 22, 17, bodyM),  0, 41,  0);
-    armL  = add(group, box( 9, 24,  9, bodyM), -21, 14, 0);
-    armR  = add(group, box( 9, 24,  9, bodyM),  21, 14, 0);
-    legL  = add(group, box(11, 26, 11, bodyM),  -7, -13, 0);
-    legR  = add(group, box(11, 26, 11, bodyM),   7, -13, 0);
-    add(group, box( 4, 4, 2, eyeM),  -5, 42, 9.5);
-    add(group, box( 4, 4, 2, eyeM),   5, 42, 9.5);
-    add(group, box(25, 22, 3, armorM), 0, 17,  9);   // chest plate
-    add(group, box(12,  8, 16, armorM), -22, 30, 0);  // pauldron L
-    add(group, box(12,  8, 16, armorM),  22, 30, 0);  // pauldron R
-    add(group, box(28,  5, 16, darkM),   0,  1,  0);  // belt
-    add(group, box(22,  4,  4, armorM),  0, 45, 9.5); // brow
-    add(group, box( 4, 10, 16, armorM),  0, 54,  0);  // crest
-    add(group, box(12, 14, 12, armorM), -7, -22, 1);  // greave L
-    add(group, box(12, 14, 12, armorM),  7, -22, 1);  // greave R
-    add(group, box( 3, 38,  4, swordM), 30,  2,  0);  // sword blade
-    add(group, box(16,  4,  5, darkM),  30, 21,  0);  // sword guard
-    add(group, box( 3, 20, 20, armorM), -26, 8,  0);  // shield
+    const ltH = torsoH * 0.42, utH = torsoH * 0.58;
+    const uaL = aLen * 0.54,   faL = aLen * 0.46;
+    const thL = lLen * 0.54,   shL = lLen * 0.46;
 
-  } else if (characterId === 'gorun') {
-    // ── Gorun: massive armoured giant ─────────────────────────────────────
-    const bodyM   = toon(mainColor);
-    const armorM  = toon(0x333333);
-    const accentM = toon(0xff4400);
-    const eyeM    = toon(0xff6600);
-    const hammerM = toon(0x555566);
-    torso = add(group, box(46, 32, 24, bodyM),   0, 16,  0);
-    head  = add(group, box(28, 24, 24, bodyM),   0, 44,  0);
-    armL  = add(group, box(16, 26, 16, bodyM), -33, 14,  0);
-    armR  = add(group, box(16, 26, 16, bodyM),  33, 14,  0);
-    legL  = add(group, box(18, 28, 18, bodyM), -12, -14, 0);
-    legR  = add(group, box(18, 28, 18, bodyM),  12, -14, 0);
-    add(group, box( 6, 3, 2, eyeM),  -6, 44, 13);
-    add(group, box( 6, 3, 2, eyeM),   6, 44, 13);
-    add(group, box(24, 10, 3, armorM),  0, 41, 13.5); // faceplate
-    add(group, box(30,  6, 4, armorM),  0, 51, 13);   // brow
-    add(group, box(22, 14, 24, armorM), -33, 32, 0);  // shoulder L
-    add(group, box(22, 14, 24, armorM),  33, 32, 0);  // shoulder R
-    add(group, box(42, 28, 4, armorM),   0, 18, 13);  // chest plate
-    for (const [rx, ry] of [[-10, 22] as const, [10, 22] as const,
-                              [-10, 10] as const, [10, 10] as const]) {
-      add(group, box(4, 4, 3, accentM), rx, ry, 15.5); // rivets
+    // Torso group (waist pivot)
+    const torsoG = new THREE.Group();
+    torsoG.position.set(0, 0, 0); group.add(torsoG);
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(waistW * 1.1, 10, 7), bodyM);
+      m.scale.set(1.3, 0.65, 1.0); m.position.set(0, -4, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(waistW, waistW * 1.1, ltH, 10), bodyM);
+      m.position.set(0, ltH * 0.5, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(torsoW, waistW, utH, 10), bodyM);
+      m.position.set(0, ltH + utH * 0.5, 0); torsoG.add(m); }
+    { const m = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.5, 7, 8), skinM);
+      m.position.set(0, torsoH + 3.5, 0); torsoG.add(m); }
+
+    // Head group (neck-top pivot)
+    const headG = new THREE.Group();
+    headG.position.set(0, torsoH + 7, 0); group.add(headG);
+
+    // Arm groups (shoulder pivot — geometry hangs downward)
+    function makeArm(side: number): THREE.Group {
+      const g = new THREE.Group();
+      g.position.set(side * shX, shY, 0); group.add(g);
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar + 1.5, 8, 6), bodyM); g.add(m); }
+      { const cL = Math.max(1, uaL - ar * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(ar, cL, 5, 8), bodyM);
+        m.position.set(0, -uaL * 0.5, 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar * 0.88, 7, 5), bodyM);
+        m.position.set(0, -uaL, 0); g.add(m); }
+      { const fr = ar * 0.78; const cL = Math.max(1, faL - fr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(fr, cL, 5, 8), bodyM);
+        m.position.set(0, -(uaL + faL * 0.5), 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(ar * 0.86, 7, 6), skinM);
+        m.scale.set(0.92, 0.86, 1.2); m.position.set(0, -(uaL + faL), 0); g.add(m); }
+      return g;
     }
-    add(group, box(46,  7, 25, armorM),  0,  1,  0);  // belt plate
-    add(group, box(20, 10, 20, armorM), -12, -18, 2);  // knee L
-    add(group, box(20, 10, 20, armorM),  12, -18, 2);  // knee R
-    add(group, box( 8, 36,  8, armorM),  50, 10,  0);  // hammer shaft
-    add(group, box(24, 24, 22, hammerM), 50, -5,  0);  // hammer head
-    add(group, box(22,  4, 20, accentM), 50, -5,  0);  // hammer accent
 
-  } else if (characterId === 'vela') {
-    // ── Vela: tall lean blade master ───────────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const darkM  = toon(0x111111);
-    const bladeM = toon(0xccddff);
-    const eyeM   = toon(0xaaffcc);
-    const clothM = toon(0x224433);
-    torso = add(group, box(22, 32, 13, bodyM),   0, 16,  0);
-    head  = add(group, box(18, 22, 15, bodyM),   0, 43,  0);
-    armL  = add(group, box( 7, 28,  7, bodyM), -16, 14,  0);
-    armR  = add(group, box( 7, 28,  7, bodyM),  16, 14,  0);
-    legL  = add(group, box( 9, 32,  9, bodyM),  -6, -16, 0);
-    legR  = add(group, box( 9, 32,  9, bodyM),   6, -16, 0);
-    add(group, box(4, 4, 2, eyeM), -4, 44, 8.5);
-    add(group, box(4, 4, 2, eyeM),  4, 44, 8.5);
-    add(group, box(6, 20, 4, bodyM),  0, 51,  -9); // ponytail 1
-    add(group, box(4, 14, 3, bodyM),  0, 41, -14); // ponytail 2
-    add(group, box(3, 10, 3, bodyM),  0, 33, -18); // ponytail 3
-    add(group, box(16, 5, 4, darkM),  0, 32, 7.5); // collar
-    add(group, box(22, 5, 14, darkM), 0,  1,  1);  // belt sash
-    add(group, box(4, 28,  2, clothM), -13, 6, -7); // cloak L
-    add(group, box(4, 28,  2, clothM),  13, 6, -7); // cloak R
-    add(group, box(3, 52,  4, bladeM),  22, -4, 0); // blade
-    add(group, box(16, 3,  5, darkM),   22, 21, 0); // guard
-    add(group, box(3, 12,  4, darkM),   22, 27, 0); // handle
-    add(group, box(10, 10, 10, darkM),  -6, -30, 0.5); // boot L
-    add(group, box(10, 10, 10, darkM),   6, -30, 0.5); // boot R
+    // Leg groups (hip pivot — geometry hangs downward)
+    function makeLeg(side: number): THREE.Group {
+      const g = new THREE.Group();
+      g.position.set(side * hpX, 0, 0); group.add(g);
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.9, 8, 6), bodyM);
+        m.position.set(0, -lr * 0.2, 0); g.add(m); }
+      { const cL = Math.max(1, thL - lr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(lr, cL, 5, 8), bodyM);
+        m.position.set(0, -thL * 0.5, 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.84, 7, 5), bodyM);
+        m.position.set(0, -thL, 0); g.add(m); }
+      { const sr = lr * 0.8; const cL = Math.max(1, shL - sr * 2);
+        const m = new THREE.Mesh(new THREE.CapsuleGeometry(sr, cL, 5, 8), bodyM);
+        m.position.set(0, -(thL + shL * 0.5), 0); g.add(m); }
+      { const m = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.86, 7, 5), bodyM);
+        m.scale.set(0.9, 0.58, 1.65); m.position.set(0, -(thL + shL), 4); g.add(m); }
+      return g;
+    }
 
-  } else if (characterId === 'syne') {
-    // ── Syne: slim tech engineer ───────────────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const techM  = toon(0x223344);
-    const glowM  = toon(0x00ffee);
-    const eyeM   = toon(0x00eeff);
-    const darkM  = toon(0x111122);
-    torso = add(group, box(20, 26, 14, bodyM),  0, 13,  0);
-    head  = add(group, box(18, 20, 18, bodyM),  0, 37,  0);
-    armL  = add(group, box( 7, 22,  7, bodyM), -15, 13, 0);
-    armR  = add(group, box( 7, 22,  7, bodyM),  15, 13, 0);
-    legL  = add(group, box( 8, 26,  8, bodyM),  -6, -13, 0);
-    legR  = add(group, box( 8, 26,  8, bodyM),   6, -13, 0);
-    add(group, box(6, 3, 2, eyeM), -5, 37, 9.5);
-    add(group, box(6, 3, 2, eyeM),  5, 37, 9.5);
-    add(group, box(18, 12, 18, techM),  0, 48,  0);   // helmet dome
-    add(group, box( 2, 14,  2, glowM),  6, 60,  0);   // antenna
-    add(group, box( 5,  5,  5, glowM),  6, 68,  0);   // antenna tip
-    add(group, box(18,  5,  3, glowM),  0, 37, 10.5); // visor
-    add(group, box(20, 26, 10, techM),  0, 13, -12);  // backpack
-    add(group, box( 8,  8,  8, glowM),  0, 15, -17);  // pack orb
-    add(group, box(16,  5, 14, techM),  0,  1,   0);  // belt pack
-    add(group, box(10, 10, 10, techM), -18, 5,   3);  // arm cannon
-    add(group, box( 5,  5, 14, darkM), -18, 5,  11);  // barrel
-    add(group, box( 9,  8, 11, techM),  -6, -25, 1);  // boot L
-    add(group, box( 9,  8, 11, techM),   6, -25, 1);  // boot R
-
-  } else if (characterId === 'zira') {
-    // ── Zira: compact agile street fighter ─────────────────────────────────
-    const bodyM   = toon(mainColor);
-    const darkM   = toon(0x550011);
-    const accentM = toon(0xff3300);
-    const eyeM    = toon(0xff9900);
-    const padM    = toon(0x222222);
-    torso = add(group, box(18, 24, 12, bodyM),   0, 12,  0);
-    head  = add(group, box(16, 18, 14, bodyM),   0, 33,  0);
-    armL  = add(group, box( 6, 20,  6, bodyM), -14, 12,  0);
-    armR  = add(group, box( 6, 20,  6, bodyM),  14, 12,  0);
-    legL  = add(group, box( 8, 28,  8, bodyM),  -6, -14, 0);
-    legR  = add(group, box( 8, 28,  8, bodyM),   6, -14, 0);
-    add(group, box(4, 3, 2, eyeM), -4, 33, 7.5);
-    add(group, box(4, 3, 2, eyeM),  4, 33, 7.5);
-    add(group, box(4, 14, 14, accentM), 0, 48, 0); // mohawk 1
-    add(group, box(3, 10, 10, accentM), 0, 57, 0); // mohawk 2
-    add(group, box(2,  7,  7, accentM), 0, 65, 0); // mohawk 3
-    add(group, box(7,  5,  7, padM),  -14, 4,  0); // wristband L
-    add(group, box(7,  5,  7, padM),   14, 4,  0); // wristband R
-    add(group, box(18, 4,  2, darkM),   0, 20,  7); // stripe 1
-    add(group, box(18, 4,  2, darkM),   0, 10,  7); // stripe 2
-    add(group, box(9,  7,  9, padM),   -6, -10, 1.5); // knee L
-    add(group, box(9,  7,  9, padM),    6, -10, 1.5); // knee R
-    add(group, box(9, 10, 13, darkM),  -6, -26,  2);  // boot L
-    add(group, box(9, 10, 13, darkM),   6, -26,  2);  // boot R
-    add(group, box(9,  4,  4, accentM), -6, -28, 9); // toe cap L
-    add(group, box(9,  4,  4, accentM),  6, -28, 9); // toe cap R
-
-  } else {
-    // ── Fallback: simple box-humanoid ──────────────────────────────────────
-    const bodyM  = toon(mainColor);
-    const dimM   = toon(dimColor(mainColor, 0.7));
-    const darkM  = toon(dimColor(mainColor, 0.6));
-    const eyeM   = toon(0x111111);
-    torso = add(group, box(26, 28, 16, bodyM),   0,  3, 0);
-    head  = add(group, box(20, 20, 16, bodyM),   0, 28, 0);
-    armL  = add(group, box( 8, 22,  8, dimM),  -17,  5, 0);
-    armR  = add(group, box( 8, 22,  8, dimM),   17,  5, 0);
-    legL  = add(group, box(10, 26, 10, darkM),  -8, -21, 0);
-    legR  = add(group, box(10, 26, 10, darkM),   8, -21, 0);
-    add(group, box(4, 3, 2, eyeM), -5, 30, 8);
-    add(group, box(4, 3, 2, eyeM),  5, 30, 8);
+    return {
+      torso: torsoG as unknown as THREE.Object3D,
+      head:  headG  as unknown as THREE.Object3D,
+      armL:  makeArm(-1) as unknown as THREE.Object3D,
+      armR:  makeArm(1)  as unknown as THREE.Object3D,
+      legL:  makeLeg(-1) as unknown as THREE.Object3D,
+      legR:  makeLeg(1)  as unknown as THREE.Object3D,
+    };
   }
 
-  group.userData['parts'] = { torso: torso!, head: head!, armL: armL!, armR: armR!, legL: legL!, legR: legR! };
+  const group = new THREE.Group();
+
+  let parts: { torso: THREE.Object3D; head: THREE.Object3D;
+               armL: THREE.Object3D; armR: THREE.Object3D;
+               legL: THREE.Object3D; legR: THREE.Object3D; };
+
+  if (characterId === 'kael') {
+    const bodyM = toon(mainColor); const armorM = toon(0x8899cc);
+    const darkM = toon(0x1a2233); const eyeM = toon(0x88ccff);
+    const swordM = toon(0xdde8ff);
+    parts = makeRig(13, 9, 28, 16, 26, 4.5, 24, 7, 5.5, 28, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(11, bodyM), 0, 11, 0);
+    add(h, sphere(2.5, eyeM, 8, 6), -5, 13, 10);
+    add(h, sphere(2.5, eyeM, 8, 6),  5, 13, 10);
+    add(h, cylinder(11.5, 11.5, 3, 14, armorM), 0, 7, 0);
+    add(h, cylinder(1.5, 2.5, 12, 6, armorM), 0, 22, 0);
+    const t = parts.torso as THREE.Group;
+    const cp = sphere(14, armorM); cp.scale.set(1, 0.8, 0.32); add(t, cp, 0, 18, 11);
+    const blt = torus(11, 2.5, darkM); blt.rotation.x = Math.PI / 2; add(t, blt, 0, 1, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const p = sphere(8, armorM); p.scale.set(1.4, 0.65, 1.4); arm.add(p);
+    }
+    add(group, cylinder(1.2, 0.3, 38, 8, swordM), 28, 2, 0);
+    add(group, cylinder(8, 8, 2.5, 8, darkM), 28, 21, 0);
+    const shd = cylinder(13, 13, 3, 12, armorM); shd.rotation.z = Math.PI / 2;
+    add(group, shd, -29, 8, 0);
+
+  } else if (characterId === 'gorun') {
+    const bodyM = toon(mainColor); const armorM = toon(0x333333);
+    const accentM = toon(0xff4400); const eyeM = toon(0xff6600);
+    const hammerM = toon(0x555566);
+    parts = makeRig(22, 16, 32, 26, 30, 7.5, 30, 12, 9, 34, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(14, bodyM), 0, 14, 0);
+    const eL = sphere(3, eyeM); eL.scale.set(1.8, 0.6, 0.5); add(h, eL, -7, 16, 13);
+    const eR = sphere(3, eyeM); eR.scale.set(1.8, 0.6, 0.5); add(h, eR,  7, 16, 13);
+    add(h, cylinder(14.5, 14.5, 4, 14, armorM), 0, 8, 0);
+    add(h, cone(4, 22, 8, armorM), -11, 28, 0);
+    add(h, cone(4, 22, 8, armorM),  11, 28, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const p = sphere(14, armorM); p.scale.set(1.5, 0.6, 1.5); arm.add(p);
+    }
+    add(group, cylinder(4, 4, 38, 8, armorM), 52, 10, 0);
+    const hh = sphere(14, hammerM); hh.scale.set(1.5, 1.2, 1.2); add(group, hh, 52, -6, 0);
+    const hband = torus(14, 2.5, accentM); hband.rotation.z = Math.PI / 2; add(group, hband, 52, -6, 0);
+
+  } else if (characterId === 'vela') {
+    const bodyM = toon(mainColor); const darkM = toon(0x111111);
+    const bladeM = toon(0xccddff); const eyeM = toon(0xaaffcc);
+    const clothM = toon(0x224433);
+    parts = makeRig(11, 8, 30, 14, 28, 3.5, 28, 6, 4.5, 32, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(9.5, bodyM), 0, 10, 0);
+    add(h, sphere(2, eyeM, 8, 6), -4, 12, 8.5);
+    add(h, sphere(2, eyeM, 8, 6),  4, 12, 8.5);
+    for (const [py, pz, pr] of [[17, -4, 4], [12, -10, 3], [6, -16, 2.2], [0, -22, 1.6]] as number[][]) {
+      add(h, sphere(pr, bodyM), 0, py, pz);
+    }
+    const t = parts.torso as THREE.Group;
+    const col = torus(7, 2, darkM); col.rotation.x = Math.PI / 2; add(t, col, 0, 30, 0);
+    const sash = torus(9, 2, darkM); sash.rotation.x = Math.PI / 2; add(t, sash, 0, 1, 0);
+    add(t, cylinder(2, 3.5, 28, 6, clothM), -13, 6, -7);
+    add(t, cylinder(2, 3.5, 28, 6, clothM),  13, 6, -7);
+    add(group, cylinder(1.5, 0.4, 52, 8, bladeM), 20, -4, 0);
+    add(group, cylinder(7, 7, 2, 8, darkM), 20, 22, 0);
+
+  } else if (characterId === 'syne') {
+    const bodyM = toon(mainColor); const techM = toon(0x223344);
+    const glowM = toon(0x00ffee); const eyeM = toon(0x00eeff);
+    const darkM = toon(0x111122);
+    parts = makeRig(10, 8, 26, 14, 24, 3, 22, 6, 3.5, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(9, bodyM), 0, 9, 0);
+    add(h, sphere(11, techM), 0, 11, 0);
+    const evL = sphere(3, eyeM); evL.scale.set(1.8, 0.55, 0.5); add(h, evL, -5, 10, 9.5);
+    const evR = sphere(3, eyeM); evR.scale.set(1.8, 0.55, 0.5); add(h, evR,  5, 10, 9.5);
+    add(h, cylinder(1, 1, 14, 6, glowM), 6, 22, 0);
+    add(h, sphere(3, glowM), 6, 30, 0);
+    const t = parts.torso as THREE.Group;
+    const bkPk = cylinder(9, 8, 26, 8, techM); bkPk.rotation.x = Math.PI / 2; add(t, bkPk, 0, 13, -12);
+    add(t, sphere(4.5, glowM), 0, 13, -18);
+    const bltR = torus(9, 2.5, techM); bltR.rotation.x = Math.PI / 2; add(t, bltR, 0, 1, 0);
+    const cnPk = cylinder(5.5, 5.5, 12, 8, techM); cnPk.rotation.x = Math.PI / 2;
+    (parts.armL as THREE.Group).add(cnPk); cnPk.position.set(0, -8, 5);
+    const brPk = cylinder(2.5, 2.5, 14, 8, darkM); brPk.rotation.x = Math.PI / 2;
+    (parts.armL as THREE.Group).add(brPk); brPk.position.set(0, -8, 13);
+
+  } else if (characterId === 'zira') {
+    const bodyM = toon(mainColor); const darkM = toon(0x550011);
+    const accentM = toon(0xff3300); const eyeM = toon(0xff9900);
+    const padM = toon(0x222222);
+    parts = makeRig(9, 7, 24, 12, 22, 2.8, 20, 6, 3.8, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(8, bodyM), 0, 8, 0);
+    add(h, sphere(2, eyeM, 8, 6), -4, 10, 7.5);
+    add(h, sphere(2, eyeM, 8, 6),  4, 10, 7.5);
+    const mhBs = torus(3.5, 1.5, accentM); mhBs.rotation.x = Math.PI / 2; add(h, mhBs, 0, 16, 0);
+    add(h, cone(2.5, 18, 6, accentM), 0, 25, 0);
+    const t = parts.torso as THREE.Group;
+    const nkRg = torus(6, 1.5, darkM); nkRg.rotation.x = Math.PI / 2; add(t, nkRg, 0, 24, 0);
+    const cb1 = torus(8.5, 1.2, darkM); cb1.rotation.x = Math.PI / 2; add(t, cb1, 0, 18, 0);
+    const cb2 = torus(8, 1.2, darkM); cb2.rotation.x = Math.PI / 2; add(t, cb2, 0, 10, 0);
+    for (const arm of [parts.armL, parts.armR] as THREE.Group[]) {
+      const wb = torus(3.5, 1.5, padM); wb.rotation.x = Math.PI / 2;
+      arm.add(wb); wb.position.set(0, -20, 0);
+    }
+
+  } else if (characterId === 'trump') {
+    // Orange suit, combed-over hair, red tie, wide torso
+    const suitM  = toon(mainColor);
+    const tieM   = toon(0xdd0000);
+    const skinM  = toon(0xffc090);
+    const hairM  = toon(0xffdd88);
+    const eyeM   = toon(0x3355aa);
+    parts = makeRig(18, 13, 30, 20, 28, 6, 26, 10, 7, 28, suitM, suitM);
+    const hTr = parts.head as THREE.Group;
+    add(hTr, sphere(12, skinM), 0, 12, 0);
+    add(hTr, sphere(2.5, eyeM, 8, 6), -5, 14, 11);
+    add(hTr, sphere(2.5, eyeM, 8, 6),  5, 14, 11);
+    const co = capsule(11, 2, hairM); co.rotation.z = Math.PI / 2;
+    co.position.set(0, 23, -2); hTr.add(co);
+    const tTr = parts.torso as THREE.Group;
+    add(tTr, cylinder(10, 7, 10, 6, tieM), 0, 14, 8);
+    add(tTr, cylinder(2.5, 4, 28, 6, tieM), 0, 2, 9);
+    const jkt = sphere(18, suitM); jkt.scale.set(1, 0.55, 0.35); jkt.position.set(0, 18, 10); tTr.add(jkt);
+    add(group, sphere(4, skinM), 28, -6, 2);
+    add(group, sphere(4, skinM), -28, -6, 2);
+    void skinM; void hairM; void eyeM;
+
+  } else if (characterId === 'musk') {
+    // Slim dark turtleneck, X belt, rocket thruster backpack
+    const bodyM  = toon(mainColor);
+    const darkM  = toon(0x222244);
+    const skinM  = toon(0xffe0c0);
+    const eyeM   = toon(0x33bb99);
+    const glowM  = toon(0x00ffee);
+    parts = makeRig(10, 8, 28, 14, 26, 3.5, 24, 6, 4, 26, darkM, darkM);
+    const hMu = parts.head as THREE.Group;
+    add(hMu, sphere(10, skinM), 0, 10, 0);
+    add(hMu, sphere(2.5, eyeM, 8, 6), -5, 12, 9.5);
+    add(hMu, sphere(2.5, eyeM, 8, 6),  5, 12, 9.5);
+    const colMu = cylinder(9, 8, 6, 10, darkM); colMu.position.set(0, 3, 0); hMu.add(colMu);
+    const tMu = parts.torso as THREE.Group;
+    const rkt = capsule(5, 18, bodyM); rkt.rotation.x = Math.PI / 2; rkt.position.set(0, 14, -14); tMu.add(rkt);
+    add(tMu, sphere(4, glowM), 0, 14, -22);
+    const bx1 = cylinder(1.5, 1.5, 14, 4, glowM); bx1.rotation.z =  Math.PI / 4; bx1.position.set(0, 2, 8); tMu.add(bx1);
+    const bx2 = cylinder(1.5, 1.5, 14, 4, glowM); bx2.rotation.z = -Math.PI / 4; bx2.position.set(0, 2, 8); tMu.add(bx2);
+    void skinM; void eyeM;
+
+  } else if (characterId === 'putin') {
+    // Shirtless, wide body, bear-saddle, medals
+    const skinM  = toon(mainColor);
+    const bearM  = toon(0x8b5e3c);
+    const eyeM   = toon(0x3399cc);
+    parts = makeRig(20, 14, 30, 24, 28, 7, 28, 11, 8, 30, skinM, skinM);
+    const hPu = parts.head as THREE.Group;
+    add(hPu, sphere(12, skinM), 0, 12, 0);
+    add(hPu, sphere(2.5, eyeM, 8, 6), -5, 14, 11);
+    add(hPu, sphere(2.5, eyeM, 8, 6),  5, 14, 11);
+    const saddle = sphere(20, bearM); saddle.scale.set(1.8, 0.9, 1.4); saddle.position.set(0, -46, 0);
+    parts.torso.add(saddle);
+    add(group, cone(5, 9, 6, bearM), -18, -42, 14);
+    add(group, cone(5, 9, 6, bearM),  18, -42, 14);
+    for (let i = 0; i < 3; i++) {
+      const medal = sphere(3, toon(0xffd700)); medal.scale.set(0.5, 1, 0.3);
+      medal.position.set(-8 + i * 8, 20, 13); parts.torso.add(medal);
+    }
+    void eyeM;
+
+  } else if (characterId === 'xi') {
+    // Dark red Mao suit, gold stars, little red book
+    const suitM  = toon(mainColor);
+    const skinM  = toon(0xf5d8b0);
+    const starM  = toon(0xffd700);
+    const eyeM   = toon(0x222222);
+    const darkM  = toon(0x660000);
+    parts = makeRig(16, 12, 32, 18, 28, 5.5, 26, 9, 7, 30, suitM, suitM);
+    const hXi = parts.head as THREE.Group;
+    add(hXi, sphere(11, skinM), 0, 11, 0);
+    add(hXi, sphere(2.2, eyeM, 8, 6), -4, 13, 10);
+    add(hXi, sphere(2.2, eyeM, 8, 6),  4, 13, 10);
+    const colXi = cylinder(10, 9, 6, 8, darkM); colXi.position.set(0, 3, 0); hXi.add(colXi);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      const s = sphere(2.5, starM); s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13);
+      parts.torso.add(s);
+    }
+    const book = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), toon(0xdd0000));
+    book.position.set(-26, -4, 0); group.add(book);
+    void suitM; void skinM; void starM; void eyeM; void darkM;
+
+  } else if (characterId === 'lizzy') {
+    // Pastel coat, crown, handbag, spectral corgi
+    const coatM  = toon(mainColor);
+    const skinM  = toon(0xffe0cc);
+    const crownM = toon(0xffd700);
+    const eyeM   = toon(0x224488);
+    const corgiM = toon(0xee8833);
+    parts = makeRig(13, 10, 28, 16, 26, 4.5, 24, 7, 5.5, 28, coatM, coatM);
+    const hLi = parts.head as THREE.Group;
+    add(hLi, sphere(10, skinM), 0, 10, 0);
+    add(hLi, sphere(2.2, eyeM, 8, 6), -4, 12, 9);
+    add(hLi, sphere(2.2, eyeM, 8, 6),  4, 12, 9);
+    add(hLi, cylinder(8, 9, 6, 6, crownM), 0, 22, 0);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2; add(hLi, cone(2, 8, 5, crownM), Math.cos(a) * 7, 27, Math.sin(a) * 7);
+    }
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 4), coatM); bag.position.set(-24, -8, 0); group.add(bag);
+    const corgiBody = sphere(6, corgiM); corgiBody.scale.set(2, 0.9, 1.2); corgiBody.position.set(-30, -48, 8); group.add(corgiBody);
+    add(group, cone(3, 7, 5, corgiM), -30, -44, 16);
+    void skinM; void eyeM; void corgiM;
+
+  } else {
+    // ── Fallback: jointed humanoid ─────────────────────────────────────────
+    const bodyM = toon(mainColor); const eyeM = toon(0x111111);
+    parts = makeRig(12, 9, 28, 15, 26, 4, 22, 7, 5, 26, bodyM, bodyM);
+    const h = parts.head as THREE.Group;
+    add(h, sphere(10, bodyM), 0, 10, 0);
+    add(h, sphere(2.5, eyeM, 8, 6), -5, 12, 9);
+    add(h, sphere(2.5, eyeM, 8, 6),  5, 12, 9);
+  }
+
+  group.userData['parts'] = parts;
 
   return group;
 }
@@ -834,7 +997,12 @@ type Parts = {
   legR:  THREE.Mesh;
 };
 
-function applyPose(group: THREE.Group, state: FighterState, moveId?: string | null): void {
+function applyPose(
+  group: THREE.Group,
+  state: FighterState,
+  moveId?: string | null,
+  facingRight?: boolean,
+): void {
   const parts = group.userData['parts'] as Parts | undefined;
   if (!parts) return;
 
@@ -849,9 +1017,11 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
   group.rotation.z = 0;
   group.scale.set(1, 1, 1);
 
-  // Reset arm Z offsets before any pose branch so all states start clean.
+  // Reset arm/leg positions before any pose branch so all states start clean.
   armR.position.z = 0;
   armL.position.z = 0;
+  armR.position.y = (armR.userData['baseY'] as number) ?? armR.position.y;
+  armL.position.y = (armL.userData['baseY'] as number) ?? armL.position.y;
 
   // ── Special-move emissive glow ──────────────────────────────────────────
   // When the fighter is executing a special move, pulse the character meshes
@@ -888,14 +1058,18 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
       legR.rotation.x = -s * 0.5;
       armL.rotation.x = -s * 0.3;
       armR.rotation.x =  s * 0.3;
+      // Slight forward lean when running
+      group.rotation.z = facingRight ? -0.12 : 0.12;
       break;
     }
     case 'jump':
     case 'doubleJump':
-      legL.rotation.x = -0.3;
-      legR.rotation.x = -0.3;
-      armL.rotation.x = -0.3;
-      armR.rotation.x = -0.3;
+      legL.rotation.x = -0.35;
+      legR.rotation.x = -0.35;
+      armL.rotation.x = -0.4;
+      armR.rotation.x = -0.4;
+      armL.position.z = 6;
+      armR.position.z = 6;
       break;
 
     case 'attack':
@@ -903,19 +1077,79 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
         // Special pose: both arms raised and spread wide (charging stance).
         armL.rotation.x = -Math.PI * 0.65;
         armR.rotation.x = -Math.PI * 0.65;
-        armL.position.z = 8;
-        armR.position.z = 8;
-        // Slight forward lean.
-        group.rotation.z = 0.12;
+        armL.position.z = 12;
+        armR.position.z = 12;
+        group.rotation.z = facingRight ? -0.15 : 0.15;
       } else {
-        // Normal attack: raise right arm forward.
-        armR.rotation.x = -Math.PI / 2;
-        armR.position.z = 10;
+        // Move-specific attack poses that visually match hitbox positions.
+        // Local +Z on this rig = world facing direction, so armR.position.z
+        // directly extends the arm toward the opponent.
+        const mid = moveId ?? '';
+
+        if (mid.startsWith('up')) {
+          // Up attacks: both arms raised overhead
+          armL.rotation.x = -Math.PI * 0.85;
+          armR.rotation.x = -Math.PI * 0.85;
+          armL.position.z = 8;
+          armR.position.z = 8;
+          // Slight backward lean to sell the upward swing
+          group.rotation.z = facingRight ? 0.1 : -0.1;
+
+        } else if (mid.startsWith('down') || mid === 'downAir') {
+          // Down attacks: arms sweep low
+          armL.rotation.x = 0.55;
+          armR.rotation.x = 0.55;
+          armL.position.z = 14;
+          armR.position.z = 14;
+          group.scale.y = 0.88; // slight crouch
+          group.rotation.z = facingRight ? -0.1 : 0.1;
+
+        } else if (mid === 'backAir') {
+          // Back air: leading arm swings backward
+          armL.rotation.x = Math.PI / 2;
+          armL.position.z = -28; // backward relative to facing
+          armR.rotation.x = 0.2;
+          group.rotation.z = facingRight ? 0.15 : -0.15;
+
+        } else if (mid.includes('Jab') || mid === 'neutralJab') {
+          // Jab: quick short punch forward
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 22; // ~15 unit hitbox offsetX → z≈22
+
+        } else if (mid.includes('Smash') && !mid.startsWith('up') && !mid.startsWith('down')) {
+          // Forward smash: big lunge — arm extends far, body leans in
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 46; // ~40-50 unit hitbox offsetX
+          armL.rotation.x = 0.3;
+          group.rotation.z = facingRight ? -0.22 : 0.22;
+          group.scale.z = 1.15; // stretch forward
+
+        } else if (mid === 'neutralAir') {
+          // Neutral air: spinning kick, both arms out
+          const spin = Math.sin(renderTime * 14);
+          armL.rotation.x = -Math.PI / 2 + spin * 0.4;
+          armR.rotation.x = -Math.PI / 2 - spin * 0.4;
+          armL.position.z = 12;
+          armR.position.z = 12;
+
+        } else {
+          // Default forward attack (tilt / forward air / other):
+          // Extend arm proportional to typical tilt hitbox (~20-30 units)
+          armR.rotation.x = -Math.PI / 2;
+          armR.position.z = 34; // covers forwardTilt (z≈25-35) and forwardAir
+          armL.rotation.x = 0.15;
+          group.rotation.z = facingRight ? -0.14 : 0.14;
+        }
       }
       break;
 
     case 'hitstun':
-      group.rotation.z = Math.sin(renderTime * 50) * 0.2;
+      // Tumble animation: body tilts backward + arms flung
+      group.rotation.z = (facingRight ? 0.3 : -0.3) + Math.sin(renderTime * 50) * 0.15;
+      armL.rotation.x = 0.6;
+      armR.rotation.x = 0.6;
+      legL.rotation.x = 0.4;
+      legR.rotation.x = -0.3;
       break;
 
     case 'KO':
@@ -924,7 +1158,76 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
       break;
 
     case 'shielding':
-      group.scale.set(0.95, 0.95, 1.2);
+      group.scale.set(0.92, 0.92, 1.18);
+      // Arms in protective stance
+      armL.rotation.x = -0.6;
+      armR.rotation.x = -0.6;
+      armL.position.z = 10;
+      armR.position.z = 10;
+      break;
+
+    case 'spotDodge':
+      group.scale.set(1, 0.75, 1.3);
+      group.rotation.z = facingRight ? -0.05 : 0.05;
+      break;
+
+    case 'rolling':
+      // Rolling dodge: lean strongly in movement direction
+      group.rotation.z = facingRight ? -0.45 : 0.45;
+      legL.rotation.x = 0.5;
+      legR.rotation.x = -0.5;
+      break;
+
+    case 'airDodge':
+      // Air dodge: tuck into a ball
+      group.scale.set(0.85, 0.85, 0.85);
+      armL.rotation.x = -0.5;
+      armR.rotation.x = -0.5;
+      legL.rotation.x = 0.5;
+      legR.rotation.x = 0.5;
+      break;
+
+    case 'walk': {
+      // Slower walk cycle — same leg/arm swing as run but at half speed/amplitude.
+      const w = Math.sin(renderTime * 4);
+      legL.rotation.x =  w * 0.35;
+      legR.rotation.x = -w * 0.35;
+      armL.rotation.x = -w * 0.2;
+      armR.rotation.x =  w * 0.2;
+      break;
+    }
+
+    case 'crouch':
+      // Compressed squat: legs bent, body low, arms guard-raised.
+      group.scale.y = 0.65;
+      legL.rotation.x = 0.7;
+      legR.rotation.x = 0.7;
+      armL.rotation.x = -0.45;
+      armR.rotation.x = -0.45;
+      armL.position.z = 6;
+      armR.position.z = 6;
+      break;
+
+    case 'grabbing':
+      // Clinch grab: both arms thrust forward to hold the opponent.
+      armL.rotation.x = -Math.PI / 2;
+      armR.rotation.x = -Math.PI / 2;
+      armL.position.z = 18;
+      armR.position.z = 18;
+      legL.rotation.x = 0.25;
+      legR.rotation.x = 0.25;
+      group.rotation.z = facingRight ? -0.1 : 0.1;
+      break;
+
+    case 'ledgeHang':
+      // Hanging from ledge: arms raised overhead, legs dangling below.
+      armL.rotation.x = -Math.PI * 0.75;
+      armR.rotation.x = -Math.PI * 0.75;
+      armL.position.z = 4;
+      armR.position.z = 4;
+      legL.rotation.x = 0.4;
+      legR.rotation.x = 0.4;
+      group.scale.y = 1.05; // slight stretch from hanging
       break;
 
     default:
@@ -940,8 +1243,17 @@ function applyPose(group: THREE.Group, state: FighterState, moveId?: string | nu
 
 export function render(stagePlatforms: Platform[], _alpha: number): void {
   // ── Camera update ─────────────────────────────────────────────────────────
-  threeCamera.position.set(camera.x, camera.y + PERSP_TILT_Y, PERSP_Z);
+  // Position: centre on fight, pulled back proportionally to spread.
+  const camZ = PERSP_Z + camera.zOff;
+  threeCamera.position.set(camera.x, camera.y + PERSP_TILT_Y, camZ);
   threeCamera.lookAt(camera.x, camera.y, 0);
+  // Apply subtle roll (tilt) on top of the lookAt orientation.
+  if (Math.abs(camera.tilt) > 0.0001) {
+    _camRollQ.setFromAxisAngle(_camRollAxis, camera.tilt);
+    threeCamera.quaternion.multiply(_camRollQ);
+  }
+  // Dynamic FOV breathing and orthographic zoom scale.
+  threeCamera.fov  = camera.fov;
   threeCamera.zoom = camera.zoom;
   threeCamera.updateProjectionMatrix();
 
@@ -1131,7 +1443,7 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
     if (glbSwapped.has(id)) {
       updateMixer(id, fighter.state);
     } else {
-      applyPose(group, fighter.state, fighter.currentMoveId);
+      applyPose(group, fighter.state, fighter.currentMoveId, transform.facingRight);
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────

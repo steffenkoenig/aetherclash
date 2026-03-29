@@ -10,6 +10,7 @@ import { buildDigitalGridEnvironment } from './digitalGrid.js';
 import { buildCrystalCavernEnvironment } from './crystalCavern.js';
 import { buildVoidRiftEnvironment } from './voidRift.js';
 import { buildSolarPinnacleEnvironment } from './solarPinnacle.js';
+import { buildWindyHeightsEnvironment } from './windyHeights.js';
 
 export function buildStageEnvironment(scene: THREE.Scene, stageId: string): THREE.Group {
   switch (stageId) {
@@ -21,6 +22,7 @@ export function buildStageEnvironment(scene: THREE.Scene, stageId: string): THRE
     case 'crystalCavern':  return buildCrystalCavernEnvironment(scene);
     case 'voidRift':       return buildVoidRiftEnvironment(scene);
     case 'solarPinnacle':  return buildSolarPinnacleEnvironment(scene);
+    case 'windyHeights':   return buildWindyHeightsEnvironment(scene);
     default:               return buildAetherPlateauEnvironment(scene);
   }
 }

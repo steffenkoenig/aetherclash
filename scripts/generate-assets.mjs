@@ -80,6 +80,11 @@ const characters = [
   { id: 'vela',  color: 0x44dd66 },
   { id: 'syne',  color: 0xcc44ff },
   { id: 'zira',  color: 0xffd700 },
+  { id: 'trump', color: 0xff8800 },
+  { id: 'musk',  color: 0x00aaff },
+  { id: 'putin', color: 0x4c7c4c },
+  { id: 'xi',    color: 0xcc2222 },
+  { id: 'lizzy', color: 0x88ccff },
 ];
 
 /** Shared helper: create a MeshStandardMaterial. */
@@ -102,6 +107,11 @@ function buildCharacter(id, color) {
     case 'vela':  buildVela(group, color);  break;
     case 'syne':  buildSyne(group, color);  break;
     case 'zira':  buildZira(group, color);  break;
+    case 'trump': buildTrump(group, color); break;
+    case 'musk':  buildMusk(group, color);  break;
+    case 'putin': buildPutin(group, color); break;
+    case 'xi':    buildXi(group, color);    break;
+    case 'lizzy': buildLizzy(group, color); break;
     default:      buildDefaultChar(group, color); break;
   }
 
@@ -109,395 +119,619 @@ function buildCharacter(id, color) {
 }
 
 // ---------------------------------------------------------------------------
+// buildBipedRig — shared helper for all characters
+//
+// Creates named THREE.Group objects anchored at joint pivot points so that
+// animation quaternion tracks rotate limbs from the correct joint (shoulder,
+// hip, neck) rather than from each limb's own centre of mass.
+//
+// Layout (all Y values in root-group space):
+//   Torso group  → y = 0  (waist pivot; chest geometry extends upward)
+//   Head  group  → y = torsoH + 7  (neck-top pivot)
+//   ArmL/R group → y = shoulderY   (shoulder pivot; arm hangs down)
+//   LegL/R group → y = 0           (hip pivot; leg hangs down)
+//
+// CapsuleGeometry(r, L): total height = L + 2r, centred at origin.
+// To span [pivot … pivot − totalLen]: position centre at y = −totalLen/2,
+// with geometryLength = totalLen − 2r.
+// ---------------------------------------------------------------------------
+function buildBipedRig(group, {
+  bodyMat, skinMat = null,
+  torsoW = 12, waistW = 9, torsoH = 28,
+  shoulderX = 15, shoulderY = 26,
+  armRadius = 4.5, armLen = 24,
+  hipX = 7, legRadius = 5.5, legLen = 28,
+}) {
+  const sm = skinMat || bodyMat;
+  const ltH = torsoH * 0.42;  // lower-torso height (waist → belly)
+  const utH = torsoH * 0.58;  // upper-torso height (belly → neck base)
+  const uaL = armLen  * 0.54; // upper-arm length (shoulder → elbow)
+  const faL = armLen  * 0.46; // forearm length   (elbow → wrist)
+  const thL = legLen  * 0.54; // thigh length     (hip → knee)
+  const shL = legLen  * 0.46; // shin length      (knee → ankle)
+
+  // ── Torso group (waist pivot) ─────────────────────────────────────────────
+  const torso = new THREE.Group();
+  torso.name = 'torso'; torso.position.set(0, 0, 0); group.add(torso);
+
+  // Pelvis — flattened sphere below waist pivot
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(waistW * 1.1, 10, 7), bodyMat);
+    m.scale.set(1.3, 0.65, 1.0); m.position.set(0, -4, 0); torso.add(m); }
+  // Lower torso cylinder
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(waistW, waistW * 1.1, ltH, 10), bodyMat);
+    m.position.set(0, ltH * 0.5, 0); torso.add(m); }
+  // Chest / upper torso (wider at top)
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(torsoW, waistW, utH, 10), bodyMat);
+    m.position.set(0, ltH + utH * 0.5, 0); torso.add(m); }
+  // Neck cylinder
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.5, 7, 8), sm);
+    m.position.set(0, torsoH + 3.5, 0); torso.add(m); }
+
+  // ── Head group (neck-top pivot) ───────────────────────────────────────────
+  const head = new THREE.Group();
+  head.name = 'head'; head.position.set(0, torsoH + 7, 0); group.add(head);
+
+  // ── Arm groups (shoulder pivot — geometry hangs downward) ─────────────────
+  function addArm(side) {
+    const g = new THREE.Group();
+    g.name = side < 0 ? 'armL' : 'armR';
+    g.position.set(side * shoulderX, shoulderY, 0); group.add(g);
+    // Shoulder ball at pivot
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(armRadius + 1.5, 8, 6), bodyMat);
+      g.add(m); }
+    // Upper arm: spans y = 0 → −uaL
+    { const cL = Math.max(1, uaL - armRadius * 2);
+      const m = new THREE.Mesh(new THREE.CapsuleGeometry(armRadius, cL, 5, 8), bodyMat);
+      m.position.set(0, -uaL * 0.5, 0); g.add(m); }
+    // Elbow ball at y = −uaL
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(armRadius * 0.88, 7, 5), bodyMat);
+      m.position.set(0, -uaL, 0); g.add(m); }
+    // Forearm: spans y = −uaL → −(uaL+faL)
+    { const fr = armRadius * 0.78;
+      const cL = Math.max(1, faL - fr * 2);
+      const m = new THREE.Mesh(new THREE.CapsuleGeometry(fr, cL, 5, 8), bodyMat);
+      m.position.set(0, -(uaL + faL * 0.5), 0); g.add(m); }
+    // Hand sphere at wrist
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(armRadius * 0.86, 7, 6), sm);
+      m.scale.set(0.92, 0.86, 1.2); m.position.set(0, -(uaL + faL), 0); g.add(m); }
+    return g;
+  }
+  const armL = addArm(-1);
+  const armR = addArm(1);
+
+  // ── Leg groups (hip pivot — geometry hangs downward) ──────────────────────
+  function addLeg(side) {
+    const g = new THREE.Group();
+    g.name = side < 0 ? 'legL' : 'legR';
+    g.position.set(side * hipX, 0, 0); group.add(g);
+    // Hip socket ball
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(legRadius * 0.9, 8, 6), bodyMat);
+      m.position.set(0, -legRadius * 0.2, 0); g.add(m); }
+    // Thigh: spans y = 0 → −thL
+    { const cL = Math.max(1, thL - legRadius * 2);
+      const m = new THREE.Mesh(new THREE.CapsuleGeometry(legRadius, cL, 5, 8), bodyMat);
+      m.position.set(0, -thL * 0.5, 0); g.add(m); }
+    // Knee ball at y = −thL
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(legRadius * 0.84, 7, 5), bodyMat);
+      m.position.set(0, -thL, 0); g.add(m); }
+    // Shin: spans y = −thL → −(thL+shL)
+    { const sr = legRadius * 0.8;
+      const cL = Math.max(1, shL - sr * 2);
+      const m = new THREE.Mesh(new THREE.CapsuleGeometry(sr, cL, 5, 8), bodyMat);
+      m.position.set(0, -(thL + shL * 0.5), 0); g.add(m); }
+    // Foot at ankle
+    { const m = new THREE.Mesh(new THREE.SphereGeometry(legRadius * 0.86, 7, 5), bodyMat);
+      m.scale.set(0.9, 0.58, 1.65); m.position.set(0, -(thL + shL), 4); g.add(m); }
+    return g;
+  }
+  const legL = addLeg(-1);
+  const legR = addLeg(1);
+
+  return { torso, head, armL, armR, legL, legR };
+}
+
+// ---------------------------------------------------------------------------
 // Kael — The Balanced Hero
-// Medium warrior with full plate armour, sword on right side, shield on left.
+// Medium armoured warrior with plate armour, round helmet and sword+shield.
 // ---------------------------------------------------------------------------
 function buildKael(group, color) {
-  const mainMat   = mat(color, 0.2, 0.7);
-  const armorMat  = mat(0x8899cc, 0.55, 0.4);
-  const darkMat   = mat(0x1a2233, 0.1, 0.9);
-  const eyeMat    = mat(0x88ccff, 0.0, 0.4);
-  const swordMat  = mat(0xdde8ff, 0.85, 0.15);
+  const bodyMat  = mat(color,    0.2, 0.60);
+  const armorMat = mat(0x8899cc, 0.6, 0.30);
+  const darkMat  = mat(0x1a2233, 0.1, 0.90);
+  const eyeMat   = mat(0x88ccff, 0.0, 0.30);
+  const swordMat = mat(0xdde8ff, 0.9, 0.10);
 
-  // ── Core animated parts ──────────────────────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(28, 30, 15), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 15, 0); group.add(torso);
+  const { torso, head, armL, armR, legL, legR } = buildBipedRig(group, {
+    bodyMat, torsoW: 13, waistW: 9, torsoH: 28,
+    shoulderX: 16, shoulderY: 26,
+    armRadius: 4.5, armLen: 24,
+    hipX: 7, legRadius: 5.5, legLen: 28,
+  });
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(20, 22, 17), mainMat);
-  head.name = 'head'; head.position.set(0, 41, 0); group.add(head);
+  // ── Head: round helmet with visor band, crest and glowing eyes ────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(11, 16, 12), bodyMat);
+    m.position.set(0, 11, 0); head.add(m); }
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.position.set(-5, 13, 10); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.position.set( 5, 13, 10); head.add(eyeR);
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(11.5, 11.5, 3, 16), armorMat);
+    m.position.set(0, 7, 0); head.add(m); }  // visor band
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.5, 12, 6), armorMat);
+    m.position.set(0, 22, 0); head.add(m); } // helmet crest
 
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-5, 42, 9.5); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(5, 42, 9.5); group.add(eyeR);
+  // ── Torso: chest plate + belt ring ────────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(14, 12, 8), armorMat);
+    m.scale.set(1.0, 0.8, 0.32); m.position.set(0, 18, 11); torso.add(m); } // chest plate
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(11, 2.5, 8, 16), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 1, 0); torso.add(m); }    // belt ring
 
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(9, 24, 9), mainMat);
-  armL.name = 'armL'; armL.position.set(-21, 14, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(9, 24, 9), mainMat);
-  armR.name = 'armR'; armR.position.set(21, 14, 0); group.add(armR);
+  // ── Arms: pauldrons at shoulder pivot + greaves on shins ──────────────────
+  for (const arm of [armL, armR]) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 8), armorMat);
+    p.scale.set(1.4, 0.65, 1.4); arm.add(p); // pauldron sits at shoulder pivot
+  }
+  for (const leg of [legL, legR]) {
+    const g = new THREE.Mesh(new THREE.CylinderGeometry(7, 6, 10, 8), armorMat);
+    g.position.set(0, -(28 * 0.54) - 6, 1); leg.add(g); // greave over shin
+  }
 
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(11, 26, 11), mainMat);
-  legL.name = 'legL'; legL.position.set(-7, -13, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(11, 26, 11), mainMat);
-  legR.name = 'legR'; legR.position.set(7, -13, 0); group.add(legR);
-
-  // ── Armour extras ────────────────────────────────────────────────────────
-  // Chest plate
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(25, 22, 3), armorMat);
-  chest.name = 'chestPlate'; chest.position.set(0, 17, 9); group.add(chest);
-
-  // Neck guard
-  const neck = new THREE.Mesh(new THREE.BoxGeometry(10, 5, 3), armorMat);
-  neck.name = 'neckGuard'; neck.position.set(0, 31, 9); group.add(neck);
-
-  // Shoulder pauldrons
-  const pL = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 16), armorMat);
-  pL.name = 'pauldronL'; pL.position.set(-22, 30, 0); group.add(pL);
-  const pR = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 16), armorMat);
-  pR.name = 'pauldronR'; pR.position.set(22, 30, 0); group.add(pR);
-
-  // Belt
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(28, 5, 16), darkMat);
-  belt.name = 'belt'; belt.position.set(0, 1, 0); group.add(belt);
-
-  // Helmet brow & crest
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(22, 4, 4), armorMat);
-  brow.name = 'helmetBrow'; brow.position.set(0, 45, 9.5); group.add(brow);
-  const crest = new THREE.Mesh(new THREE.BoxGeometry(4, 10, 16), armorMat);
-  crest.name = 'helmetCrest'; crest.position.set(0, 54, 0); group.add(crest);
-
-  // Greaves (lower-leg armour)
-  const gL = new THREE.Mesh(new THREE.BoxGeometry(12, 14, 12), armorMat);
-  gL.name = 'greaveL'; gL.position.set(-7, -22, 1); group.add(gL);
-  const gR = new THREE.Mesh(new THREE.BoxGeometry(12, 14, 12), armorMat);
-  gR.name = 'greaveR'; gR.position.set(7, -22, 1); group.add(gR);
-
-  // Sword (right side, hanging at rest)
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(3, 38, 4), swordMat);
-  blade.name = 'swordBlade'; blade.position.set(30, 2, 0); group.add(blade);
-  const hilt = new THREE.Mesh(new THREE.BoxGeometry(3, 10, 4), darkMat);
-  hilt.name = 'swordHandle'; hilt.position.set(30, 22, 0); group.add(hilt);
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(16, 4, 5), darkMat);
-  guard.name = 'swordGuard'; guard.position.set(30, 21, 0); group.add(guard);
-
-  // Shield (left arm)
-  const shield = new THREE.Mesh(new THREE.BoxGeometry(3, 20, 20), armorMat);
-  shield.name = 'shield'; shield.position.set(-26, 8, 0); group.add(shield);
-  const emblem = new THREE.Mesh(new THREE.BoxGeometry(2, 8, 8), mat(color, 0.4, 0.5));
-  emblem.name = 'shieldEmblem'; emblem.position.set(-28, 8, 0); group.add(emblem);
+  // ── Weapon + shield (attached to root group) ──────────────────────────────
+  // Sword (right side)
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.3, 38, 8), swordMat);
+    m.position.set(28, 2, 0); group.add(m); }  // blade
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 2.5, 8), darkMat);
+    m.position.set(28, 21, 0); group.add(m); } // guard
+  { const m = new THREE.Mesh(new THREE.CapsuleGeometry(2, 8, 4, 8), darkMat);
+    m.position.set(28, 28, 0); group.add(m); } // grip
+  // Shield (left side) — disc + emblem
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(13, 13, 3, 12), armorMat);
+    m.rotation.z = Math.PI / 2; m.position.set(-29, 8, 0); group.add(m); }
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8), mat(color, 0.4, 0.5));
+    m.scale.z = 0.4; m.position.set(-32, 8, 0); group.add(m); }
 }
 
 // ---------------------------------------------------------------------------
 // Gorun — The Heavy Vanguard
-// Massive armoured giant.  Everything is oversized; wields a giant hammer.
+// Massive armoured giant with horned helmet, huge shoulders and war-hammer.
 // ---------------------------------------------------------------------------
 function buildGorun(group, color) {
-  const mainMat    = mat(color, 0.3, 0.65);
-  const armorMat   = mat(0x333333, 0.7, 0.35);
-  const accentMat  = mat(0xff4400, 0.4, 0.5);
-  const eyeMat     = mat(0xff6600, 0.0, 0.3);
-  const hammerMat  = mat(0x555566, 0.75, 0.3);
+  const bodyMat   = mat(color,    0.3, 0.65);
+  const armorMat  = mat(0x333333, 0.7, 0.35);
+  const accentMat = mat(0xff4400, 0.4, 0.50);
+  const eyeMat    = mat(0xff6600, 0.0, 0.30);
+  const hammerMat = mat(0x555566, 0.8, 0.30);
 
-  // ── Core animated parts (all oversized) ──────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(46, 32, 24), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 16, 0); group.add(torso);
+  const { torso, head, armL, armR, legL, legR } = buildBipedRig(group, {
+    bodyMat, torsoW: 22, waistW: 16, torsoH: 32,
+    shoulderX: 26, shoulderY: 30,
+    armRadius: 7.5, armLen: 30,
+    hipX: 12, legRadius: 9, legLen: 34,
+  });
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(28, 24, 24), mainMat);
-  head.name = 'head'; head.position.set(0, 44, 0); group.add(head);
+  // ── Head: horned helmet sphere ─────────────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(14, 16, 12), bodyMat);
+    m.position.set(0, 14, 0); head.add(m); }
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.scale.set(1.8, 0.6, 0.5); eyeL.position.set(-7, 16, 13); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.scale.set(1.8, 0.6, 0.5); eyeR.position.set( 7, 16, 13); head.add(eyeR);
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(14.5, 14.5, 4, 16), armorMat);
+    m.position.set(0, 8, 0); head.add(m); }  // visor band
+  { const m = new THREE.Mesh(new THREE.ConeGeometry(4, 22, 8), armorMat);
+    m.position.set(-11, 28, 0); head.add(m); } // horn L
+  { const m = new THREE.Mesh(new THREE.ConeGeometry(4, 22, 8), armorMat);
+    m.position.set( 11, 28, 0); head.add(m); } // horn R
 
-  // Narrow glowing slit eyes (helmet look)
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-6, 44, 13); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(6, 44, 13); group.add(eyeR);
-
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(16, 26, 16), mainMat);
-  armL.name = 'armL'; armL.position.set(-33, 14, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(16, 26, 16), mainMat);
-  armR.name = 'armR'; armR.position.set(33, 14, 0); group.add(armR);
-
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(18, 28, 18), mainMat);
-  legL.name = 'legL'; legL.position.set(-12, -14, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(18, 28, 18), mainMat);
-  legR.name = 'legR'; legR.position.set(12, -14, 0); group.add(legR);
-
-  // ── Armour extras ────────────────────────────────────────────────────────
-  // Helmet faceplate
-  const face = new THREE.Mesh(new THREE.BoxGeometry(24, 10, 3), armorMat);
-  face.name = 'helmetFace'; face.position.set(0, 41, 13.5); group.add(face);
-  const brow = new THREE.Mesh(new THREE.BoxGeometry(30, 6, 4), armorMat);
-  brow.name = 'helmetBrow'; brow.position.set(0, 51, 13); group.add(brow);
-
-  // Shoulder armour (oversized)
-  const sL = new THREE.Mesh(new THREE.BoxGeometry(22, 14, 24), armorMat);
-  sL.name = 'shoulderL'; sL.position.set(-33, 32, 0); group.add(sL);
-  const sR = new THREE.Mesh(new THREE.BoxGeometry(22, 14, 24), armorMat);
-  sR.name = 'shoulderR'; sR.position.set(33, 32, 0); group.add(sR);
-
-  // Chest plate with glowing accent rivets
-  const cPlate = new THREE.Mesh(new THREE.BoxGeometry(42, 28, 4), armorMat);
-  cPlate.name = 'chestPlate'; cPlate.position.set(0, 18, 13); group.add(cPlate);
-  for (const [rx, ry] of [[-10, 22], [10, 22], [-10, 10], [10, 10]]) {
-    const rivet = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 3), accentMat);
-    rivet.position.set(rx, ry, 15.5); group.add(rivet);
+  // ── Torso: massive chest plate + belt rivets ───────────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(20, 12, 8), armorMat);
+    m.scale.set(1.0, 0.7, 0.35); m.position.set(0, 20, 13); torso.add(m); } // chest plate
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(18, 3.5, 8, 14), armorMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 1, 0); torso.add(m); }    // belt ring
+  for (const [rx, rz] of [[-9, 15], [9, 15], [-9, -15], [9, -15]]) {
+    const r = new THREE.Mesh(new THREE.SphereGeometry(2.5, 6, 5), accentMat);
+    r.position.set(rx, 1, rz); torso.add(r);
   }
 
-  // Belt plate
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(46, 7, 25), armorMat);
-  belt.name = 'beltPlate'; belt.position.set(0, 1, 0); group.add(belt);
+  // ── Arms: massive pauldrons with accent spikes ─────────────────────────────
+  for (const arm of [armL, armR]) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(14, 12, 8), armorMat);
+    p.scale.set(1.5, 0.6, 1.5); arm.add(p); // shoulder plate at pivot
+    const s = new THREE.Mesh(new THREE.ConeGeometry(5, 17, 8), accentMat);
+    s.position.set(0, 14, 0); arm.add(s);   // spike above shoulder
+  }
+  // Knee plates on legs
+  for (const leg of [legL, legR]) {
+    const k = new THREE.Mesh(new THREE.SphereGeometry(11, 10, 8), armorMat);
+    k.scale.set(1, 0.55, 0.9); k.position.set(0, -(34 * 0.54) + 2, 6); leg.add(k);
+  }
 
-  // Knee pads
-  const kL = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 20), armorMat);
-  kL.name = 'kneeL'; kL.position.set(-12, -18, 2); group.add(kL);
-  const kR = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 20), armorMat);
-  kR.name = 'kneeR'; kR.position.set(12, -18, 2); group.add(kR);
-
-  // Hammer (right side — shaft + head)
-  const shaft = new THREE.Mesh(new THREE.BoxGeometry(8, 36, 8), armorMat);
-  shaft.name = 'hammerShaft'; shaft.position.set(50, 10, 0); group.add(shaft);
-  const hamHead = new THREE.Mesh(new THREE.BoxGeometry(24, 24, 22), hammerMat);
-  hamHead.name = 'hammerHead'; hamHead.position.set(50, -5, 0); group.add(hamHead);
-  const hamAccent = new THREE.Mesh(new THREE.BoxGeometry(22, 4, 20), accentMat);
-  hamAccent.name = 'hammerAccent'; hamAccent.position.set(50, -5, 0); group.add(hamAccent);
+  // ── Hammer (root group — right side) ──────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 38, 8), armorMat);
+    m.position.set(52, 10, 0); group.add(m); } // shaft
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(14, 12, 8), hammerMat);
+    m.scale.set(1.5, 1.2, 1.2); m.position.set(52, -6, 0); group.add(m); } // head
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(14, 2.5, 6, 12), accentMat);
+    m.rotation.z = Math.PI / 2; m.position.set(52, -6, 0); group.add(m); } // band
 }
 
 // ---------------------------------------------------------------------------
 // Vela — The Blade Master
-// Tall, lean duelist.  Long curved blade, flowing ponytail and cloak elements.
+// Tall lean duelist with sphere-chain ponytail, cloak panels and long blade.
 // ---------------------------------------------------------------------------
 function buildVela(group, color) {
-  const mainMat  = mat(color, 0.15, 0.65);
-  const darkMat  = mat(0x111111, 0.1, 0.9);
-  const bladeMat = mat(0xccddff, 0.9, 0.1);
-  const eyeMat   = mat(0xaaffcc, 0.0, 0.3);
-  const clothMat = mat(0x224433, 0.0, 0.95);
+  const bodyMat  = mat(color,    0.15, 0.65);
+  const darkMat  = mat(0x111111, 0.10, 0.90);
+  const bladeMat = mat(0xccddff, 0.90, 0.10);
+  const eyeMat   = mat(0xaaffcc, 0.00, 0.30);
+  const clothMat = mat(0x224433, 0.00, 0.95);
 
-  // ── Core animated parts (taller + leaner) ────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(22, 32, 13), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 16, 0); group.add(torso);
+  const { torso, head, armL, armR, legL, legR } = buildBipedRig(group, {
+    bodyMat, torsoW: 11, waistW: 8, torsoH: 30,
+    shoulderX: 14, shoulderY: 28,
+    armRadius: 3.5, armLen: 28,
+    hipX: 6, legRadius: 4.5, legLen: 32,
+  });
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(18, 22, 15), mainMat);
-  head.name = 'head'; head.position.set(0, 43, 0); group.add(head);
+  // ── Head: elegant sphere + sphere-chain ponytail ───────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(9.5, 16, 12), bodyMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.position.set(-4, 12, 8.5); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.position.set( 4, 12, 8.5); head.add(eyeR);
+  // Ponytail — decreasing spheres sweeping back from crown
+  for (const [py, pz, pr] of [[17, -4, 4], [12, -10, 3], [6, -16, 2.2], [0, -22, 1.6]]) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(pr, 8, 6), bodyMat);
+    m.position.set(0, py, pz); head.add(m);
+  }
 
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-4, 44, 8.5); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(4, 44, 8.5); group.add(eyeR);
+  // ── Torso: collar ring + belt sash + cloak panels ─────────────────────────
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(7, 2, 8, 12), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 30, 0); torso.add(m); } // collar
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(9, 2, 8, 12), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 1, 0); torso.add(m); }  // belt sash
+  for (const sx of [-13, 13]) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(2, 3.5, 28, 6), clothMat);
+    m.position.set(sx, 6, -7); torso.add(m); // cloak panel
+  }
 
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(7, 28, 7), mainMat);
-  armL.name = 'armL'; armL.position.set(-16, 14, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(7, 28, 7), mainMat);
-  armR.name = 'armR'; armR.position.set(16, 14, 0); group.add(armR);
+  // ── Arms: long blade glove on right forearm ────────────────────────────────
+  // (No extra decoration needed — shape is distinctive enough)
 
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(9, 32, 9), mainMat);
-  legL.name = 'legL'; legL.position.set(-6, -16, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(9, 32, 9), mainMat);
-  legR.name = 'legR'; legR.position.set(6, -16, 0); group.add(legR);
+  // ── Legs: tall dark boots over shins ─────────────────────────────────────
+  for (const leg of [legL, legR]) {
+    const side = leg === legL ? -1 : 1;
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5, 10, 8), darkMat);
+    b.position.set(0, -(32 * 0.54) - 4, 1); leg.add(b); // boot cylinder over shin
+  }
 
-  // ── Signature extras ─────────────────────────────────────────────────────
-  // Ponytail (3-segment, swept back)
-  const pt1 = new THREE.Mesh(new THREE.BoxGeometry(6, 20, 4), mainMat);
-  pt1.name = 'ponytail1'; pt1.position.set(0, 51, -9); group.add(pt1);
-  const pt2 = new THREE.Mesh(new THREE.BoxGeometry(4, 14, 3), mainMat);
-  pt2.name = 'ponytail2'; pt2.position.set(0, 41, -14); group.add(pt2);
-  const pt3 = new THREE.Mesh(new THREE.BoxGeometry(3, 10, 3), mainMat);
-  pt3.name = 'ponytail3'; pt3.position.set(0, 33, -18); group.add(pt3);
-
-  // Collar / neck scarf
-  const collar = new THREE.Mesh(new THREE.BoxGeometry(16, 5, 4), darkMat);
-  collar.name = 'collar'; collar.position.set(0, 32, 7.5); group.add(collar);
-
-  // Belt sash
-  const sash = new THREE.Mesh(new THREE.BoxGeometry(22, 5, 14), darkMat);
-  sash.name = 'beltSash'; sash.position.set(0, 1, 1); group.add(sash);
-
-  // Cloak panels (left and right of torso, angled back)
-  const cL = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 2), clothMat);
-  cL.name = 'cloakL'; cL.position.set(-13, 6, -7); group.add(cL);
-  const cR = new THREE.Mesh(new THREE.BoxGeometry(4, 28, 2), clothMat);
-  cR.name = 'cloakR'; cR.position.set(13, 6, -7); group.add(cR);
-
-  // Long curved blade — two-piece (blade + guard)
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(3, 52, 4), bladeMat);
-  blade.name = 'swordBlade'; blade.position.set(22, -4, 0); group.add(blade);
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(16, 3, 5), darkMat);
-  guard.name = 'swordGuard'; guard.position.set(22, 21, 0); group.add(guard);
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(3, 12, 4), darkMat);
-  handle.name = 'swordHandle'; handle.position.set(22, 27, 0); group.add(handle);
-
-  // Boot wraps (lower-leg detail)
-  const bL = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), darkMat);
-  bL.name = 'bootL'; bL.position.set(-6, -30, 0.5); group.add(bL);
-  const bR = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), darkMat);
-  bR.name = 'bootR'; bR.position.set(6, -30, 0.5); group.add(bR);
+  // ── Sword (root group — right side) ───────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.4, 52, 8), bladeMat);
+    m.position.set(20, -4, 0); group.add(m); } // blade
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 2, 8), darkMat);
+    m.position.set(20, 22, 0); group.add(m); } // guard
+  { const m = new THREE.Mesh(new THREE.CapsuleGeometry(1.8, 10, 4, 8), darkMat);
+    m.position.set(20, 28, 0); group.add(m); } // grip
 }
 
 // ---------------------------------------------------------------------------
 // Syne — The Projectile Tactician
-// Slim tech engineer.  Dome helmet, large backpack, energy arm cannon.
+// Slim tech engineer with dome helmet, backpack reactor and arm cannon.
 // ---------------------------------------------------------------------------
 function buildSyne(group, color) {
-  const mainMat   = mat(color, 0.2, 0.65);
-  const techMat   = mat(0x223344, 0.6, 0.4);
-  const glowMat   = mat(0x00ffee, 0.0, 0.3);
-  const eyeMat    = mat(0x00eeff, 0.0, 0.2);
-  const darkMat   = mat(0x111122, 0.1, 0.9);
+  const bodyMat = mat(color,    0.20, 0.65);
+  const techMat = mat(0x223344, 0.60, 0.40);
+  const glowMat = mat(0x00ffee, 0.00, 0.30);
+  const eyeMat  = mat(0x00eeff, 0.00, 0.20);
+  const darkMat = mat(0x111122, 0.10, 0.90);
 
-  // ── Core animated parts (slim) ────────────────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(20, 26, 14), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 13, 0); group.add(torso);
+  const { torso, head, armL, armR, legL, legR } = buildBipedRig(group, {
+    bodyMat, torsoW: 10, waistW: 8, torsoH: 26,
+    shoulderX: 14, shoulderY: 24,
+    armRadius: 3, armLen: 22,
+    hipX: 6, legRadius: 3.5, legLen: 26,
+  });
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(18, 20, 18), mainMat);
-  head.name = 'head'; head.position.set(0, 37, 0); group.add(head);
+  // ── Head: tech dome helmet + visor + antenna ───────────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12), bodyMat);
+    m.position.set(0, 9, 0); head.add(m); } // head sphere
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(11, 16, 10), techMat);
+    m.position.set(0, 11, 0); head.add(m); } // dome helmet over head
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.scale.set(1.8, 0.55, 0.5); eyeL.position.set(-5, 10, 9.5); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.scale.set(1.8, 0.55, 0.5); eyeR.position.set( 5, 10, 9.5); head.add(eyeR);
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(9, 2, 6, 16, Math.PI), glowMat);
+    m.rotation.z = Math.PI / 2; m.position.set(0, 10, 9); head.add(m); } // visor arc
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 14, 6), glowMat);
+    m.position.set(6, 22, 0); head.add(m); } // antenna
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), glowMat);
+    m.position.set(6, 30, 0); head.add(m); } // tip
 
-  // Wide visor-slit eyes
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-5, 37, 9.5); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(5, 37, 9.5); group.add(eyeR);
+  // ── Torso: backpack reactor + belt ring ────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(9, 8, 26, 8), techMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 13, -12); torso.add(m); } // backpack
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(4.5, 10, 8), glowMat);
+    m.position.set(0, 13, -18); torso.add(m); } // reactor orb
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(9, 2.5, 8, 12), techMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 1, 0); torso.add(m); } // belt ring
 
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(7, 22, 7), mainMat);
-  armL.name = 'armL'; armL.position.set(-15, 13, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(7, 22, 7), mainMat);
-  armR.name = 'armR'; armR.position.set(15, 13, 0); group.add(armR);
+  // ── Arms: cannon on left arm group ────────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 12, 8), techMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, -8, 5); armL.add(m); } // cannon housing
+  { const m = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 14, 8), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, -8, 13); armL.add(m); } // barrel
 
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(8, 26, 8), mainMat);
-  legL.name = 'legL'; legL.position.set(-6, -13, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(8, 26, 8), mainMat);
-  legR.name = 'legR'; legR.position.set(6, -13, 0); group.add(legR);
-
-  // ── Tech extras ──────────────────────────────────────────────────────────
-  // Dome helmet top
-  const dome = new THREE.Mesh(new THREE.BoxGeometry(18, 12, 18), techMat);
-  dome.name = 'helmetDome'; dome.position.set(0, 48, 0); group.add(dome);
-  // Antenna
-  const ant = new THREE.Mesh(new THREE.BoxGeometry(2, 14, 2), glowMat);
-  ant.name = 'antenna'; ant.position.set(6, 60, 0); group.add(ant);
-  const antTip = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 5), glowMat);
-  antTip.name = 'antennaTip'; antTip.position.set(6, 68, 0); group.add(antTip);
-
-  // Visor plate
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(18, 5, 3), glowMat);
-  visor.name = 'visor'; visor.position.set(0, 37, 10.5); group.add(visor);
-
-  // Backpack (large tech device)
-  const pack = new THREE.Mesh(new THREE.BoxGeometry(20, 26, 10), techMat);
-  pack.name = 'backpack'; pack.position.set(0, 13, -12); group.add(pack);
-  const packOrb = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), glowMat);
-  packOrb.name = 'packOrb'; packOrb.position.set(0, 15, -17); group.add(packOrb);
-
-  // Belt utility pack
-  const bPack = new THREE.Mesh(new THREE.BoxGeometry(16, 5, 14), techMat);
-  bPack.name = 'beltPack'; bPack.position.set(0, 1, 0); group.add(bPack);
-
-  // Left arm cannon / mine-deployer
-  const cannon = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), techMat);
-  cannon.name = 'cannon'; cannon.position.set(-18, 5, 3); group.add(cannon);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 14), darkMat);
-  barrel.name = 'cannonBarrel'; barrel.position.set(-18, 5, 11); group.add(barrel);
-
-  // Tech boots
-  const bootL = new THREE.Mesh(new THREE.BoxGeometry(9, 8, 11), techMat);
-  bootL.name = 'bootL'; bootL.position.set(-6, -25, 1); group.add(bootL);
-  const bootR = new THREE.Mesh(new THREE.BoxGeometry(9, 8, 11), techMat);
-  bootR.name = 'bootR'; bootR.position.set(6, -25, 1); group.add(bootR);
+  // ── Legs: tech boots on shins ─────────────────────────────────────────────
+  for (const leg of [legL, legR]) {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4, 8, 8), techMat);
+    b.position.set(0, -(26 * 0.54) - 3, 1); leg.add(b); // boot over shin
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Zira — The Agile Striker
-// Compact ultra-light street fighter.  Mohawk, wristbands, knee pads, boots.
+// Compact street fighter with mohawk, wristbands and toe-cap boots.
 // ---------------------------------------------------------------------------
 function buildZira(group, color) {
-  const mainMat   = mat(color, 0.15, 0.7);
-  const darkMat   = mat(0x550011, 0.1, 0.85);
-  const accentMat = mat(0xff3300, 0.2, 0.6);
-  const eyeMat    = mat(0xff9900, 0.0, 0.3);
-  const padMat    = mat(0x222222, 0.2, 0.7);
+  const bodyMat   = mat(color,    0.15, 0.70);
+  const darkMat   = mat(0x550011, 0.10, 0.85);
+  const accentMat = mat(0xff3300, 0.20, 0.60);
+  const eyeMat    = mat(0xff9900, 0.00, 0.30);
+  const padMat    = mat(0x222222, 0.20, 0.70);
 
-  // ── Core animated parts (compact + slim) ─────────────────────────────────
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(18, 24, 12), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 12, 0); group.add(torso);
+  const { torso, head, armL, armR, legL, legR } = buildBipedRig(group, {
+    bodyMat, torsoW: 9, waistW: 7, torsoH: 24,
+    shoulderX: 12, shoulderY: 22,
+    armRadius: 2.8, armLen: 20,
+    hipX: 6, legRadius: 3.8, legLen: 26,
+  });
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(16, 18, 14), mainMat);
-  head.name = 'head'; head.position.set(0, 33, 0); group.add(head);
+  // ── Head: round sphere + mohawk cone + glowing eyes ────────────────────────
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 12), bodyMat);
+    m.position.set(0, 8, 0); head.add(m); }
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.position.set(-4, 10, 7.5); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.position.set( 4, 10, 7.5); head.add(eyeR);
+  // Mohawk base ring + cone
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(3.5, 1.5, 6, 12), accentMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 16, 0); head.add(m); }
+  { const m = new THREE.Mesh(new THREE.ConeGeometry(2.5, 18, 6), accentMat);
+    m.position.set(0, 25, 0); head.add(m); }
 
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-4, 33, 7.5); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(4, 33, 7.5); group.add(eyeR);
+  // ── Torso: neck collar + chest bands ──────────────────────────────────────
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(6, 1.5, 6, 12), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 24, 0); torso.add(m); } // collar
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(8.5, 1.2, 6, 12), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 18, 0); torso.add(m); } // chest band 1
+  { const m = new THREE.Mesh(new THREE.TorusGeometry(8, 1.2, 6, 12), darkMat);
+    m.rotation.x = Math.PI / 2; m.position.set(0, 10, 0); torso.add(m); } // chest band 2
 
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(6, 20, 6), mainMat);
-  armL.name = 'armL'; armL.position.set(-14, 12, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(6, 20, 6), mainMat);
-  armR.name = 'armR'; armR.position.set(14, 12, 0); group.add(armR);
+  // ── Arms: wristband torus rings at the wrist (end of forearm) ─────────────
+  const wristY = -(20 * 0.54 + 20 * 0.46);   // = −armLen (wrist position in arm group)
+  for (const arm of [armL, armR]) {
+    const w = new THREE.Mesh(new THREE.TorusGeometry(3.5, 1.5, 8, 12), padMat);
+    w.rotation.x = Math.PI / 2; w.position.set(0, wristY + 3, 0); arm.add(w);
+  }
 
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(8, 28, 8), mainMat);
-  legL.name = 'legL'; legL.position.set(-6, -14, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(8, 28, 8), mainMat);
-  legR.name = 'legR'; legR.position.set(6, -14, 0); group.add(legR);
-
-  // ── Street-fighter extras ────────────────────────────────────────────────
-  // Mohawk — three tapering segments
-  const m1 = new THREE.Mesh(new THREE.BoxGeometry(4, 14, 14), accentMat);
-  m1.name = 'mohawk1'; m1.position.set(0, 48, 0); group.add(m1);
-  const m2 = new THREE.Mesh(new THREE.BoxGeometry(3, 10, 10), accentMat);
-  m2.name = 'mohawk2'; m2.position.set(0, 57, 0); group.add(m2);
-  const m3 = new THREE.Mesh(new THREE.BoxGeometry(2, 7, 7), accentMat);
-  m3.name = 'mohawk3'; m3.position.set(0, 65, 0); group.add(m3);
-
-  // Wristbands
-  const wL = new THREE.Mesh(new THREE.BoxGeometry(7, 5, 7), padMat);
-  wL.name = 'wristL'; wL.position.set(-14, 4, 0); group.add(wL);
-  const wR = new THREE.Mesh(new THREE.BoxGeometry(7, 5, 7), padMat);
-  wR.name = 'wristR'; wR.position.set(14, 4, 0); group.add(wR);
-
-  // Chest wraps / tank-top stripes
-  const stripe1 = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 2), darkMat);
-  stripe1.name = 'stripe1'; stripe1.position.set(0, 20, 7); group.add(stripe1);
-  const stripe2 = new THREE.Mesh(new THREE.BoxGeometry(18, 4, 2), darkMat);
-  stripe2.name = 'stripe2'; stripe2.position.set(0, 10, 7); group.add(stripe2);
-
-  // Knee pads
-  const kL = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 9), padMat);
-  kL.name = 'kneeL'; kL.position.set(-6, -10, 1.5); group.add(kL);
-  const kR = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 9), padMat);
-  kR.name = 'kneeR'; kR.position.set(6, -10, 1.5); group.add(kR);
-
-  // Combat boots
-  const bootL = new THREE.Mesh(new THREE.BoxGeometry(9, 10, 13), darkMat);
-  bootL.name = 'bootL'; bootL.position.set(-6, -26, 2); group.add(bootL);
-  const bootR = new THREE.Mesh(new THREE.BoxGeometry(9, 10, 13), darkMat);
-  bootR.name = 'bootR'; bootR.position.set(6, -26, 2); group.add(bootR);
-  // Toe cap accent
-  const toeL = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 4), accentMat);
-  toeL.name = 'toeL'; toeL.position.set(-6, -28, 9); group.add(toeL);
-  const toeR = new THREE.Mesh(new THREE.BoxGeometry(9, 4, 4), accentMat);
-  toeR.name = 'toeR'; toeR.position.set(6, -28, 9); group.add(toeR);
+  // ── Legs: knee pads on thighs, dark boots on shins ────────────────────────
+  for (const leg of [legL, legR]) {
+    // Knee pad at bottom of thigh (y = −thL)
+    const k = new THREE.Mesh(new THREE.SphereGeometry(5, 8, 6), padMat);
+    k.scale.set(1, 0.55, 0.8); k.position.set(0, -(26 * 0.54) + 2, 4); leg.add(k);
+    // Boot cylinder over shin
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4, 9, 8), darkMat);
+    b.position.set(0, -(26 * 0.54) - 4, 2); leg.add(b);
+    // Toe cap
+    const t = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), accentMat);
+    t.scale.set(1, 0.5, 0.7); t.position.set(0, -(26 * 0.54 + 26 * 0.46), 7); leg.add(t);
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Default fallback character (simple box-humanoid)
+// Trump — wide orange suit, combed-over hair, red tie
+// ---------------------------------------------------------------------------
+function buildTrump(group, color) {
+  const suitMat  = mat(color);
+  const tieMat   = mat(0xdd0000);
+  const skinMat  = mat(0xffc090);
+  const hairMat  = mat(0xffdd88);
+  const eyeMat   = mat(0x3355aa);
+  const { head, torso, armL, armR } = buildBipedRig(group, {
+    bodyMat: suitMat, torsoW: 18, waistW: 13, torsoH: 30,
+    shoulderX: 20, shoulderY: 28,
+    armRadius: 6, armLen: 26,
+    hipX: 10, legRadius: 7, legLen: 28,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 10), skinMat);
+    m.position.set(0, 12, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 14, 11],[5, 14, 11]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Combover
+  const co = new THREE.Mesh(new THREE.CapsuleGeometry(11, 2, 4, 6), hairMat);
+  co.rotation.z = Math.PI / 2; co.position.set(0, 23, -2); head.add(co);
+  // Tie
+  { const k = new THREE.Mesh(new THREE.CylinderGeometry(10, 7, 10, 6), tieMat);
+    k.position.set(0, 14, 8); torso.add(k); }
+  { const t = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 4, 28, 6), tieMat);
+    t.position.set(0, 2, 9); torso.add(t); }
+  // Small hands
+  for (const arm of [armL, armR]) {
+    const h = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), skinMat);
+    h.position.set(0, -28, 0); arm.add(h);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Musk — slim dark turtleneck, X belt buckle, rocket thruster backpack
+// ---------------------------------------------------------------------------
+function buildMusk(group, color) {
+  const bodyMat = mat(color);
+  const darkMat = mat(0x222244);
+  const skinMat = mat(0xffe0c0);
+  const eyeMat  = mat(0x33bb99);
+  const glowMat = mat(0x00ffee);
+  const { head, torso, armL } = buildBipedRig(group, {
+    bodyMat: darkMat, torsoW: 10, waistW: 8, torsoH: 28,
+    shoulderX: 14, shoulderY: 26,
+    armRadius: 3.5, armLen: 24,
+    hipX: 6, legRadius: 4, legLen: 26,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 14, 10), skinMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 12, 9.5],[5, 12, 9.5]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(9, 8, 6, 10), darkMat);
+    c.position.set(0, 3, 0); head.add(c); }
+  // Rocket backpack
+  { const r = new THREE.Mesh(new THREE.CapsuleGeometry(5, 18, 4, 8), bodyMat);
+    r.rotation.x = Math.PI / 2; r.position.set(0, 14, -14); torso.add(r); }
+  { const g = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), glowMat);
+    g.position.set(0, 14, -22); torso.add(g); }
+  // X belt
+  for (const rz of [Math.PI / 4, -Math.PI / 4]) {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 14, 4), glowMat);
+    b.rotation.z = rz; b.position.set(0, 2, 8); torso.add(b);
+  }
+  void armL; void darkMat;
+}
+
+// ---------------------------------------------------------------------------
+// Putin — shirtless, wide, bear-saddle, chest medals
+// ---------------------------------------------------------------------------
+function buildPutin(group, color) {
+  const skinMat  = mat(color);
+  const bearMat  = mat(0x8b5e3c);
+  const eyeMat   = mat(0x3399cc);
+  const medalMat = mat(0xffd700);
+  const { head, torso } = buildBipedRig(group, {
+    bodyMat: skinMat, torsoW: 20, waistW: 14, torsoH: 30,
+    shoulderX: 24, shoulderY: 28,
+    armRadius: 7, armLen: 28,
+    hipX: 11, legRadius: 8, legLen: 30,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 10), skinMat);
+    m.position.set(0, 12, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 14, 11],[5, 14, 11]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Bear saddle
+  { const s = new THREE.Mesh(new THREE.SphereGeometry(20, 10, 8), bearMat);
+    s.scale.set(1.8, 0.9, 1.4); s.position.set(0, -46, 0); torso.add(s); }
+  // Bear ears
+  for (const bx of [-18, 18]) {
+    const e = new THREE.Mesh(new THREE.ConeGeometry(5, 9, 6), bearMat);
+    e.position.set(bx, -42, 14); group.add(e);
+  }
+  // Chest medals
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), medalMat);
+    m.scale.set(0.5, 1, 0.3); m.position.set(-8 + i * 8, 20, 13); torso.add(m);
+  }
+  void eyeMat;
+}
+
+// ---------------------------------------------------------------------------
+// Xi — dark red Mao suit, five-star chest, Little Red Book
+// ---------------------------------------------------------------------------
+function buildXi(group, color) {
+  const suitMat = mat(color);
+  const skinMat = mat(0xf5d8b0);
+  const starMat = mat(0xffd700);
+  const eyeMat  = mat(0x222222);
+  const colMat  = mat(0x660000);
+  const { head, torso } = buildBipedRig(group, {
+    bodyMat: suitMat, torsoW: 16, waistW: 12, torsoH: 32,
+    shoulderX: 18, shoulderY: 28,
+    armRadius: 5.5, armLen: 26,
+    hipX: 9, legRadius: 7, legLen: 30,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(11, 14, 10), skinMat);
+    m.position.set(0, 11, 0); head.add(m); }
+  for (const [x, y, z] of [[-4, 13, 10],[4, 13, 10]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(10, 9, 6, 8), colMat);
+    c.position.set(0, 3, 0); head.add(c); }
+  // Five stars on chest
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    const s = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), starMat);
+    s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13); torso.add(s);
+  }
+  // Little Red Book
+  { const b = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), mat(0xdd0000));
+    b.position.set(-26, -4, 0); group.add(b); }
+  void suitMat;
+}
+
+// ---------------------------------------------------------------------------
+// Lizzy — pastel coat, crown, handbag, spectral corgi
+// ---------------------------------------------------------------------------
+function buildLizzy(group, color) {
+  const coatMat  = mat(color);
+  const skinMat  = mat(0xffe0cc);
+  const crownMat = mat(0xffd700);
+  const eyeMat   = mat(0x224488);
+  const corgiMat = mat(0xee8833);
+  const { head } = buildBipedRig(group, {
+    bodyMat: coatMat, torsoW: 13, waistW: 10, torsoH: 28,
+    shoulderX: 16, shoulderY: 26,
+    armRadius: 4.5, armLen: 24,
+    hipX: 7, legRadius: 5.5, legLen: 28,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 14, 10), skinMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  for (const [x, y, z] of [[-4, 12, 9],[4, 12, 9]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Crown
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(8, 9, 6, 6), crownMat);
+    c.position.set(0, 22, 0); head.add(c); }
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const p = new THREE.Mesh(new THREE.ConeGeometry(2, 8, 5), crownMat);
+    p.position.set(Math.cos(a) * 7, 27, Math.sin(a) * 7); head.add(p);
+  }
+  // Handbag
+  { const b = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 4), coatMat);
+    b.position.set(-24, -8, 0); group.add(b); }
+  // Spectral corgi
+  { const cb = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8), corgiMat);
+    cb.scale.set(2, 0.9, 1.2); cb.position.set(-30, -48, 8); group.add(cb); }
+  { const cg = new THREE.Mesh(new THREE.ConeGeometry(3, 7, 5), corgiMat);
+    cg.position.set(-30, -44, 16); group.add(cg); }
+  void eyeMat;
+}
+
+// ---------------------------------------------------------------------------
+// Default fallback character — simple jointed humanoid
 // ---------------------------------------------------------------------------
 function buildDefaultChar(group, color) {
-  const mainMat = mat(color);
+  const bodyMat = mat(color);
   const eyeMat  = mat(0xffffff);
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(26, 28, 16), mainMat);
-  torso.name = 'torso'; torso.position.set(0, 14, 0); group.add(torso);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 18), mainMat);
-  head.name = 'head'; head.position.set(0, 38, 0); group.add(head);
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 2), eyeMat);
-  eyeL.name = 'eyeL'; eyeL.position.set(-5, 40, 9); group.add(eyeL);
-  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 2), eyeMat);
-  eyeR.name = 'eyeR'; eyeR.position.set(5, 40, 9); group.add(eyeR);
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(8, 24, 8), mainMat);
-  armL.name = 'armL'; armL.position.set(-17, 14, 0); group.add(armL);
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(8, 24, 8), mainMat);
-  armR.name = 'armR'; armR.position.set(17, 14, 0); group.add(armR);
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(10, 26, 10), mainMat);
-  legL.name = 'legL'; legL.position.set(-7, -13, 0); group.add(legL);
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(10, 26, 10), mainMat);
-  legR.name = 'legR'; legR.position.set(7, -13, 0); group.add(legR);
+  const { head } = buildBipedRig(group, {
+    bodyMat, torsoW: 12, waistW: 9, torsoH: 28,
+    shoulderX: 15, shoulderY: 26,
+    armRadius: 4, armLen: 22,
+    hipX: 7, legRadius: 5, legLen: 26,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 14, 10), bodyMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+  eyeL.name = 'eyeL'; eyeL.position.set(-4, 12, 9); head.add(eyeL);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+  eyeR.name = 'eyeR'; eyeR.position.set( 4, 12, 9); head.add(eyeR);
 }
 
 /** Build all AnimationClips for a character. */
@@ -587,6 +821,109 @@ function buildAnimations(id) {
       `${root}.scale`,
       [0, 0.5],
       new Float32Array([1, 1, 1,  1, 0.3, 1]),
+    ),
+  ]));
+
+  // --- walk (0.6 s, loop): slower/smaller amplitude leg & arm swing ---
+  const walkTimes = [0, 0.15, 0.3, 0.45, 0.6];
+  clips.push(new THREE.AnimationClip('walk', 0.6, [
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', walkTimes,
+      flatQuat(quatRotX(20), quatRotX(0), quatRotX(-20), quatRotX(0), quatRotX(20)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', walkTimes,
+      flatQuat(quatRotX(-20), quatRotX(0), quatRotX(20), quatRotX(0), quatRotX(-20)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', walkTimes,
+      flatQuat(quatRotX(-12), quatRotX(0), quatRotX(12), quatRotX(0), quatRotX(-12)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', walkTimes,
+      flatQuat(quatRotX(12), quatRotX(0), quatRotX(-12), quatRotX(0), quatRotX(12)),
+    ),
+  ]));
+
+  // --- crouch (0.15 s, one-shot): legs bent, body compressed, arms in guard ---
+  const crouchTimes = [0, 0.15];
+  clips.push(new THREE.AnimationClip('crouch', 0.15, [
+    new THREE.VectorKeyframeTrack(
+      `${root}.scale`,
+      crouchTimes,
+      new Float32Array([1, 1, 1,  1, 0.65, 1]),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(40)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(40)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(-25)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(-25)),
+    ),
+  ]));
+
+  // --- grabbing (0.2 s, one-shot): both arms thrust forward, slight knee bend ---
+  const grabTimes = [0, 0.1, 0.2];
+  clips.push(new THREE.AnimationClip('grabbing', 0.2, [
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(-90), quatRotX(-90)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(-90), quatRotX(-90)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(15), quatRotX(15)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(15), quatRotX(15)),
+    ),
+  ]));
+
+  // --- ledgeHang (1.2 s, loop): arms overhead, legs dangling, gentle Z sway ---
+  const hangTimes = [0, 0.3, 0.6, 0.9, 1.2];
+  clips.push(new THREE.AnimationClip('ledgeHang', 1.2, [
+    new THREE.QuaternionKeyframeTrack(
+      `${root}.quaternion`, hangTimes,
+      flatQuat(
+        quatRotZ(0), quatRotZ(3), quatRotZ(0), quatRotZ(-3), quatRotZ(0),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25),
+      ),
     ),
   ]));
 
