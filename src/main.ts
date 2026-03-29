@@ -316,7 +316,7 @@ const ROLL_INVINCIBLE_FRAMES       = 15;
 const ROLL_TOTAL_FRAMES            = 30;
 const AIR_DODGE_INVINCIBLE_FRAMES  = 20;
 const AIR_DODGE_TOTAL_FRAMES       = 30;
-const GRAB_TOTAL_FRAMES            = 20;
+const GRAB_TOTAL_FRAMES            = 60;
 const ROLL_SPEED_MULTIPLIER        = toFixed(0.7);
 
 /** Shield health drained per frame while shielding. */
@@ -344,6 +344,13 @@ const THROW_VICTIM_HITSTUN_BASE = 20;
  * standing roughly adjacent to each other.
  */
 const GRAB_REACH: number = (FIGHTER_HALF_WIDTH * 5) >> 1; // ≈ toFixed(37.5)
+/** Walk speed multiplier while carrying a grabbed opponent (slower than free walk). */
+const GRAB_WALK_MULTIPLIER = toFixed(0.5);
+/**
+ * Horizontal distance from the grabber's centre to the held victim's centre.
+ * One fighter-width in front keeps them visually overlapping.
+ */
+const GRAB_CARRY_OFFSET: number = FIGHTER_HALF_WIDTH << 1; // 2 × FIGHTER_HALF_WIDTH
 
 // ── Up-special recovery constants ────────────────────────────────────────────
 
@@ -615,6 +622,21 @@ function processPlayerInput(
     }
 
     syncAnimation(fighter, renderable);
+
+    // Allow the grabber to walk while carrying the victim.
+    // Running is not permitted — cap at walk speed × GRAB_WALK_MULTIPLIER.
+    if (phys.grounded) {
+      if (input.stickX > WALK_THRESHOLD) {
+        phys.vx = fixedMul(fighter.stats.walkSpeed, GRAB_WALK_MULTIPLIER);
+        transform.facingRight = true;
+      } else if (input.stickX < -WALK_THRESHOLD) {
+        phys.vx = fixedNeg(fixedMul(fighter.stats.walkSpeed, GRAB_WALK_MULTIPLIER));
+        transform.facingRight = false;
+      } else {
+        phys.vx = toFixed(0);
+      }
+    }
+
     return;
   }
 
@@ -976,6 +998,31 @@ function integratePositions(): void {
     transform.prevY = transform.y;
     transform.x = (transform.x + phys.vx) | 0;
     transform.y = (transform.y + phys.vy) | 0;
+  }
+}
+
+// ── Grab carry: keep victim glued to grabber after positions are integrated ───
+
+/**
+ * After integratePositions, snap every grabbed victim's position to sit just
+ * in front of the grabber and zero out their velocity so gravity / friction
+ * cannot pull them away during the same frame.
+ */
+function snapGrabbedFighters(entityIds: number[]): void {
+  for (const id of entityIds) {
+    const fighter = fighterComponents.get(id);
+    if (fighter?.state !== 'grabbing' || fighter.grabVictimId === null) continue;
+    const grabberT = transformComponents.get(id);
+    const victimT  = transformComponents.get(fighter.grabVictimId);
+    const victimP  = physicsComponents.get(fighter.grabVictimId);
+    if (!grabberT || !victimT || !victimP) continue;
+    victimT.x = grabberT.facingRight
+      ? (grabberT.x + GRAB_CARRY_OFFSET) | 0
+      : (grabberT.x - GRAB_CARRY_OFFSET) | 0;
+    victimT.y       = grabberT.y;
+    victimP.vx      = toFixed(0);
+    victimP.vy      = toFixed(0);
+    victimP.grounded = true;
   }
 }
 
@@ -1418,6 +1465,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     ]);
 
     integratePositions();
+    snapGrabbedFighters([player1Id, player2Id]);
     applyGravitySystem();
     platformCollisionSystem();
     fighterBodyCollisionSystem([player1Id, player2Id]);
