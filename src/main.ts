@@ -1176,7 +1176,7 @@ function processPlayerInput(
   // When active, halve horizontal velocity (applied after all movement code
   // so it overrides walk/run/air-drift uniformly).
   if ((speedDebuffMap.get(playerId) ?? 0) > 0) {
-    phys.vx = phys.vx >> 1; // Q16.16 arithmetic right-shift ÷ 2
+    phys.vx = fixedMul(phys.vx, toFixed(0.5));
   }
 
   if (buffer.consume('jump', matchState.frame)) {

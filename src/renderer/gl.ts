@@ -1605,13 +1605,16 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
         const riseY = (fighter.attackFrame - 10) * 2.5; // climbs ~112 units over 45 frames
         rocketGroup.position.set(wx, wy + 30 + riseY, zOffset - 8);
         rocketGroup.visible = true;
-        // Pulse exhaust emissive intensity
-        const renderTime = Date.now() * 0.001;
+        // Pulse exhaust emissive intensity.
+        // Date.now() and Math.sin() are renderer-only here — intentional and
+        // determinism-safe; they drive visual animation only, not simulation state.
+        // This mirrors the same pattern used in applyPose (see renderTime there).
+        const rocketRenderTime = Date.now() * 0.001;
         rocketGroup.traverse((obj) => {
           if (!(obj instanceof THREE.Mesh)) return;
           const mat = obj.material;
           if (mat instanceof THREE.MeshStandardMaterial && mat.emissive.getHex() === 0x00ffee) {
-            mat.emissiveIntensity = 0.6 + Math.abs(Math.sin(renderTime * 20)) * 0.4;
+            mat.emissiveIntensity = 0.6 + Math.abs(Math.sin(rocketRenderTime * 20)) * 0.4;
           }
         });
       } else if (rocketGroup) {
