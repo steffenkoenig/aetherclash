@@ -68,6 +68,64 @@ const TURN_LERP = 0.18;
 // Maps entity id → semi-transparent sphere shown while shielding.
 const shieldBubbleMeshes = new Map<number, THREE.Mesh>();
 
+// ── Trump "The Wall" effect mesh registry ─────────────────────────────────────
+// Maps entity id → gold-plated brick wall group shown during sideSpecial.
+const trumpWallMeshes = new Map<number, THREE.Group>();
+
+// ── Musk "Mars Colonization" effect mesh registry ─────────────────────────────
+// Maps entity id → SpaceX rocket cone shown during downSpecial.
+const muskRocketMeshes = new Map<number, THREE.Group>();
+
+/** Build a gold-plated brick wall group (Trump sideSpecial). */
+function buildTrumpWall(): THREE.Group {
+  const g    = new THREE.Group();
+  const goldM = new THREE.MeshStandardMaterial({
+    color: 0xffd700, emissive: 0xffd700, emissiveIntensity: 0.35,
+    metalness: 0.8, roughness: 0.25,
+  });
+  // Main wall slab
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(16, 70, 20), goldM);
+  g.add(wall);
+  // Brick-row lines (darker gold strips)
+  const lineM = new THREE.MeshStandardMaterial({ color: 0xb8860b, metalness: 0.6, roughness: 0.5 });
+  for (let row = -3; row <= 3; row++) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(16.5, 1.5, 21), lineM);
+    line.position.y = row * 10;
+    g.add(line);
+  }
+  return g;
+}
+
+/** Build a SpaceX-style rocket cone group (Musk downSpecial). */
+function buildMuskRocket(): THREE.Group {
+  const g       = new THREE.Group();
+  const bodyM   = new THREE.MeshStandardMaterial({ color: 0xddddee, metalness: 0.7, roughness: 0.25 });
+  const exhaustM = new THREE.MeshStandardMaterial({
+    color: 0x00ffee, emissive: 0x00ffee, emissiveIntensity: 0.9,
+    transparent: true, opacity: 0.75,
+  });
+  const finM = new THREE.MeshStandardMaterial({ color: 0x223355, metalness: 0.5, roughness: 0.4 });
+  // Rocket body cylinder
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 40, 10), bodyM);
+  g.add(body);
+  // Nose cone
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(5, 16, 10), bodyM);
+  nose.position.y = 28;
+  g.add(nose);
+  // Exhaust cone (flares downward)
+  const exhaust = new THREE.Mesh(new THREE.ConeGeometry(7, 22, 10), exhaustM);
+  exhaust.rotation.x = Math.PI;
+  exhaust.position.y = -30;
+  g.add(exhaust);
+  // Grid-fin pair
+  for (const sx of [-1, 1]) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 1.5), finM);
+    fin.position.set(sx * 7, -14, 0);
+    g.add(fin);
+  }
+  return g;
+}
+
 /** Radius of the shield bubble in world units. */
 const SHIELD_BUBBLE_RADIUS = 45;
 
@@ -563,12 +621,13 @@ export function createCharacterMesh(characterId: string): THREE.Group {
     void eyeM;
 
   } else if (characterId === 'xi') {
-    // Dark red Mao suit, gold stars, little red book
+    // Dark red Mao suit with subtle honeycomb pattern, gold stars, little red book
     const suitM  = toon(mainColor);
     const skinM  = toon(0xf5d8b0);
     const starM  = toon(0xffd700);
     const eyeM   = toon(0x222222);
     const darkM  = toon(0x660000);
+    const honeyM = toon(0xb31b1b); // slightly lighter red for honeycomb cells
     parts = makeRig(16, 12, 32, 18, 28, 5.5, 26, 9, 7, 30, suitM, suitM);
     const hXi = parts.head as THREE.Group;
     add(hXi, sphere(11, skinM), 0, 11, 0);
@@ -580,17 +639,30 @@ export function createCharacterMesh(characterId: string): THREE.Group {
       const s = sphere(2.5, starM); s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13);
       parts.torso.add(s);
     }
+    // Subtle honeycomb pattern: small flat hexagonal cylinders on the suit front
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 2; col++) {
+        const hCell = cylinder(2.2, 2.2, 0.8, 6, honeyM);
+        hCell.position.set(-5 + col * 10, 20 - row * 9, 17);
+        parts.torso.add(hCell);
+      }
+    }
     const book = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), toon(0xdd0000));
     book.position.set(-26, -4, 0); group.add(book);
-    void suitM; void skinM; void starM; void eyeM; void darkM;
+    void suitM; void skinM; void starM; void eyeM; void darkM; void honeyM;
 
   } else if (characterId === 'lizzy') {
-    // Pastel coat, crown, handbag, spectral corgi
-    const coatM  = toon(mainColor);
-    const skinM  = toon(0xffe0cc);
+    // Translucent neon-blue ghost dress, crown, handbag, spectral corgi
+    // Use transparent toon materials for the spectral appearance
+    const ghostToon = (hex: number, opacity = 0.72) => {
+      const m = new THREE.MeshToonMaterial({ color: hex, transparent: true, opacity, depthWrite: false });
+      return m;
+    };
+    const coatM  = ghostToon(mainColor);
+    const skinM  = ghostToon(0xc0e8ff, 0.80); // cool blue-tinted skin
     const crownM = toon(0xffd700);
-    const eyeM   = toon(0x224488);
-    const corgiM = toon(0xee8833);
+    const eyeM   = ghostToon(0x0044cc, 0.90);
+    const corgiM = ghostToon(0xee8833, 0.65); // spectral corgi
     parts = makeRig(13, 10, 28, 16, 26, 4.5, 24, 7, 5.5, 28, coatM, coatM);
     const hLi = parts.head as THREE.Group;
     add(hLi, sphere(10, skinM), 0, 10, 0);
@@ -976,6 +1048,18 @@ export function resetRenderer(): void {
     (mesh.material as THREE.Material).dispose();
   }
   shieldBubbleMeshes.clear();
+  // Clear Trump wall effects
+  for (const g of trumpWallMeshes.values()) {
+    scene?.remove(g);
+    g.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+  }
+  trumpWallMeshes.clear();
+  // Clear Musk rocket effects
+  for (const g of muskRocketMeshes.values()) {
+    scene?.remove(g);
+    g.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+  }
+  muskRocketMeshes.clear();
   // Clear platform mesh cache — new stage will rebuild with its own palette.
   clearPlatformMeshes();
 }
@@ -1444,6 +1528,98 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
       updateMixer(id, fighter.state);
     } else {
       applyPose(group, fighter.state, fighter.currentMoveId, transform.facingRight);
+    }
+
+    // ── Character-specific per-frame visual effects ───────────────────────────
+
+    // Trump: glowing orange aura when at low damage (high health).
+    // Only active outside special moves (applyPose drives emissive during specials).
+    // Emissive intensity fades out as damage% rises toward 100.
+    const isSpecialActive = fighter.state === 'attack' &&
+      fighter.currentMoveId != null &&
+      fighter.currentMoveId.includes('Special');
+    if (fighter.characterId === 'trump' && !isSpecialActive) {
+      const dmgPct  = toFloat(fighter.damagePercent);          // 0–∞ raw %
+      const auraStr = Math.max(0, 1 - dmgPct / 100) * 0.6;   // 0.6 at 0%, 0 at 100%+
+      group.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (mat instanceof THREE.MeshToonMaterial) {
+          mat.emissive.setRGB(auraStr, auraStr * 0.4, 0); // warm orange hue
+        }
+      });
+    }
+
+    // Lizzy: persistent neon-blue ghost translucency — make all toon materials
+    // semi-transparent so she reads as a spectral apparition.
+    // Opacity is already baked into the mesh materials at creation time; this
+    // block is a safety net in case a material was added after initial creation.
+    if (fighter.characterId === 'lizzy') {
+      group.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (mat instanceof THREE.MeshToonMaterial && !mat.transparent) {
+          mat.transparent = true;
+          mat.opacity     = 0.72;
+          mat.depthWrite  = false;
+        }
+      });
+    }
+
+    // ── Trump "The Wall" — gold-plated barrier during sideSpecial ────────────
+    // Active frames [10, 60] of sideSpecial; wall appears in front of Trump.
+    const isTrumpWall = fighter.characterId === 'trump' &&
+      fighter.state === 'attack' && fighter.currentMoveId === 'sideSpecial' &&
+      fighter.attackFrame >= 10 && fighter.attackFrame <= 60;
+    {
+      let wallGroup = trumpWallMeshes.get(id);
+      if (isTrumpWall) {
+        if (!wallGroup) {
+          wallGroup = buildTrumpWall();
+          scene.add(wallGroup);
+          trumpWallMeshes.set(id, wallGroup);
+        }
+        // Position in front of the fighter (offsetX ≈ 60 world units from move data)
+        const wallOffX = transform.facingRight ? 60 : -60;
+        wallGroup.position.set(wx + wallOffX, wy, zOffset - 5);
+        wallGroup.visible = true;
+      } else if (wallGroup) {
+        wallGroup.visible = false;
+      }
+    }
+
+    // ── Musk "Mars Colonization" — rocket during downSpecial ─────────────────
+    // Active frames [10, 55]; rocket rises above Musk and launches upward.
+    const isMuskRocket = fighter.characterId === 'musk' &&
+      fighter.state === 'attack' && fighter.currentMoveId === 'downSpecial' &&
+      fighter.attackFrame >= 10 && fighter.attackFrame <= 55;
+    {
+      let rocketGroup = muskRocketMeshes.get(id);
+      if (isMuskRocket) {
+        if (!rocketGroup) {
+          rocketGroup = buildMuskRocket();
+          scene.add(rocketGroup);
+          muskRocketMeshes.set(id, rocketGroup);
+        }
+        // Rocket rises: translate upward proportional to attackFrame
+        const riseY = (fighter.attackFrame - 10) * 2.5; // climbs ~112 units over 45 frames
+        rocketGroup.position.set(wx, wy + 30 + riseY, zOffset - 8);
+        rocketGroup.visible = true;
+        // Pulse exhaust emissive intensity.
+        // Date.now() and Math.sin() are renderer-only here — intentional and
+        // determinism-safe; they drive visual animation only, not simulation state.
+        // This mirrors the same pattern used in applyPose (see renderTime there).
+        const rocketRenderTime = Date.now() * 0.001;
+        rocketGroup.traverse((obj) => {
+          if (!(obj instanceof THREE.Mesh)) return;
+          const mat = obj.material;
+          if (mat instanceof THREE.MeshStandardMaterial && mat.emissive.getHex() === 0x00ffee) {
+            mat.emissiveIntensity = 0.6 + Math.abs(Math.sin(rocketRenderTime * 20)) * 0.4;
+          }
+        });
+      } else if (rocketGroup) {
+        rocketGroup.visible = false;
+      }
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────

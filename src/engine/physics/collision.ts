@@ -287,6 +287,20 @@ const WAVEDASH_FRAMES = 10;
 export const hitRegistry = new Set<string>();
 
 /**
+ * Records every confirmed hit from the current physics frame.
+ * Cleared at the start of each call to {@link checkHitboxSystem}.
+ * Consumers (e.g. main.ts) may read this array after checkHitboxSystem
+ * to apply character-specific on-hit effects without modifying engine code.
+ */
+export interface HitEvent {
+  attackerId:     number;
+  victimId:       number;
+  attackerCharId: string;
+  hitboxId:       string;
+}
+export const lastFrameHits: HitEvent[] = [];
+
+/**
  * Remove all hit-registry entries belonging to a specific attacker.
  * Call when the attacker's move ends so the hitboxes can re-hit on reuse.
  * If called with no argument, clears the entire registry (e.g. on match reset).
@@ -350,6 +364,7 @@ export function checkHitboxSystem(
   moveData: Map<string, Map<string, Move>>,
   inputMap?: ReadonlyMap<EntityId, InputState>,
 ): void {
+  lastFrameHits.length = 0;
   for (const attackerId of fighters) {
     const attackerFighter    = fighterComponents.get(attackerId);
     const attackerTransform  = transformComponents.get(attackerId);
@@ -426,6 +441,12 @@ export function checkHitboxSystem(
 
         // ── Hit confirmed ─────────────────────────────────────────────────
         hitRegistry.add(registryKey);
+        lastFrameHits.push({
+          attackerId,
+          victimId,
+          attackerCharId: attackerFighter.characterId,
+          hitboxId:       hitbox.id,
+        });
 
         // ── Shield hit: attack absorbed by an active shield ───────────────
         if (victimFighter.state === 'shielding') {
