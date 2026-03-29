@@ -32,11 +32,11 @@ export function prefersReducedMotion(): boolean {
 // ── Character / stage metadata ────────────────────────────────────────────────
 
 export const CHARACTERS = [
-  { id: 'kael',  label: 'KAEL',  icon: '⚔️',  archetype: 'BLADE MASTER', description: 'Versatile swordsman. Solid in every range.' },
-  { id: 'gorun', label: 'GORUN', icon: '🪨',  archetype: 'TITAN',        description: 'Punishing power. One clean hit ends a stock.' },
-  { id: 'vela',  label: 'VELA',  icon: '⚡',  archetype: 'BLITZER',      description: 'Blazing speed. Relentless combo pressure.' },
-  { id: 'syne',  label: 'SYNE',  icon: '🔮',  archetype: 'PSYCHIC',      description: 'Tricky spacing tools. Rewards deep knowledge.' },
-  { id: 'zira',  label: 'ZIRA',  icon: '🌀',  archetype: 'AERIALIST',    description: 'Feather-light. Dominates from above.' },
+  { id: 'trump', label: 'THE MOGUL',   icon: '🏛️', archetype: 'POWERHOUSE',  description: 'Massive knockback. Tie-whip range. Small Hands grab penalty.' },
+  { id: 'musk',  label: 'THE ARCHON',  icon: '🚀', archetype: 'AERIALIST',   description: 'Unrivalled air time. Flamethrower & X-shuriken toolkit.' },
+  { id: 'putin', label: 'THE TSAR',    icon: '🐻', archetype: 'GRAPPLER',    description: 'Strongest throws in the game. Slow but unstoppable.' },
+  { id: 'xi',    label: 'THE HONEY',   icon: '📕', archetype: 'TANK',         description: 'High health pool. Slow startup — but devastating payoff.' },
+  { id: 'lizzy', label: 'THE REGENT',  icon: '👑', archetype: 'POISE MASTER', description: 'Slowest walk. Intangible on every hit. Spectral Corgis.' },
 ] as const;
 
 export const STAGES = [

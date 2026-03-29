@@ -85,11 +85,11 @@ import {
   updateParticles,
   disposeParticles,
 } from './renderer/particles.js';
-import { KAEL_STATS, KAEL_MOVES }          from './game/characters/kael.js';
-import { GORUN_STATS, GORUN_MOVES }        from './game/characters/gorun.js';
-import { VELA_STATS, VELA_MOVES }          from './game/characters/vela.js';
-import { SYNE_STATS, SYNE_MOVES }          from './game/characters/syne.js';
-import { ZIRA_STATS, ZIRA_MOVES }          from './game/characters/zira.js';
+import { TRUMP_STATS, TRUMP_MOVES }        from './game/characters/trump.js';
+import { MUSK_STATS, MUSK_MOVES }          from './game/characters/musk.js';
+import { PUTIN_STATS, PUTIN_MOVES }        from './game/characters/putin.js';
+import { XI_STATS, XI_MOVES }              from './game/characters/xi.js';
+import { LIZZY_STATS, LIZZY_MOVES }        from './game/characters/lizzy.js';
 import type { FighterStats } from './engine/ecs/component.js';
 import type { Move } from './engine/ecs/component.js';
 import {
@@ -144,19 +144,19 @@ import {
 // ── Character lookup tables ───────────────────────────────────────────────────
 
 const CHARACTER_STATS: Record<string, FighterStats> = {
-  kael:  KAEL_STATS,
-  gorun: GORUN_STATS,
-  vela:  VELA_STATS,
-  syne:  SYNE_STATS,
-  zira:  ZIRA_STATS,
+  trump: TRUMP_STATS,
+  musk:  MUSK_STATS,
+  putin: PUTIN_STATS,
+  xi:    XI_STATS,
+  lizzy: LIZZY_STATS,
 };
 
 const CHARACTER_MOVES: Record<string, Record<string, Move>> = {
-  kael:  KAEL_MOVES,
-  gorun: GORUN_MOVES,
-  vela:  VELA_MOVES,
-  syne:  SYNE_MOVES,
-  zira:  ZIRA_MOVES,
+  trump: TRUMP_MOVES,
+  musk:  MUSK_MOVES,
+  putin: PUTIN_MOVES,
+  xi:    XI_MOVES,
+  lizzy: LIZZY_MOVES,
 };
 
 // ── Stage lookup tables ───────────────────────────────────────────────────────
@@ -1220,8 +1220,8 @@ let lastRenderTime = performance.now();
 // Mutable player IDs — set by startMatch()
 let player1Id = -1;
 let player2Id = -1;
-let p1CharId  = 'kael';
-let p2CharId  = 'gorun';
+let p1CharId  = 'trump';
+let p2CharId  = 'putin';
 
 // ── Pause menu ────────────────────────────────────────────────────────────────
 
@@ -1425,7 +1425,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   // The player 2 character is always the "other" one from the lobby default.
   // In local play we just pick the next character; in the future this would
   // come from a 2-player select screen. For now we default to gorun/kael.
-  const p2Char = (p1Char === 'kael' ? 'gorun' : 'kael') as CharacterId;
+  const p2Char = (p1Char === 'trump' ? 'putin' : 'trump') as CharacterId;
   p1CharId  = p1Char;
   p2CharId  = p2Char;
   p2StageId = stageId;
@@ -1519,7 +1519,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     currentMoveId:    null,
     grabVictimId:     null,
     smashChargeFrames: 0,
-    stats:            CHARACTER_STATS[p1Char] ?? KAEL_STATS,
+    stats:            CHARACTER_STATS[p1Char] ?? TRUMP_STATS,
   });
   renderableComponents.set(player1Id, {
     meshUrl:        `/assets/characters/${p1Char}/${p1Char}.glb`,
@@ -1560,7 +1560,7 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     currentMoveId:    null,
     grabVictimId:     null,
     smashChargeFrames: 0,
-    stats:            CHARACTER_STATS[p2Char] ?? GORUN_STATS,
+    stats:            CHARACTER_STATS[p2Char] ?? PUTIN_STATS,
   });
   renderableComponents.set(player2Id, {
     meshUrl:        `/assets/characters/${p2Char}/${p2Char}.glb`,
@@ -1593,11 +1593,11 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
 
   // Accent colours for hit sparks (must match CHARACTER_COLORS in gl.ts)
   const CHARACTER_ACCENT: Record<string, string> = {
-    kael:  '#4488ee',
-    gorun: '#ee6600',
-    vela:  '#44dd66',
-    syne:  '#cc44ff',
-    zira:  '#ffd700',
+    trump: '#ff8800',
+    musk:  '#00aaff',
+    putin: '#4c7c4c',
+    xi:    '#cc2222',
+    lizzy: '#88ccff',
   };
 
   /** Scale from damage percentage to launch-trail force threshold (renderer only). */
