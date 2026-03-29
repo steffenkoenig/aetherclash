@@ -2,7 +2,7 @@
 // Continuous AABB-vs-line-segment platform collision detection.
 
 import type { Fixed } from './fixednum.js';
-import { FRAC_SCALE, toFixed, fixedAdd, fixedSub, fixedNeg } from './fixednum.js';
+import { FRAC_SCALE, toFixed, fixedAdd, fixedSub, fixedNeg, fixedMul, fixedDiv } from './fixednum.js';
 import type { EntityId } from '../ecs/entity.js';
 import {
   transformComponents,
@@ -14,7 +14,6 @@ import {
 import type { InputState } from '../input/keyboard.js';
 import { applyKnockback, computeHitlagFrames } from './knockback.js';
 import { hitlagMap, dodgeFramesMap, transitionFighterState, techWindowMap, airDodgeUsedSet, isEntityFrozenByHitlag, landingLagMap, lCancelWindowMap, wavedashFramesMap } from './stateMachine.js';
-import { fixedMul } from './fixednum.js';
 
 export interface Platform {
   x1: Fixed;
@@ -418,8 +417,8 @@ export function checkHitboxSystem(
         // of the box is only half as high, making the fighter harder to hit with
         // attacks aimed at the upper body.
         if (victimFighter.state === 'crouch') {
-          hurtH = FIGHTER_HALF_HEIGHT;                          // half normal height
-          hurtY = fixedSub(victimTransform.y, FIGHTER_HALF_HEIGHT >> 1); // shift centre down
+          hurtH = FIGHTER_HALF_HEIGHT;                                             // half normal height
+          hurtY = fixedSub(victimTransform.y, fixedDiv(FIGHTER_HALF_HEIGHT, toFixed(2))); // shift centre down
         }
 
         if (!aabbOverlap(hbWorldX, hbWorldY, hitbox.width, hitbox.height,
