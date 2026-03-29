@@ -80,6 +80,11 @@ const characters = [
   { id: 'vela',  color: 0x44dd66 },
   { id: 'syne',  color: 0xcc44ff },
   { id: 'zira',  color: 0xffd700 },
+  { id: 'trump', color: 0xff8800 },
+  { id: 'musk',  color: 0x00aaff },
+  { id: 'putin', color: 0x4c7c4c },
+  { id: 'xi',    color: 0xcc2222 },
+  { id: 'lizzy', color: 0x88ccff },
 ];
 
 /** Shared helper: create a MeshStandardMaterial. */
@@ -102,6 +107,11 @@ function buildCharacter(id, color) {
     case 'vela':  buildVela(group, color);  break;
     case 'syne':  buildSyne(group, color);  break;
     case 'zira':  buildZira(group, color);  break;
+    case 'trump': buildTrump(group, color); break;
+    case 'musk':  buildMusk(group, color);  break;
+    case 'putin': buildPutin(group, color); break;
+    case 'xi':    buildXi(group, color);    break;
+    case 'lizzy': buildLizzy(group, color); break;
     default:      buildDefaultChar(group, color); break;
   }
 
@@ -518,6 +528,189 @@ function buildZira(group, color) {
     const t = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), accentMat);
     t.scale.set(1, 0.5, 0.7); t.position.set(0, -(26 * 0.54 + 26 * 0.46), 7); leg.add(t);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Trump — wide orange suit, combed-over hair, red tie
+// ---------------------------------------------------------------------------
+function buildTrump(group, color) {
+  const suitMat  = mat(color);
+  const tieMat   = mat(0xdd0000);
+  const skinMat  = mat(0xffc090);
+  const hairMat  = mat(0xffdd88);
+  const eyeMat   = mat(0x3355aa);
+  const { head, torso, armL, armR } = buildBipedRig(group, {
+    bodyMat: suitMat, torsoW: 18, waistW: 13, torsoH: 30,
+    shoulderX: 20, shoulderY: 28,
+    armRadius: 6, armLen: 26,
+    hipX: 10, legRadius: 7, legLen: 28,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 10), skinMat);
+    m.position.set(0, 12, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 14, 11],[5, 14, 11]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Combover
+  const co = new THREE.Mesh(new THREE.CapsuleGeometry(11, 2, 4, 6), hairMat);
+  co.rotation.z = Math.PI / 2; co.position.set(0, 23, -2); head.add(co);
+  // Tie
+  { const k = new THREE.Mesh(new THREE.CylinderGeometry(10, 7, 10, 6), tieMat);
+    k.position.set(0, 14, 8); torso.add(k); }
+  { const t = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 4, 28, 6), tieMat);
+    t.position.set(0, 2, 9); torso.add(t); }
+  // Small hands
+  for (const arm of [armL, armR]) {
+    const h = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), skinMat);
+    h.position.set(0, -28, 0); arm.add(h);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Musk — slim dark turtleneck, X belt buckle, rocket thruster backpack
+// ---------------------------------------------------------------------------
+function buildMusk(group, color) {
+  const bodyMat = mat(color);
+  const darkMat = mat(0x222244);
+  const skinMat = mat(0xffe0c0);
+  const eyeMat  = mat(0x33bb99);
+  const glowMat = mat(0x00ffee);
+  const { head, torso, armL } = buildBipedRig(group, {
+    bodyMat: darkMat, torsoW: 10, waistW: 8, torsoH: 28,
+    shoulderX: 14, shoulderY: 26,
+    armRadius: 3.5, armLen: 24,
+    hipX: 6, legRadius: 4, legLen: 26,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 14, 10), skinMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 12, 9.5],[5, 12, 9.5]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(9, 8, 6, 10), darkMat);
+    c.position.set(0, 3, 0); head.add(c); }
+  // Rocket backpack
+  { const r = new THREE.Mesh(new THREE.CapsuleGeometry(5, 18, 4, 8), bodyMat);
+    r.rotation.x = Math.PI / 2; r.position.set(0, 14, -14); torso.add(r); }
+  { const g = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), glowMat);
+    g.position.set(0, 14, -22); torso.add(g); }
+  // X belt
+  for (const rz of [Math.PI / 4, -Math.PI / 4]) {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 14, 4), glowMat);
+    b.rotation.z = rz; b.position.set(0, 2, 8); torso.add(b);
+  }
+  void armL; void darkMat;
+}
+
+// ---------------------------------------------------------------------------
+// Putin — shirtless, wide, bear-saddle, chest medals
+// ---------------------------------------------------------------------------
+function buildPutin(group, color) {
+  const skinMat  = mat(color);
+  const bearMat  = mat(0x8b5e3c);
+  const eyeMat   = mat(0x3399cc);
+  const medalMat = mat(0xffd700);
+  const { head, torso } = buildBipedRig(group, {
+    bodyMat: skinMat, torsoW: 20, waistW: 14, torsoH: 30,
+    shoulderX: 24, shoulderY: 28,
+    armRadius: 7, armLen: 28,
+    hipX: 11, legRadius: 8, legLen: 30,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 10), skinMat);
+    m.position.set(0, 12, 0); head.add(m); }
+  for (const [x, y, z] of [[-5, 14, 11],[5, 14, 11]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Bear saddle
+  { const s = new THREE.Mesh(new THREE.SphereGeometry(20, 10, 8), bearMat);
+    s.scale.set(1.8, 0.9, 1.4); s.position.set(0, -46, 0); torso.add(s); }
+  // Bear ears
+  for (const bx of [-18, 18]) {
+    const e = new THREE.Mesh(new THREE.ConeGeometry(5, 9, 6), bearMat);
+    e.position.set(bx, -42, 14); group.add(e);
+  }
+  // Chest medals
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 6), medalMat);
+    m.scale.set(0.5, 1, 0.3); m.position.set(-8 + i * 8, 20, 13); torso.add(m);
+  }
+  void eyeMat;
+}
+
+// ---------------------------------------------------------------------------
+// Xi — dark red Mao suit, five-star chest, Little Red Book
+// ---------------------------------------------------------------------------
+function buildXi(group, color) {
+  const suitMat = mat(color);
+  const skinMat = mat(0xf5d8b0);
+  const starMat = mat(0xffd700);
+  const eyeMat  = mat(0x222222);
+  const colMat  = mat(0x660000);
+  const { head, torso } = buildBipedRig(group, {
+    bodyMat: suitMat, torsoW: 16, waistW: 12, torsoH: 32,
+    shoulderX: 18, shoulderY: 28,
+    armRadius: 5.5, armLen: 26,
+    hipX: 9, legRadius: 7, legLen: 30,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(11, 14, 10), skinMat);
+    m.position.set(0, 11, 0); head.add(m); }
+  for (const [x, y, z] of [[-4, 13, 10],[4, 13, 10]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(10, 9, 6, 8), colMat);
+    c.position.set(0, 3, 0); head.add(c); }
+  // Five stars on chest
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    const s = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 6), starMat);
+    s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13); torso.add(s);
+  }
+  // Little Red Book
+  { const b = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), mat(0xdd0000));
+    b.position.set(-26, -4, 0); group.add(b); }
+  void suitMat;
+}
+
+// ---------------------------------------------------------------------------
+// Lizzy — pastel coat, crown, handbag, spectral corgi
+// ---------------------------------------------------------------------------
+function buildLizzy(group, color) {
+  const coatMat  = mat(color);
+  const skinMat  = mat(0xffe0cc);
+  const crownMat = mat(0xffd700);
+  const eyeMat   = mat(0x224488);
+  const corgiMat = mat(0xee8833);
+  const { head } = buildBipedRig(group, {
+    bodyMat: coatMat, torsoW: 13, waistW: 10, torsoH: 28,
+    shoulderX: 16, shoulderY: 26,
+    armRadius: 4.5, armLen: 24,
+    hipX: 7, legRadius: 5.5, legLen: 28,
+  });
+  { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 14, 10), skinMat);
+    m.position.set(0, 10, 0); head.add(m); }
+  for (const [x, y, z] of [[-4, 12, 9],[4, 12, 9]]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 6), eyeMat);
+    e.position.set(x, y, z); head.add(e);
+  }
+  // Crown
+  { const c = new THREE.Mesh(new THREE.CylinderGeometry(8, 9, 6, 6), crownMat);
+    c.position.set(0, 22, 0); head.add(c); }
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const p = new THREE.Mesh(new THREE.ConeGeometry(2, 8, 5), crownMat);
+    p.position.set(Math.cos(a) * 7, 27, Math.sin(a) * 7); head.add(p);
+  }
+  // Handbag
+  { const b = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 4), coatMat);
+    b.position.set(-24, -8, 0); group.add(b); }
+  // Spectral corgi
+  { const cb = new THREE.Mesh(new THREE.SphereGeometry(6, 10, 8), corgiMat);
+    cb.scale.set(2, 0.9, 1.2); cb.position.set(-30, -48, 8); group.add(cb); }
+  { const cg = new THREE.Mesh(new THREE.ConeGeometry(3, 7, 5), corgiMat);
+    cg.position.set(-30, -44, 16); group.add(cg); }
+  void eyeMat;
 }
 
 // ---------------------------------------------------------------------------

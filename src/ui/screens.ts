@@ -370,7 +370,7 @@ function showCharacterSelect(): void {
   nav.appendChild(backBtn);
   const nextBtn = makeButton('NEXT →', '#0055CC');
   nextBtn.onclick = () => {
-    if (!selectedCharacter) selectedCharacter = 'kael';
+    if (!selectedCharacter) selectedCharacter = 'trump';
     showStageSelect();
   };
   nav.appendChild(nextBtn);

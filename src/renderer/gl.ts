@@ -276,17 +276,17 @@ const CHARACTER_COLORS: Record<string, number> = {
   vela:  0x44dd66,
   syne:  0xcc44ff,
   zira:  0xffd700,
+  // satirical roster
+  trump: 0xff8800,
+  musk:  0x00aaff,
+  putin: 0x4c7c4c,
+  xi:    0xcc2222,
+  lizzy: 0x88ccff,
 };
 const FALLBACK_COLOR = 0xff4444;
 
 // ── Procedural character mesh ─────────────────────────────────────────────────
 
-function dimColor(hex: number, factor: number): number {
-  const r = ((hex >> 16) & 0xff) * factor;
-  const g = ((hex >>  8) & 0xff) * factor;
-  const b = ( hex        & 0xff) * factor;
-  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}
 
 export function createCharacterMesh(characterId: string): THREE.Group {
   const mainColor = CHARACTER_COLORS[characterId] ?? FALLBACK_COLOR;
@@ -437,6 +437,7 @@ export function createCharacterMesh(characterId: string): THREE.Group {
     }
     add(group, cylinder(4, 4, 38, 8, armorM), 52, 10, 0);
     const hh = sphere(14, hammerM); hh.scale.set(1.5, 1.2, 1.2); add(group, hh, 52, -6, 0);
+    const hband = torus(14, 2.5, accentM); hband.rotation.z = Math.PI / 2; add(group, hband, 52, -6, 0);
 
   } else if (characterId === 'vela') {
     const bodyM = toon(mainColor); const darkM = toon(0x111111);
@@ -498,6 +499,111 @@ export function createCharacterMesh(characterId: string): THREE.Group {
       const wb = torus(3.5, 1.5, padM); wb.rotation.x = Math.PI / 2;
       arm.add(wb); wb.position.set(0, -20, 0);
     }
+
+  } else if (characterId === 'trump') {
+    // Orange suit, combed-over hair, red tie, wide torso
+    const suitM  = toon(mainColor);
+    const tieM   = toon(0xdd0000);
+    const skinM  = toon(0xffc090);
+    const hairM  = toon(0xffdd88);
+    const eyeM   = toon(0x3355aa);
+    parts = makeRig(18, 13, 30, 20, 28, 6, 26, 10, 7, 28, suitM, suitM);
+    const hTr = parts.head as THREE.Group;
+    add(hTr, sphere(12, skinM), 0, 12, 0);
+    add(hTr, sphere(2.5, eyeM, 8, 6), -5, 14, 11);
+    add(hTr, sphere(2.5, eyeM, 8, 6),  5, 14, 11);
+    const co = capsule(11, 2, hairM); co.rotation.z = Math.PI / 2;
+    co.position.set(0, 23, -2); hTr.add(co);
+    const tTr = parts.torso as THREE.Group;
+    add(tTr, cylinder(10, 7, 10, 6, tieM), 0, 14, 8);
+    add(tTr, cylinder(2.5, 4, 28, 6, tieM), 0, 2, 9);
+    const jkt = sphere(18, suitM); jkt.scale.set(1, 0.55, 0.35); jkt.position.set(0, 18, 10); tTr.add(jkt);
+    add(group, sphere(4, skinM), 28, -6, 2);
+    add(group, sphere(4, skinM), -28, -6, 2);
+    void skinM; void hairM; void eyeM;
+
+  } else if (characterId === 'musk') {
+    // Slim dark turtleneck, X belt, rocket thruster backpack
+    const bodyM  = toon(mainColor);
+    const darkM  = toon(0x222244);
+    const skinM  = toon(0xffe0c0);
+    const eyeM   = toon(0x33bb99);
+    const glowM  = toon(0x00ffee);
+    parts = makeRig(10, 8, 28, 14, 26, 3.5, 24, 6, 4, 26, darkM, darkM);
+    const hMu = parts.head as THREE.Group;
+    add(hMu, sphere(10, skinM), 0, 10, 0);
+    add(hMu, sphere(2.5, eyeM, 8, 6), -5, 12, 9.5);
+    add(hMu, sphere(2.5, eyeM, 8, 6),  5, 12, 9.5);
+    const colMu = cylinder(9, 8, 6, 10, darkM); colMu.position.set(0, 3, 0); hMu.add(colMu);
+    const tMu = parts.torso as THREE.Group;
+    const rkt = capsule(5, 18, bodyM); rkt.rotation.x = Math.PI / 2; rkt.position.set(0, 14, -14); tMu.add(rkt);
+    add(tMu, sphere(4, glowM), 0, 14, -22);
+    const bx1 = cylinder(1.5, 1.5, 14, 4, glowM); bx1.rotation.z =  Math.PI / 4; bx1.position.set(0, 2, 8); tMu.add(bx1);
+    const bx2 = cylinder(1.5, 1.5, 14, 4, glowM); bx2.rotation.z = -Math.PI / 4; bx2.position.set(0, 2, 8); tMu.add(bx2);
+    void skinM; void eyeM;
+
+  } else if (characterId === 'putin') {
+    // Shirtless, wide body, bear-saddle, medals
+    const skinM  = toon(mainColor);
+    const bearM  = toon(0x8b5e3c);
+    const eyeM   = toon(0x3399cc);
+    parts = makeRig(20, 14, 30, 24, 28, 7, 28, 11, 8, 30, skinM, skinM);
+    const hPu = parts.head as THREE.Group;
+    add(hPu, sphere(12, skinM), 0, 12, 0);
+    add(hPu, sphere(2.5, eyeM, 8, 6), -5, 14, 11);
+    add(hPu, sphere(2.5, eyeM, 8, 6),  5, 14, 11);
+    const saddle = sphere(20, bearM); saddle.scale.set(1.8, 0.9, 1.4); saddle.position.set(0, -46, 0);
+    parts.torso.add(saddle);
+    add(group, cone(5, 9, 6, bearM), -18, -42, 14);
+    add(group, cone(5, 9, 6, bearM),  18, -42, 14);
+    for (let i = 0; i < 3; i++) {
+      const medal = sphere(3, toon(0xffd700)); medal.scale.set(0.5, 1, 0.3);
+      medal.position.set(-8 + i * 8, 20, 13); parts.torso.add(medal);
+    }
+    void eyeM;
+
+  } else if (characterId === 'xi') {
+    // Dark red Mao suit, gold stars, little red book
+    const suitM  = toon(mainColor);
+    const skinM  = toon(0xf5d8b0);
+    const starM  = toon(0xffd700);
+    const eyeM   = toon(0x222222);
+    const darkM  = toon(0x660000);
+    parts = makeRig(16, 12, 32, 18, 28, 5.5, 26, 9, 7, 30, suitM, suitM);
+    const hXi = parts.head as THREE.Group;
+    add(hXi, sphere(11, skinM), 0, 11, 0);
+    add(hXi, sphere(2.2, eyeM, 8, 6), -4, 13, 10);
+    add(hXi, sphere(2.2, eyeM, 8, 6),  4, 13, 10);
+    const colXi = cylinder(10, 9, 6, 8, darkM); colXi.position.set(0, 3, 0); hXi.add(colXi);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      const s = sphere(2.5, starM); s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13);
+      parts.torso.add(s);
+    }
+    const book = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), toon(0xdd0000));
+    book.position.set(-26, -4, 0); group.add(book);
+    void suitM; void skinM; void starM; void eyeM; void darkM;
+
+  } else if (characterId === 'lizzy') {
+    // Pastel coat, crown, handbag, spectral corgi
+    const coatM  = toon(mainColor);
+    const skinM  = toon(0xffe0cc);
+    const crownM = toon(0xffd700);
+    const eyeM   = toon(0x224488);
+    const corgiM = toon(0xee8833);
+    parts = makeRig(13, 10, 28, 16, 26, 4.5, 24, 7, 5.5, 28, coatM, coatM);
+    const hLi = parts.head as THREE.Group;
+    add(hLi, sphere(10, skinM), 0, 10, 0);
+    add(hLi, sphere(2.2, eyeM, 8, 6), -4, 12, 9);
+    add(hLi, sphere(2.2, eyeM, 8, 6),  4, 12, 9);
+    add(hLi, cylinder(8, 9, 6, 6, crownM), 0, 22, 0);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2; add(hLi, cone(2, 8, 5, crownM), Math.cos(a) * 7, 27, Math.sin(a) * 7);
+    }
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 4), coatM); bag.position.set(-24, -8, 0); group.add(bag);
+    const corgiBody = sphere(6, corgiM); corgiBody.scale.set(2, 0.9, 1.2); corgiBody.position.set(-30, -48, 8); group.add(corgiBody);
+    add(group, cone(3, 7, 5, corgiM), -30, -44, 16);
+    void skinM; void eyeM; void corgiM;
 
   } else {
     // ── Fallback: jointed humanoid ─────────────────────────────────────────
