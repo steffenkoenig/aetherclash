@@ -563,12 +563,13 @@ export function createCharacterMesh(characterId: string): THREE.Group {
     void eyeM;
 
   } else if (characterId === 'xi') {
-    // Dark red Mao suit, gold stars, little red book
+    // Dark red Mao suit with subtle honeycomb pattern, gold stars, little red book
     const suitM  = toon(mainColor);
     const skinM  = toon(0xf5d8b0);
     const starM  = toon(0xffd700);
     const eyeM   = toon(0x222222);
     const darkM  = toon(0x660000);
+    const honeyM = toon(0xb31b1b); // slightly lighter red for honeycomb cells
     parts = makeRig(16, 12, 32, 18, 28, 5.5, 26, 9, 7, 30, suitM, suitM);
     const hXi = parts.head as THREE.Group;
     add(hXi, sphere(11, skinM), 0, 11, 0);
@@ -580,17 +581,30 @@ export function createCharacterMesh(characterId: string): THREE.Group {
       const s = sphere(2.5, starM); s.position.set(Math.cos(a) * 5, 22 + Math.sin(a) * 5, 13);
       parts.torso.add(s);
     }
+    // Subtle honeycomb pattern: small flat hexagonal cylinders on the suit front
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 2; col++) {
+        const hCell = cylinder(2.2, 2.2, 0.8, 6, honeyM);
+        hCell.position.set(-5 + col * 10, 20 - row * 9, 17);
+        parts.torso.add(hCell);
+      }
+    }
     const book = new THREE.Mesh(new THREE.BoxGeometry(8, 10, 2), toon(0xdd0000));
     book.position.set(-26, -4, 0); group.add(book);
-    void suitM; void skinM; void starM; void eyeM; void darkM;
+    void suitM; void skinM; void starM; void eyeM; void darkM; void honeyM;
 
   } else if (characterId === 'lizzy') {
-    // Pastel coat, crown, handbag, spectral corgi
-    const coatM  = toon(mainColor);
-    const skinM  = toon(0xffe0cc);
+    // Translucent neon-blue ghost dress, crown, handbag, spectral corgi
+    // Use transparent toon materials for the spectral appearance
+    const ghostToon = (hex: number, opacity = 0.72) => {
+      const m = new THREE.MeshToonMaterial({ color: hex, transparent: true, opacity, depthWrite: false });
+      return m;
+    };
+    const coatM  = ghostToon(mainColor);
+    const skinM  = ghostToon(0xc0e8ff, 0.80); // cool blue-tinted skin
     const crownM = toon(0xffd700);
-    const eyeM   = toon(0x224488);
-    const corgiM = toon(0xee8833);
+    const eyeM   = ghostToon(0x0044cc, 0.90);
+    const corgiM = ghostToon(0xee8833, 0.65); // spectral corgi
     parts = makeRig(13, 10, 28, 16, 26, 4.5, 24, 7, 5.5, 28, coatM, coatM);
     const hLi = parts.head as THREE.Group;
     add(hLi, sphere(10, skinM), 0, 10, 0);
@@ -1444,6 +1458,42 @@ export function render(stagePlatforms: Platform[], _alpha: number): void {
       updateMixer(id, fighter.state);
     } else {
       applyPose(group, fighter.state, fighter.currentMoveId, transform.facingRight);
+    }
+
+    // ── Character-specific per-frame visual effects ───────────────────────────
+
+    // Trump: glowing orange aura when at low damage (high health).
+    // Only active outside special moves (applyPose drives emissive during specials).
+    // Emissive intensity fades out as damage% rises toward 100.
+    const isSpecialActive = fighter.state === 'attack' &&
+      fighter.currentMoveId != null &&
+      fighter.currentMoveId.includes('Special');
+    if (fighter.characterId === 'trump' && !isSpecialActive) {
+      const dmgPct  = toFloat(fighter.damagePercent);          // 0–∞ raw %
+      const auraStr = Math.max(0, 1 - dmgPct / 100) * 0.6;   // 0.6 at 0%, 0 at 100%+
+      group.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (mat instanceof THREE.MeshToonMaterial) {
+          mat.emissive.setRGB(auraStr, auraStr * 0.4, 0); // warm orange hue
+        }
+      });
+    }
+
+    // Lizzy: persistent neon-blue ghost translucency — make all toon materials
+    // semi-transparent so she reads as a spectral apparition.
+    // Opacity is already baked into the mesh materials at creation time; this
+    // block is a safety net in case a material was added after initial creation.
+    if (fighter.characterId === 'lizzy') {
+      group.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (mat instanceof THREE.MeshToonMaterial && !mat.transparent) {
+          mat.transparent = true;
+          mat.opacity     = 0.72;
+          mat.depthWrite  = false;
+        }
+      });
     }
 
     // ── Shield bubble ────────────────────────────────────────────────────────

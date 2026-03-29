@@ -27,9 +27,10 @@ import {
   checkHitboxSystem,
   clearHitRegistry,
   setLandingLagLookup,
+  lastFrameHits,
 } from './engine/physics/collision.js';
 import { blastZoneSystem, setBlastZones } from './engine/physics/blastZone.js';
-import { seedRng } from './engine/physics/lcg.js';
+import { seedRng, nextRng } from './engine/physics/lcg.js';
 import {
   transitionFighterState,
   tickFighterTimers,
@@ -309,6 +310,27 @@ const prevCStickActive = new Map<number, boolean>();
  */
 const pummelCooldown = new Map<number, number>();
 
+// ── Character-specific status maps ───────────────────────────────────────────
+
+/**
+ * Putin: Social Freeze — frames remaining during which the victim cannot use
+ * special moves.  Set when `putin_nspecial` connects; decremented each frame.
+ */
+const specialLockMap = new Map<number, number>();
+
+/**
+ * Xi: Social Credit debt stack counter per entity.
+ * Each hit from xi_credit1/2/3 increments the stack.  At 5 stacks the counter
+ * resets and a speed debuff is applied.
+ */
+const creditStackMap = new Map<number, number>();
+
+/**
+ * Xi: Social Credit speed debuff — frames remaining during which the victim's
+ * horizontal velocity is halved.  Applied when creditStackMap reaches 5 stacks.
+ */
+const speedDebuffMap = new Map<number, number>();
+
 // ── Dodge / grab / shield constants ──────────────────────────────────────────
 
 const SPOT_DODGE_INVINCIBLE_FRAMES = 8;
@@ -500,6 +522,9 @@ function startAttack(playerId: number, fighter: Fighter, phys: Physics, input: I
 }
 
 function startSpecial(playerId: number, fighter: Fighter, phys: Physics, input: InputState): void {
+  // Putin's Social Freeze: locked fighters cannot use specials.
+  if ((specialLockMap.get(playerId) ?? 0) > 0) return;
+
   let moveId: string;
 
   if (input.stickY > STICK_THRESHOLD) {
@@ -982,6 +1007,35 @@ function processPlayerInput(
 
   if (fighter.state === 'attack') {
     fighter.attackFrame++;
+
+    // ── Musk "Glitch" mechanic ────────────────────────────────────────────
+    // 1% chance per gadget-move startup frame that the device misfires and
+    // deals 10% self-damage + brief hitstun.  Uses the shared LCG so both
+    // peers see the same outcome (determinism-safe).
+    if (fighter.characterId === 'musk') {
+      const gadgetMoves = ['neutralSpecial', 'sideSpecial', 'downSpecial'];
+      const mid = fighter.currentMoveId ?? '';
+      if (gadgetMoves.includes(mid) && fighter.attackFrame === 1) {
+        // nextRng() returns a 32-bit unsigned integer; 1% ≈ value % 100 === 0
+        if (nextRng() % 100 === 0) {
+          fighter.damagePercent = fixedAdd(fighter.damagePercent, toFixed(10));
+          // Self-knockback: small upward flinch, does not cause KO
+          const selfPhys = physicsComponents.get(playerId);
+          if (selfPhys) {
+            selfPhys.vy = toFixed(6);
+            selfPhys.grounded = false;
+          }
+          transitionFighterState(playerId, 'hitstun');
+          fighter.hitstunFrames = 18;
+          clearHitRegistry(playerId);
+          fighter.currentMoveId = null;
+          fighter.attackFrame   = 0;
+          syncAnimation(fighter, renderable);
+          return;
+        }
+      }
+    }
+
     const moves = getMoves(fighter.characterId);
     const move  = moves?.get(fighter.currentMoveId ?? '');
     if (move) {
@@ -1116,6 +1170,13 @@ function processPlayerInput(
   if (!phys.grounded && input.stickY < -STICK_THRESHOLD && phys.vy <= 0) {
     phys.fastFalling       = true;
     phys.gravityMultiplier = toFixed(2.5);
+  }
+
+  // ── Xi Social Credit speed debuff ─────────────────────────────────────
+  // When active, halve horizontal velocity (applied after all movement code
+  // so it overrides walk/run/air-drift uniformly).
+  if ((speedDebuffMap.get(playerId) ?? 0) > 0) {
+    phys.vx = phys.vx >> 1; // Q16.16 arithmetic right-shift ÷ 2
   }
 
   if (buffer.consume('jump', matchState.frame)) {
@@ -1447,6 +1508,9 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
   platforms.length = 0;
   clearItems();
   clearHazards();
+  specialLockMap.clear();
+  creditStackMap.clear();
+  speedDebuffMap.clear();
 
   // ── Stage ──────────────────────────────────────────────────────────────
   platforms.push(...(STAGE_PLATFORMS[stageId] ?? AETHER_PLATEAU_PLATFORMS));
@@ -1638,6 +1702,61 @@ function startMatch(p1Char: CharacterId, stageId: StageId): void {
     platformCollisionSystem();
     fighterBodyCollisionSystem([player1Id, player2Id]);
     checkHitboxSystem([player1Id, player2Id], MOVE_DATA, inputMap);
+
+    // ── Character-specific on-hit effects ─────────────────────────────────
+    for (const hit of lastFrameHits) {
+      const { attackerId, victimId, attackerCharId, hitboxId } = hit;
+
+      // Putin Social Freeze: neutralSpecial disables victim's specials 3 s (180 frames)
+      if (attackerCharId === 'putin' && hitboxId === 'putin_nspecial') {
+        specialLockMap.set(victimId, 180);
+      }
+
+      // Xi Social Credit: debt stack accumulates; 5 stacks → speed debuff 5 s (300 frames)
+      if (attackerCharId === 'xi' &&
+          (hitboxId === 'xi_credit1' || hitboxId === 'xi_credit2' || hitboxId === 'xi_credit3')) {
+        const stacks = (creditStackMap.get(victimId) ?? 0) + 1;
+        if (stacks >= 5) {
+          creditStackMap.delete(victimId);
+          speedDebuffMap.set(victimId, 300);
+          // Visual: spawn a red "SANCTIONED" spark burst at the victim
+          const vTransform = transformComponents.get(victimId);
+          if (vTransform) spawnHitSpark(toFloat(vTransform.x), toFloat(vTransform.y), '#cc2222');
+        } else {
+          creditStackMap.set(victimId, stacks);
+        }
+      }
+
+      // Lizzy Royal Decree: freeze victim for 1.5 s (90 frames); Lizzy is exempt
+      if (attackerCharId === 'lizzy' && hitboxId === 'lizzy_decree_freeze') {
+        const victimFighter = fighterComponents.get(victimId);
+        if (victimFighter) {
+          hitlagMap.set(victimId, 90);
+          victimFighter.hitlagFrames = 90;
+        }
+        // Clear the attacker's own hitlag so only the victim is frozen
+        const attackerFighter = fighterComponents.get(attackerId);
+        if (attackerFighter) {
+          hitlagMap.set(attackerId, 0);
+          attackerFighter.hitlagFrames = 0;
+        }
+      }
+    }
+
+    // ── Decrement character-specific status timers ─────────────────────────
+    for (const entityId of [player1Id, player2Id]) {
+      const sl = specialLockMap.get(entityId);
+      if (sl !== undefined) {
+        if (sl <= 1) specialLockMap.delete(entityId);
+        else specialLockMap.set(entityId, sl - 1);
+      }
+      const sd = speedDebuffMap.get(entityId);
+      if (sd !== undefined) {
+        if (sd <= 1) speedDebuffMap.delete(entityId);
+        else speedDebuffMap.set(entityId, sd - 1);
+      }
+    }
+
     blastZoneSystem();
     trySpawnItem(matchState.frame);
     tickItems(matchState.frame);
