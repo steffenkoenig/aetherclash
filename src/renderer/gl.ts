@@ -125,7 +125,7 @@ let lastMixerTime = 0;
 /** Map fighter state names to GLB animation clip names. */
 const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').FighterState, string>> = {
   idle:       'idle',
-  walk:       'run',
+  walk:       'walk',
   run:        'run',
   jump:       'jump',
   doubleJump: 'jump',
@@ -136,9 +136,9 @@ const STATE_TO_CLIP: Partial<Record<import('../engine/ecs/component.js').Fighter
   spotDodge:  'idle',
   rolling:    'run',
   airDodge:   'jump',
-  crouch:     'idle',
-  grabbing:   'idle',
-  ledgeHang:  'jump',
+  crouch:     'crouch',
+  grabbing:   'grabbing',
+  ledgeHang:  'ledgeHang',
 };
 
 function updateMixer(entityId: number, state: import('../engine/ecs/component.js').FighterState): void {
@@ -155,7 +155,8 @@ function updateMixer(entityId: number, state: import('../engine/ecs/component.js
 
   mixer.stopAllAction();
   const action = mixer.clipAction(clip);
-  const loop = clipName === 'idle' || clipName === 'run';
+  const loop = clipName === 'idle' || clipName === 'run' || clipName === 'walk' ||
+               clipName === 'hitstun' || clipName === 'ledgeHang';
   action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
   action.clampWhenFinished = !loop;
   action.reset().play();

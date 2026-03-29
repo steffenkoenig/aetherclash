@@ -590,6 +590,109 @@ function buildAnimations(id) {
     ),
   ]));
 
+  // --- walk (0.6 s, loop): slower/smaller amplitude leg & arm swing ---
+  const walkTimes = [0, 0.15, 0.3, 0.45, 0.6];
+  clips.push(new THREE.AnimationClip('walk', 0.6, [
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', walkTimes,
+      flatQuat(quatRotX(20), quatRotX(0), quatRotX(-20), quatRotX(0), quatRotX(20)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', walkTimes,
+      flatQuat(quatRotX(-20), quatRotX(0), quatRotX(20), quatRotX(0), quatRotX(-20)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', walkTimes,
+      flatQuat(quatRotX(-12), quatRotX(0), quatRotX(12), quatRotX(0), quatRotX(-12)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', walkTimes,
+      flatQuat(quatRotX(12), quatRotX(0), quatRotX(-12), quatRotX(0), quatRotX(12)),
+    ),
+  ]));
+
+  // --- crouch (0.15 s, one-shot): legs bent, body compressed, arms in guard ---
+  const crouchTimes = [0, 0.15];
+  clips.push(new THREE.AnimationClip('crouch', 0.15, [
+    new THREE.VectorKeyframeTrack(
+      `${root}.scale`,
+      crouchTimes,
+      new Float32Array([1, 1, 1,  1, 0.65, 1]),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(40)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(40)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(-25)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', crouchTimes,
+      flatQuat(quatIdentity(), quatRotX(-25)),
+    ),
+  ]));
+
+  // --- grabbing (0.2 s, one-shot): both arms thrust forward, slight knee bend ---
+  const grabTimes = [0, 0.1, 0.2];
+  clips.push(new THREE.AnimationClip('grabbing', 0.2, [
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(-90), quatRotX(-90)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(-90), quatRotX(-90)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(15), quatRotX(15)),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', grabTimes,
+      flatQuat(quatIdentity(), quatRotX(15), quatRotX(15)),
+    ),
+  ]));
+
+  // --- ledgeHang (1.2 s, loop): arms overhead, legs dangling, gentle Z sway ---
+  const hangTimes = [0, 0.3, 0.6, 0.9, 1.2];
+  clips.push(new THREE.AnimationClip('ledgeHang', 1.2, [
+    new THREE.QuaternionKeyframeTrack(
+      `${root}.quaternion`, hangTimes,
+      flatQuat(
+        quatRotZ(0), quatRotZ(3), quatRotZ(0), quatRotZ(-3), quatRotZ(0),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armL.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'armR.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135), quatRotX(-135),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legL.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25),
+      ),
+    ),
+    new THREE.QuaternionKeyframeTrack(
+      'legR.quaternion', hangTimes,
+      flatQuat(
+        quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25), quatRotX(25),
+      ),
+    ),
+  ]));
+
   return clips;
 }
 
